@@ -21,7 +21,7 @@ Estados: `⬜ pendiente` · `🔄 en curso` · `🔁 devuelta (ronda n)` · `✅
 
 ## Estado en una línea
 
-P1 en ejecución: T1–T6, T8 y T9 integradas, 92 pruebas pasan en `p1/nucleo`. T7 (constructor de prompts) en su 2.ª ronda de corrección. El clasificador de permisos bloquea lanzar subagentes nuevos: las revisiones las hace el coordinador. El P2 ya puede arrancar en paralelo.
+P1 en ejecución: Olas 0 a 4 cerradas (T1–T9), 105 pruebas pasan en `p1/nucleo`. Lo siguiente es la Ola 5 (T10, workers). El clasificador de permisos bloquea lanzar subagentes nuevos: las revisiones las hace el coordinador. El P2 ya puede arrancar en paralelo.
 
 ## Documentos de referencia
 
@@ -51,7 +51,7 @@ P1 en ejecución: T1–T6, T8 y T9 integradas, 92 pruebas pasan en `p1/nucleo`. 
 | T6 Cliente de IA | 1 | ✅ | `c44d84d` (merge) | 1 ronda: errores 4xx de `/tokenize`, registro protegido, `finish_reason`, último JSON |
 | T4 Cola con leases | 2 | ✅ | `988a01a` | 1 ronda: fencing por worker (zombis) y conteo de recuperaciones (trabajos venenosos). Desviación aceptada: la cola no se traba tras una caída |
 | T5 Mensajes tipados | 3 | ✅ | `f91cf4f` | Incluye: contexto de clase con copias propias (sin compartir la rúbrica entre hilos) |
-| T7 Constructor de prompts | 4 | ⬜ | — | |
+| T7 Constructor de prompts | 4 | ✅ | `84552af` (merge) | 2 rondas: recorte con búsqueda binaria, sello cotejado, datos delimitados, política de IA y entregables en el prompt (§9.4), pedido del código separado de las indicaciones del docente |
 | T8 Perfiles de facultad | 4 | ✅ | `4254625` (merge) | Ajustes por carrera (Software, TI). Revisada por el coordinador (bloqueo de subagentes) |
 | T9 Planificador | 4 | ✅ | `c7f7c6b` (merge) | 1 ronda: reparto de focos sin perder contenidos y desacoplado del nivel. Re-revisión por el coordinador |
 | T10 Workers | 5 | ⬜ | — | |
