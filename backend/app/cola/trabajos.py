@@ -86,7 +86,9 @@ def tomar_siguiente(conn: psycopg.Connection, worker_id: str, lease_s: int) -> T
     """Toma el trabajo más antiguo disponible y lo pasa a generando con lease nuevo.
 
     Devuelve None si no hay candidato o si otro worker ganó el carril a la vez
-    (UniqueViolation en trabajo_carril).
+    (UniqueViolation en trabajo_carril). Un trabajo retomado (lease vencido) suma 1
+    a `intentos`, reinicia en 'generando' y conserva lotes_hechos, tokens y
+    rondas_revision; la política de reanudación es de la Tarea 13.
     """
     try:
         with conn.transaction():
@@ -94,10 +96,12 @@ def tomar_siguiente(conn: psycopg.Connection, worker_id: str, lease_s: int) -> T
             if f is None:
                 return None
             f = conn.execute(
-                "update trabajo set estado = 'generando', worker_id = %s,"
+                "update trabajo set"
+                " intentos = intentos + case when estado = any(%s) then 1 else 0 end,"
+                " estado = 'generando', worker_id = %s,"
                 " lease_hasta = now() + make_interval(secs => %s), actualizado = now()"
                 " where id = %s returning *",
-                (worker_id, lease_s, f["id"]),
+                (list(ACTIVOS), worker_id, lease_s, f["id"]),
             ).fetchone()
     except psycopg.errors.UniqueViolation:
         return None
@@ -117,52 +121,75 @@ def renovar_lease(conn: psycopg.Connection, trabajo_id: UUID, worker_id: str,
     return f is not None
 
 
+def _cerco(trabajo_id: UUID, worker_id: str | None) -> tuple[str, tuple]:
+    """WHERE por id; con worker_id, además exige que siga siendo suyo y activo."""
+    if worker_id is None:
+        return " where id = %s", (trabajo_id,)
+    return (" where id = %s and worker_id = %s and estado = any(%s)",
+            (trabajo_id, worker_id, list(ACTIVOS)))
+
+
 def registrar_avance(conn: psycopg.Connection, trabajo_id: UUID, *, estado: str | None = None,
                      lotes_total: int | None = None, lotes_hechos: int | None = None,
-                     rondas_revision: int | None = None,
-                     tokens: tuple[int, int] = (0, 0)) -> None:
-    """Actualiza los campos dados (None = sin cambio) y suma los tokens."""
+                     rondas_revision: int | None = None, tokens: tuple[int, int] = (0, 0),
+                     worker_id: str | None = None) -> bool:
+    """Actualiza los campos dados (None = sin cambio) y suma los tokens.
+
+    `estado` solo admite estados activos; los finales se fijan con terminar().
+    Devuelve True si actualizó el trabajo.
+    """
+    if estado is not None and estado not in ACTIVOS:
+        raise ValueError(f"estado no activo: {estado}")
+    donde, args = _cerco(trabajo_id, worker_id)
     with conn.transaction():
-        conn.execute(
+        cur = conn.execute(
             "update trabajo set estado = coalesce(%s, estado),"
             " lotes_total = coalesce(%s, lotes_total),"
             " lotes_hechos = coalesce(%s, lotes_hechos),"
             " rondas_revision = coalesce(%s, rondas_revision),"
             " tokens_entrada = tokens_entrada + %s, tokens_salida = tokens_salida + %s,"
-            " actualizado = now() where id = %s",
-            (estado, lotes_total, lotes_hechos, rondas_revision, tokens[0], tokens[1],
-             trabajo_id),
+            " actualizado = now()" + donde,
+            (estado, lotes_total, lotes_hechos, rondas_revision, tokens[0], tokens[1], *args),
         )
+        return cur.rowcount == 1
 
 
 def terminar(conn: psycopg.Connection, trabajo_id: UUID,
              estado: Literal["listo", "requiere_revision", "error"],
-             error: str | None = None) -> None:
-    """Fija el estado final y libera el lease (y con él el carril)."""
+             error: str | None = None, *, worker_id: str | None = None) -> bool:
+    """Fija el estado final y libera el lease (y con él el carril).
+
+    Con worker_id no toca un trabajo que otro worker ya retomó. True si actualizó.
+    """
+    donde, args = _cerco(trabajo_id, worker_id)
     with conn.transaction():
-        conn.execute(
+        cur = conn.execute(
             "update trabajo set estado = %s, error = %s, worker_id = null, lease_hasta = null,"
-            " actualizado = now() where id = %s",
-            (estado, error, trabajo_id),
+            " actualizado = now()" + donde,
+            (estado, error, *args),
         )
+        return cur.rowcount == 1
 
 
-def poner_en_espera(conn: psycopg.Connection, trabajo_id: UUID) -> datetime:
+def poner_en_espera(conn: psycopg.Connection, trabajo_id: UUID, *,
+                    worker_id: str | None = None) -> datetime | None:
     """Suma un intento, libera el carril y devuelve cuándo vuelve a estar disponible.
 
     Espera = min(30·2^(intentos−1), 600) s con los intentos ya sumados; en el SET,
-    `intentos` es el valor anterior, de ahí 2^intentos.
+    `intentos` es el valor anterior, de ahí 2^intentos. None si no actualizó nada
+    (id desconocido o, con worker_id, trabajo que ya no es suyo).
     """
+    donde, args = _cerco(trabajo_id, worker_id)
     with conn.transaction():
         f = conn.execute(
             "update trabajo set estado = 'en_espera', intentos = intentos + 1,"
             " disponible_desde = now()"
             " + make_interval(secs => least(30 * power(2, intentos), 600)),"
             " worker_id = null, lease_hasta = null, actualizado = now()"
-            " where id = %s returning disponible_desde",
-            (trabajo_id,),
+            + donde + " returning disponible_desde",
+            args,
         ).fetchone()
-    return f["disponible_desde"]
+    return None if f is None else f["disponible_desde"]
 
 
 def listar(conn: psycopg.Connection, asignatura_id: UUID) -> list[Trabajo]:

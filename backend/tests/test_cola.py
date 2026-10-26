@@ -98,6 +98,7 @@ def test_carril_entre_workers_concurrentes(conn, nueva_conexion):
     a = _encolar(conn, asig)
     _encolar(conn, asig)
     c1, c2 = nueva_conexion(), nueva_conexion()
+    c2.execute("set statement_timeout = '5s'")  # una regresión falla en vez de colgar
     resultado = {}
 
     def segundo():
@@ -108,7 +109,7 @@ def test_carril_entre_workers_concurrentes(conn, nueva_conexion):
 
     with c1.transaction():
         t1 = tomar_siguiente(c1, "w1", 60)
-        hilo = threading.Thread(target=segundo)
+        hilo = threading.Thread(target=segundo, daemon=True)
         hilo.start()
         hilo.join(0.5)
         assert hilo.is_alive()  # espera en el índice único a que c1 termine
@@ -157,8 +158,70 @@ def test_renovar_falla_si_no_esta_activo(conn):
     # Aunque conserve el worker_id, un trabajo fuera de estado activo no se renueva.
     b = _encolar(conn, asignatura(conn))
     tomar_siguiente(conn, "w1", 60)
-    registrar_avance(conn, b, estado="listo")
+    conn.execute("update trabajo set estado = 'listo' where id = %s", (b,))
     assert renovar_lease(conn, b, "w1", 60) is False
+
+
+@pytest.mark.parametrize("estado", ["listo", "requiere_revision", "error", "en_espera",
+                                    "en_cola"])
+def test_registrar_avance_solo_estados_activos(conn, estado):
+    a = _encolar(conn, asignatura(conn))
+    tomar_siguiente(conn, "w1", 60)
+    with pytest.raises(ValueError):
+        registrar_avance(conn, a, estado=estado)
+    assert _fila(conn, a)["estado"] == "generando"
+
+
+def test_retomar_suma_intento(conn):
+    a = _encolar(conn, asignatura(conn))
+    assert tomar_siguiente(conn, "w1", 60).intentos == 0  # primera toma: no cuenta
+    conn.execute("update trabajo set lease_hasta = now() - interval '1 s' where id = %s", (a,))
+    t = tomar_siguiente(conn, "w2", 60)
+    assert t.id == a and t.intentos == 1
+    # Tras la espera, volver a tomarlo tampoco cuenta (ya lo sumó poner_en_espera).
+    poner_en_espera(conn, a, worker_id="w2")
+    conn.execute("update trabajo set disponible_desde = now() - interval '1 s' where id = %s", (a,))
+    assert tomar_siguiente(conn, "w3", 60).intentos == 2
+
+
+def _retomado_por_w2(conn) -> tuple[uuid.UUID, uuid.UUID]:
+    """a de la asignatura X: w1 lo tomó, su lease venció y w2 lo retomó. b espera en X."""
+    asig = asignatura(conn)
+    a = _encolar(conn, asig)
+    b = _encolar(conn, asig)
+    tomar_siguiente(conn, "w1", 60)
+    conn.execute("update trabajo set lease_hasta = now() - interval '1 s' where id = %s", (a,))
+    assert tomar_siguiente(conn, "w2", 60).id == a
+    return a, b
+
+
+def test_terminar_zombi_no_libera_carril(conn):
+    a, _ = _retomado_por_w2(conn)
+    assert terminar(conn, a, "listo", worker_id="w1") is False
+    f = _fila(conn, a)
+    assert (f["estado"], f["worker_id"]) == ("generando", "w2")
+    assert tomar_siguiente(conn, "w3", 60) is None  # el carril sigue ocupado por w2
+    assert terminar(conn, a, "listo", worker_id="w2") is True
+    assert _fila(conn, a)["worker_id"] is None
+
+
+def test_avance_y_espera_zombi_no_tocan(conn):
+    a, _ = _retomado_por_w2(conn)
+    assert registrar_avance(conn, a, estado="verificando", tokens=(5, 5),
+                            worker_id="w1") is False
+    assert poner_en_espera(conn, a, worker_id="w1") is None
+    f = _fila(conn, a)
+    assert (f["estado"], f["worker_id"], f["tokens_entrada"]) == ("generando", "w2", 0)
+    assert registrar_avance(conn, a, estado="verificando", tokens=(5, 5),
+                            worker_id="w2") is True
+    assert _fila(conn, a)["estado"] == "verificando"
+
+
+def test_id_desconocido(conn):
+    x = uuid.uuid4()
+    assert poner_en_espera(conn, x) is None
+    assert terminar(conn, x, "error") is False
+    assert registrar_avance(conn, x, tokens=(1, 1)) is False
 
 
 def test_en_espera_con_backoff(conn):
