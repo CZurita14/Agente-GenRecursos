@@ -1,13 +1,16 @@
 """Fixtures compartidas de las pruebas del backend."""
+import copy
+import json
 import uuid
+from pathlib import Path
 
 import psycopg
 import pytest
-from psycopg.rows import dict_row
 
 from app.config import ajustes
 from app.db.conexion import conectar
 from app.db.migrar import aplicar_migraciones
+from app.silabo.modelo import SilaboUTI
 
 
 @pytest.fixture(autouse=True)
@@ -17,10 +20,11 @@ def _limpiar_ajustes():
     ajustes.cache_clear()
 
 
+# --- Base de datos (Tarea 2) ------------------------------------------------
+
 @pytest.fixture
 def conn():
-    """Conexión autocommit a un esquema temporal con las migraciones aplicadas.
-    """
+    """Conexión autocommit a un esquema temporal con las migraciones aplicadas."""
     esquema = f"prueba_{uuid.uuid4().hex[:8]}"
     c = conectar()
     try:
@@ -52,3 +56,21 @@ def nueva_conexion(conn):
     yield _nueva
     for c in abiertas:
         c.close()
+
+
+# --- Sílabo (Tarea 3) -------------------------------------------------------
+
+_RUTA_SILABO = Path(__file__).parent / "fixtures" / "silabo_datos.json"
+_DATOS_SILABO = json.loads(_RUTA_SILABO.read_text(encoding="utf-8"))
+
+
+@pytest.fixture
+def datos() -> dict:
+    """Copia nueva de los datos del sílabo de Análisis de Datos, mutable por prueba."""
+    return copy.deepcopy(_DATOS_SILABO)
+
+
+@pytest.fixture
+def silabo(datos) -> SilaboUTI:
+    """Sílabo de Análisis de Datos (M2 y M3) validado."""
+    return SilaboUTI.model_validate(datos)
