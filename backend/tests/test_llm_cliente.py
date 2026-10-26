@@ -1,12 +1,14 @@
 """Pruebas del cliente de IA; nunca llaman al servidor real."""
 import json
+import logging
 
 import httpx
 import pytest
 from pydantic import BaseModel
 
 from app.llm.cliente import (
-    ClienteSimulado, ClienteVLLM, ContextoExcedido, ServidorNoDisponible,
+    ClienteSimulado, ClienteVLLM, ContextoExcedido, ErrorDelServidor, Respuesta,
+    ServidorNoDisponible,
 )
 from app.llm.json import JsonInvalido, pedir_json, ultimo_json
 
@@ -65,7 +67,7 @@ def test_payload_con_esquema():
     assert cuerpo["repetition_penalty"] == 1.05
     assert cuerpo["response_format"]["type"] == "json_schema"
     assert cuerpo["chat_template_kwargs"] == {"enable_thinking": False}
-    assert "stream" not in cuerpo or cuerpo["stream"] is False
+    assert not cuerpo.get("stream")
 
 
 def test_sin_esquema_no_envia_penalizacion():
@@ -183,3 +185,121 @@ def test_extra_body():
     assert cuerpo["chat_template_kwargs"] == {"enable_thinking": True}
     assert cuerpo["repetition_penalty"] == 1.05
     assert "extra_body" not in cuerpo
+
+
+def test_4xx_en_chat_no_se_reintenta():
+    llamadas = []
+
+    def manejador(p):
+        if p.url.path.endswith("/tokenize"):
+            return httpx.Response(200, json={"count": 100})
+        llamadas.append(1)
+        return httpx.Response(400, json={"error": "mala peticion"})
+    registros = []
+    c, _ = _cliente(manejador, registros)
+    with pytest.raises(Exception) as info:
+        _completar(c)
+    assert not isinstance(info.value, ServidorNoDisponible)
+    assert len(llamadas) == 1 and registros[-1]["ok"] is False
+
+
+def test_semaforo_se_libera_tras_excepcion():
+    estado = {"n": 0}
+
+    def manejador(p):
+        if p.url.path.endswith("/tokenize"):
+            return httpx.Response(200, json={"count": 100})
+        estado["n"] += 1
+        if estado["n"] <= 2:
+            raise httpx.ConnectError("sin red")
+        return httpx.Response(200, json=_respuesta_chat("ok"))
+    c = ClienteVLLM(BASE, "m", 120, 1, lambda d: None,
+                    transporte=httpx.MockTransport(manejador))
+    with pytest.raises(ServidorNoDisponible):
+        _completar(c)
+    assert _completar(c).texto == "ok"  # con max_concurrencia=1 se bloquearía si no se liberó
+
+
+def test_registrar_que_falla_no_tapa_el_resultado(caplog):
+    def malo(d):
+        raise RuntimeError("bd caída")
+    c = ClienteVLLM(BASE, "m", 120, 1, malo, transporte=httpx.MockTransport(_normal("hola")))
+    with caplog.at_level(logging.ERROR, logger="app.llm"):
+        assert _completar(c).texto == "hola"
+    assert any(r.name == "app.llm" for r in caplog.records)
+
+    def caido(p):
+        if p.url.path.endswith("/tokenize"):
+            return httpx.Response(200, json={"count": 100})
+        raise httpx.ConnectError("sin red")
+    c = ClienteVLLM(BASE, "m", 120, 1, malo, transporte=httpx.MockTransport(caido))
+    with pytest.raises(ServidorNoDisponible):
+        _completar(c)
+
+
+def test_tokenize_4xx_no_reintenta():
+    n = []
+
+    def manejador(p):
+        n.append(1)
+        return httpx.Response(422, json={"error": "x"})
+    c, _ = _cliente(manejador)
+    with pytest.raises(ErrorDelServidor):
+        c.contar_tokens(MSJ)
+    assert len(n) == 1
+
+
+def test_tokenize_red_transitoria_y_exito():
+    n = []
+
+    def manejador(p):
+        n.append(1)
+        if len(n) == 1:
+            raise httpx.ConnectError("sin red")
+        return httpx.Response(200, json={"count": 9})
+    c, _ = _cliente(manejador)
+    assert c.contar_tokens(MSJ) == 9 and len(n) == 2
+
+
+def test_tokenize_cuerpo_invalido_y_5xx_persistente():
+    c, _ = _cliente(lambda p: httpx.Response(200, json={"otro": 1}))
+    with pytest.raises(ErrorDelServidor):
+        c.contar_tokens(MSJ)
+    n = []
+
+    def manejador(p):
+        n.append(1)
+        return httpx.Response(503)
+    c, _ = _cliente(manejador)
+    with pytest.raises(ServidorNoDisponible):
+        c.contar_tokens(MSJ)
+    assert len(n) == 2
+
+
+def test_finish_reason_se_rellena():
+    def manejador(p):
+        if p.url.path.endswith("/tokenize"):
+            return httpx.Response(200, json={"count": 100})
+        return httpx.Response(200, json=_respuesta_chat("{", finish="length"))
+    c, _ = _cliente(manejador)
+    assert _completar(c).finish_reason == "length"
+
+
+def test_pedir_json_reintenta_si_finish_reason_length():
+    class M(BaseModel):
+        a: int
+
+    class Corta(ClienteSimulado):
+        def completar(self, *a, **k):
+            r = super().completar(*a, **k)
+            if len(self.llamadas) == 1:  # válido pero cortado: igual se reintenta
+                return Respuesta(r.texto, "", 1, 1, 0.0, "length")
+            return r
+    sim = Corta({"r": ['{"a": 1}', '{"a": 2}']})
+    valor, _ = pedir_json(sim, MSJ, M, ESQUEMA, rol="r")
+    assert valor.a == 2 and len(sim.llamadas) == 2
+
+
+def test_ultimo_json_dos_objetos():
+    assert ultimo_json('{"a":1} texto {"b":2}') == {"b": 2}
+    assert ultimo_json('x {"a":{"b":1}} fin') == {"a": {"b": 1}}

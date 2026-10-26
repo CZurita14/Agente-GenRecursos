@@ -15,10 +15,22 @@ __all__ = ["JsonInvalido", "pedir_json", "ultimo_json"]
 
 
 def ultimo_json(texto: str) -> dict:
-    """Devuelve el último objeto JSON del texto, ignorando los bloques <think>."""
+    """Devuelve el último objeto JSON completo del texto, ignorando los bloques <think>."""
     texto = re.sub(r"<think>.*?</think>", "", texto, flags=re.S)
-    bloques = re.findall(r"\{.*\}", texto, flags=re.S)
-    return json.loads(bloques[-1])
+    decodificador = json.JSONDecoder()
+    ultimo = None
+    i = texto.find("{")
+    while i != -1:
+        try:
+            objeto, fin = decodificador.raw_decode(texto, i)
+        except ValueError:
+            i = texto.find("{", i + 1)
+            continue
+        ultimo = objeto
+        i = texto.find("{", fin)
+    if ultimo is None:
+        raise ValueError("no hay ningún objeto JSON en el texto")
+    return ultimo
 
 
 def pedir_json(cliente: ClienteLLM, mensajes: list[dict], modelo: type[T], esquema: dict,
@@ -36,6 +48,9 @@ def pedir_json(cliente: ClienteLLM, mensajes: list[dict], modelo: type[T], esque
     ultimo_error: Exception | None = None
     for _ in range(1 + REINTENTOS_JSON):
         respuesta = cliente.completar(mensajes, esquema=esquema, **kw)
+        if respuesta.finish_reason == "length":
+            ultimo_error = ValueError("salida cortada por límite de tokens")
+            continue
         try:
             return modelo.model_validate(ultimo_json(respuesta.texto)), respuesta
         except (ValueError, IndexError) as error:  # JSONDecodeError y ValidationError son ValueError

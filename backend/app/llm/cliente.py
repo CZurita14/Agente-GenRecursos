@@ -1,4 +1,5 @@
 """Cliente único del servidor de IA local (vLLM, API compatible con OpenAI)."""
+import logging
 import re
 import threading
 import time
@@ -14,6 +15,8 @@ MARGEN_SEGURIDAD = 300
 MINIMO_SALIDA = 256
 PENALIZACION_REPETICION = 1.05
 
+registro = logging.getLogger("app.llm")
+
 
 @dataclass(frozen=True)
 class Respuesta:
@@ -22,10 +25,15 @@ class Respuesta:
     tokens_entrada: int
     tokens_salida: int
     segundos: float
+    finish_reason: str = "stop"
 
 
 class ServidorNoDisponible(Exception):
     """El servidor no responde (red o 5xx) tras el reintento."""
+
+
+class ErrorDelServidor(Exception):
+    """Error no reintentable: respuesta 4xx o cuerpo mal formado."""
 
 
 class JsonInvalido(Exception):
@@ -74,13 +82,24 @@ class ClienteVLLM:
                                   max_retries=0, http_client=self._http)
 
     def contar_tokens(self, mensajes: list[dict]) -> int:
-        try:
-            respuesta = self._http.post(f"{self._raiz}/tokenize",
-                                        json={"model": self._modelo, "messages": mensajes})
-            respuesta.raise_for_status()
-        except (httpx.TransportError, httpx.HTTPStatusError) as error:
-            raise ServidorNoDisponible(f"/tokenize falló: {error}") from error
-        return int(respuesta.json()["count"])
+        ultimo: Exception | None = None
+        for _ in range(2):  # un reintento ante error de red o 5xx
+            try:
+                respuesta = self._http.post(f"{self._raiz}/tokenize",
+                                            json={"model": self._modelo, "messages": mensajes})
+            except httpx.TransportError as error:
+                ultimo = error
+                continue
+            if respuesta.status_code >= 500:
+                ultimo = ErrorDelServidor(f"HTTP {respuesta.status_code}")
+                continue
+            if respuesta.status_code >= 400:
+                raise ErrorDelServidor(f"/tokenize respondió HTTP {respuesta.status_code}")
+            try:
+                return int(respuesta.json()["count"])
+            except (ValueError, KeyError, TypeError) as error:
+                raise ErrorDelServidor(f"/tokenize devolvió un cuerpo inválido: {error}") from error
+        raise ServidorNoDisponible(f"/tokenize no responde: {ultimo}") from ultimo
 
     def completar(self, mensajes: list[dict], *, rol: str, esquema: dict | None,
                   temperatura: float, max_tokens: int, pensar: bool,
@@ -118,12 +137,16 @@ class ClienteVLLM:
             tokens_salida = uso.completion_tokens if uso else 0
             ok = True
             return Respuesta(texto, razonamiento, tokens_entrada, tokens_salida,
-                             round(time.monotonic() - inicio, 3))
+                             round(time.monotonic() - inicio, 3),
+                             finalizacion.choices[0].finish_reason or "stop")
         finally:
-            self._registrar({
-                "trabajo_id": trabajo_id, "asignatura_id": asignatura_id, "rol": rol,
-                "tokens_entrada": tokens_entrada, "tokens_salida": tokens_salida,
-                "segundos": round(time.monotonic() - inicio, 3), "ok": ok})
+            try:
+                self._registrar({
+                    "trabajo_id": trabajo_id, "asignatura_id": asignatura_id, "rol": rol,
+                    "tokens_entrada": tokens_entrada, "tokens_salida": tokens_salida,
+                    "segundos": round(time.monotonic() - inicio, 3), "ok": ok})
+            except Exception:  # el registro nunca debe tapar el resultado ni el error original
+                registro.exception("no se pudo registrar la llamada al modelo (rol %s)", rol)
 
     def _pedir(self, argumentos: dict):
         """Una llamada con exactamente un reintento ante error de red o 5xx."""
@@ -160,4 +183,4 @@ class ClienteSimulado:
         else:
             assert fuente, f"ClienteSimulado: no quedan respuestas para el rol {rol!r}"
             texto = fuente.pop(0)
-        return Respuesta(texto, "", self.contar_tokens(mensajes), len(texto) // 4, 0.0)
+        return Respuesta(texto, "", self.contar_tokens(mensajes), len(texto) // 4, 0.0, "stop")
