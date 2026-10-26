@@ -1,0 +1,17 @@
+# Sílabos reales: contienen datos personales del docente (teléfono, correo,
+# ORCID) y firmas electrónicas. No se versionan; las pruebas usan copias
+# anonimizadas.
+Silabos/
+
+# Entorno y secretos
+.env
+.venv/
+__pycache__/
+*.log
+
+# Herramienta de análisis REA (clon con su propio repositorio)
+rea/
+
+# Pruebas y espacio de trabajo de los agentes de construcción
+.pytest_cache/
+.superpowers/
