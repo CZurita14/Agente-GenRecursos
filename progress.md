@@ -21,7 +21,7 @@ Estados: `⬜ pendiente` · `🔄 en curso` · `🔁 devuelta (ronda n)` · `✅
 
 ## Estado en una línea
 
-Diseño cerrado (spec v1.2) y plan de implementación listo. **Aún no hay código del producto.** Lo siguiente es la Ola 0 del P1 (T1), que espera tu aprobación de `git init` y del remoto.
+P1 en ejecución: Olas 0 y 1 cerradas (T1, T2, T3, T6), 36 pruebas pasan en `p1/nucleo`. Lo siguiente es la Ola 2 (T4, cola con leases). El P2 ya puede arrancar en paralelo.
 
 ## Documentos de referencia
 
@@ -45,10 +45,10 @@ Diseño cerrado (spec v1.2) y plan de implementación listo. **Aún no hay códi
 
 | Tarea | Ola | Estado | Commit | Nota |
 |---|---|---|---|---|
-| T1 Repositorio y configuración | 0 | ⬜ | — | Espera aprobación de `git init` y del remoto |
-| T2 Migraciones | 1 | ⬜ | — | Requiere Docker encendido |
-| T3 Contrato `SilaboUTI` | 1 | ⬜ | — | Al cerrarla se desbloquea el P2 |
-| T6 Cliente de IA | 1 | ⬜ | — | SDK `openai` + `/tokenize`; separar `<think>` |
+| T1 Repositorio y configuración | 0 | ✅ | `c861d08` | Revisión limpia; detalles menores corregidos en la T2 |
+| T2 Migraciones | 1 | ✅ | `e61e0b5` (merge) | 1 ronda de corrección (limpieza de la fixture `conn`) |
+| T3 Contrato `SilaboUTI` | 1 | ✅ | `1eae46d` (merge) | Fixture transcrita del PDF real sin datos personales. **El P2 ya puede arrancar** |
+| T6 Cliente de IA | 1 | ✅ | `c44d84d` (merge) | 1 ronda: errores 4xx de `/tokenize`, registro protegido, `finish_reason`, último JSON |
 | T4 Cola con leases | 2 | ⬜ | — | |
 | T5 Mensajes tipados | 3 | ⬜ | — | |
 | T7 Constructor de prompts | 4 | ⬜ | — | |
@@ -98,8 +98,8 @@ Diseño cerrado (spec v1.2) y plan de implementación listo. **Aún no hay códi
 
 | # | Bloqueo | Afecta a | Responsable | Estado |
 |---|---|---|---|---|
-| B1 | Aprobar `git init` y el remoto `CZurita14/Agente-GenRecursos` | P1 T1 | Usuario | Abierto |
-| B2 | Docker Desktop apagado (`genrecursos-db`) | P1 T2 | Usuario | Abierto |
+| B1 | Aprobar `git init` y el remoto `CZurita14/Agente-GenRecursos` | P1 T1 | Usuario | ✅ Resuelto 2026-10-26 (sin push) |
+| B2 | Docker Desktop apagado (`genrecursos-db`) | P1 T2 | Usuario | ✅ Resuelto 2026-10-26 |
 | B3 | Plantilla de herramientas del área académica | P3 H8 | Área académica | Abierto |
 | B4 | Cuenta SMTP institucional | P4 A2 | TI | Abierto |
 | B5 | Servidor, dominio y certificado en la red UTI | P7 D4 | TI | Abierto |
@@ -158,6 +158,19 @@ Diseño cerrado (spec v1.2) y plan de implementación listo. **Aún no hay códi
   - sección "Motor del producto": el Qwen local lo usan el agente coordinador de facultad, los workers y el revisor; el orquestador, el lector, el planificador y el verificador son código;
   - sección de especialización;
   - tarjetas de tareas con las correcciones R1–R5.
+
+### 2026-10-26 · Ejecución del P1
+- **Repositorio:**
+  - `git init` en la carpeta del proyecto;
+  - commit base `5a473ed` en `main`;
+  - rama de trabajo `p1/nucleo`;
+  - remoto `origin` configurado, **sin push**.
+- **Ola 0:** T1 terminada (configuración del backend).
+- **Ola 1:** T2, T3 y T6 en paralelo, cada una en su worktree, con doble revisión. T2 y T6 necesitaron 1 ronda de corrección cada una. Integradas en `p1/nucleo` (`1eae46d`), **36 pruebas pasan**.
+- **Registro de ejecución** (decisiones, hallazgos menores diferidos): `.superpowers/sdd/2026-10-26-p1-nucleo-multiagente/progress.md`. No se versiona.
+- **Incidente de privacidad (T3):** el subagente imprimió en su terminal un fragmento de la sección I del sílabo de Datos (datos del docente).
+  - Verificado que no está en ningún archivo ni commit; quedó solo en el registro local temporal de ese subagente.
+  - Regla nueva para el P2: extraer el texto saltando las secciones I y VII antes de imprimir nada.
 
 ### 2026-10-20
 - Tres rondas de prueba de calidad con Qwen3-8B (aprox. 5, 10 y 8 ítems sólidos de 16). Las mejoras M1–M5 quedan en pausa hasta tener la plantilla académica y más sílabos. Detalle en `pruebas/` y `docs/prueba-calidad-silabo.md`.
