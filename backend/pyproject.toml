@@ -18,9 +18,10 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=8.4"]
 
-[tool.setuptools]
-packages = ["app"]
+[tool.setuptools.packages.find]
+include = ["app*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
 markers = ["servidor: requiere el servidor de IA real"]
