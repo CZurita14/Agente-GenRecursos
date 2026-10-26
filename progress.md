@@ -21,7 +21,7 @@ Estados: `⬜ pendiente` · `🔄 en curso` · `🔁 devuelta (ronda n)` · `✅
 
 ## Estado en una línea
 
-P1 en ejecución: Olas 0 a 4 cerradas (T1–T9), 105 pruebas pasan en `p1/nucleo`. Lo siguiente es la Ola 5 (T10, workers). El clasificador de permisos bloquea lanzar subagentes nuevos: las revisiones las hace el coordinador. El P2 ya puede arrancar en paralelo.
+P1 en ejecución: T1–T12 hechas, 138 pruebas pasan en `p1/nucleo`. Siguiente: T13 (coordinador de facultad), brief en .superpowers/sdd/…/task-13-brief.md. Luego T14, T15 y revisión final. El clasificador de permisos bloquea lanzar subagentes nuevos: las revisiones las hace el coordinador. El P2 ya puede arrancar en paralelo.
 
 ## Documentos de referencia
 
@@ -54,9 +54,9 @@ P1 en ejecución: Olas 0 a 4 cerradas (T1–T9), 105 pruebas pasan en `p1/nucleo
 | T7 Constructor de prompts | 4 | ✅ | `84552af` (merge) | 2 rondas: recorte con búsqueda binaria, sello cotejado, datos delimitados, política de IA y entregables en el prompt (§9.4), pedido del código separado de las indicaciones del docente |
 | T8 Perfiles de facultad | 4 | ✅ | `4254625` (merge) | Ajustes por carrera (Software, TI). Revisada por el coordinador (bloqueo de subagentes) |
 | T9 Planificador | 4 | ✅ | `c7f7c6b` (merge) | 1 ronda: reparto de focos sin perder contenidos y desacoplado del nivel. Re-revisión por el coordinador |
-| T10 Workers | 5 | ⬜ | — | |
-| T11 Verificador | 6 | ⬜ | — | |
-| T12 Revisor | 6 | ⬜ | — | |
+| T10 Workers | 5 | ✅ | `65afc4c` | Hecha por el coordinador (subagentes bloqueados) |
+| T11 Verificador | 6 | ✅ | `a518a1d` | Regex ampliada: "Todas las anteriores" |
+| T12 Revisor | 6 | ✅ | `a6c470a` | 1 ítem por llamada, a ciegas, integridad |
 | T13 Coordinador de facultad | 7 | ⬜ | — | |
 | T14 Orquestador y worker | 8 | ⬜ | — | |
 | T15 Prueba con Qwen real | 9 | ⬜ | — | El servidor es alcanzable desde la PC de desarrollo |
