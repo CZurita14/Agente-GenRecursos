@@ -10,8 +10,12 @@ from datetime import date
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class _Base(BaseModel):
+class BaseInmutable(BaseModel):
+    """Base común: inmutable y sin campos desconocidos (también en lo anidado)."""
     model_config = ConfigDict(frozen=True, extra="forbid")
+
+
+_Base = BaseInmutable
 
 
 class Periodo(_Base):

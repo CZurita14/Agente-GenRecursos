@@ -1,9 +1,8 @@
 """Contexto de una clase: lo que los agentes necesitan saber de una sesión."""
 from datetime import date
 
-from pydantic import BaseModel
-
 from app.silabo.modelo import (
+    BaseInmutable,
     FilaRubrica,
     Problema,
     ResultadoAprendizaje,
@@ -11,7 +10,7 @@ from app.silabo.modelo import (
 )
 
 
-class ContextoClase(BaseModel, frozen=True):
+class ContextoClase(BaseInmutable):
     codigo_pf: str
     version_silabo: str
     asignatura: str
@@ -63,10 +62,11 @@ def contexto_clase(silabo: SilaboUTI, clase_id: str) -> ContextoClase:
                 momento_titulo=momento.titulo,
                 contenidos=list(sesion.contenidos),
                 actividades=[t for t in candidatas if t.strip()],
-                ra=[r for r in silabo.resultados_aprendizaje if r.id in momento.ra],
-                rubrica=list(momento.rubrica),
+                ra=[r.model_copy(deep=True) for r in silabo.resultados_aprendizaje if r.id in momento.ra],
+                # Copias profundas: `niveles` es un dict y no se comparte con el sílabo.
+                rubrica=[f.model_copy(deep=True) for f in momento.rubrica],
                 competencia_perfil=silabo.competencia_perfil,
-                problema=silabo.problema,
+                problema=silabo.problema.model_copy(deep=True),
                 politica_ia=momento.politica_ia,
                 entregables_momento=entregables,
             )

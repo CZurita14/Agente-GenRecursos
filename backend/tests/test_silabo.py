@@ -56,3 +56,37 @@ def test_contexto_incluye_politica_rubrica_y_problema(silabo):
     c = contexto_clase(silabo, "M3-S4")
     assert c.politica_ia and c.rubrica and c.problema.reto
     assert c.codigo_pf == "B26-SOFT-3-56146-1727"
+
+
+def test_contexto_no_comparte_objetos_mutables(silabo):
+    a = contexto_clase(silabo, "M2-S1")
+    b = contexto_clase(silabo, "M2-S2")
+    original = dict(silabo.momentos[1].rubrica[0].niveles)
+    a.rubrica[0].niveles["x"] = "mutado"
+    assert silabo.momentos[1].rubrica[0].niveles == original
+    assert "x" not in b.rubrica[0].niveles
+
+
+def test_contexto_rechaza_extras_y_es_inmutable(silabo):
+    c = contexto_clase(silabo, "M2-S1")
+    with pytest.raises(ValidationError):
+        c.clase_id = "otro"
+    with pytest.raises(ValidationError):
+        type(c).model_validate({**c.model_dump(), "extra": 1})
+
+
+def test_extra_forbid_en_modelos_anidados(datos):
+    d = {**datos, "proyecto_formativo": {**datos["proyecto_formativo"], "docente": "x"}}
+    with pytest.raises(ValidationError):
+        SilaboUTI.model_validate(d)
+    momentos = [dict(m) for m in datos["momentos"]]
+    momentos[0]["sesiones"] = [{**momentos[0]["sesiones"][0], "correo": "x"}, *momentos[0]["sesiones"][1:]]
+    with pytest.raises(ValidationError):
+        SilaboUTI.model_validate({**datos, "momentos": momentos})
+
+
+def test_inmutable_en_modelos_anidados(silabo):
+    with pytest.raises(ValidationError):
+        silabo.proyecto_formativo.nombre = "otro"
+    with pytest.raises(ValidationError):
+        silabo.momentos[0].sesiones[0].id = "otro"
