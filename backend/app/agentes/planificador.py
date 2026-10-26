@@ -6,6 +6,7 @@ reparte el plan en lotes que caben en el contexto del modelo (§5.3).
 No usa aleatoriedad: el mismo contexto produce siempre el mismo plan.
 """
 from itertools import zip_longest
+from math import gcd
 
 from app.agentes.mensajes import PlanItem
 from app.silabo.contexto import ContextoClase
@@ -13,12 +14,14 @@ from app.silabo.contexto import ContextoClase
 # Orden de niveles de menor a mayor; también es el desempate del mayor resto.
 NIVELES = ("receptivo", "resolutivo", "reflexivo", "critico")
 
-# Porcentajes enteros (suma 100). "Crítico/Cocreativo" se agrupa en `critico`.
-PERFILES: dict[str, dict[str, float]] = {
-    "fundamentacion": {"receptivo": 0.20, "resolutivo": 0.40, "reflexivo": 0.30, "critico": 0.10},
-    "profesional": {"receptivo": 0.10, "resolutivo": 0.30, "reflexivo": 0.35, "critico": 0.25},
-    "avanzado": {"receptivo": 0.0, "resolutivo": 0.20, "reflexivo": 0.40, "critico": 0.40},
+# Porcentajes enteros por perfil (suma 100). "Crítico/Cocreativo" se agrupa en `critico`.
+PERFILES: dict[str, dict[str, int]] = {
+    "fundamentacion": {"receptivo": 20, "resolutivo": 40, "reflexivo": 30, "critico": 10},
+    "profesional": {"receptivo": 10, "resolutivo": 30, "reflexivo": 35, "critico": 25},
+    "avanzado": {"receptivo": 0, "resolutivo": 20, "reflexivo": 40, "critico": 40},
 }
+for _nombre, _pct in PERFILES.items():
+    assert sum(_pct.values()) == 100, f"el perfil {_nombre} no suma 100"
 
 
 def perfil_por_nivel(nivel: int, posgrado: bool = False) -> str:
@@ -33,13 +36,14 @@ def perfil_por_nivel(nivel: int, posgrado: bool = False) -> str:
 def tabla_especificaciones(n: int, perfil: str) -> dict[str, int]:
     """Reparte `n` ítems entre los niveles con el método del mayor resto.
 
-    Se usa aritmética entera (porcentajes enteros) para evitar errores de
-    coma flotante. Ante restos iguales gana el nivel más bajo (orden de
+    Los porcentajes son enteros, así que no hay errores de coma flotante. Ante restos iguales gana el nivel más bajo (orden de
     `NIVELES`). La suma siempre es `n`.
     """
     if n < 0:
         raise ValueError("n debe ser >= 0")
-    porcentajes = {nv: round(PERFILES[perfil][nv] * 100) for nv in NIVELES}
+    if perfil not in PERFILES:
+        raise ValueError(f"perfil desconocido: {perfil!r}")
+    porcentajes = PERFILES[perfil]
     base = {nv: n * porcentajes[nv] // 100 for nv in NIVELES}
     restos = {nv: n * porcentajes[nv] % 100 for nv in NIVELES}
     faltan = n - sum(base.values())
@@ -60,14 +64,30 @@ def _focos(contexto: ContextoClase) -> list[str]:
     return intercalados or [contexto.momento_titulo]
 
 
+def _indice_foco(k: int, n: int, m: int) -> int:
+    """Índice del foco del ítem `k` (de `n`) sobre una lista de `m` focos.
+
+    - Si n <= m: se reparten uniformemente por toda la lista, (k*m)//n, de modo
+      que aparecen tanto actividades como contenidos.
+    - Si n > m: se recorre la lista con un paso coprimo con m (el menor >= 2),
+      así ítems consecutivos (del mismo nivel o no) nunca comparten foco y un
+      foco no queda siempre atado al mismo nivel.
+    """
+    if n <= m:
+        return (k * m) // n
+    paso = next(p for p in range(2, m + 3) if gcd(p, m) == 1)
+    return (k * paso) % m
+
+
 def planificar(
     contexto: ContextoClase, n: int, perfil: str, tam_lote: int = 4
 ) -> list[list[PlanItem]]:
     """Plan de `n` ítems `i1…in`, de menor a mayor nivel, en lotes de `tam_lote`.
 
-    El foco de cada ítem rota por las actividades y contenidos de la clase,
-    de modo que dos clases con el mismo contenido pero distintas actividades
-    obtienen focos distintos.
+    Los focos salen de las actividades y contenidos de la clase (intercalados,
+    actividad primero) y se asignan con `_indice_foco`: dos clases con el mismo
+    contenido pero distintas actividades obtienen focos distintos, sin perder
+    contenidos en cuestionarios cortos. Es totalmente determinista.
     """
     if tam_lote < 1:
         raise ValueError("tam_lote debe ser >= 1")
@@ -75,7 +95,7 @@ def planificar(
     focos = _focos(contexto)
     niveles = [nv for nv in NIVELES for _ in range(tabla[nv])]
     items = [
-        PlanItem(item_id=f"i{k + 1}", nivel=nv, foco=focos[k % len(focos)])
+        PlanItem(item_id=f"i{k + 1}", nivel=nv, foco=focos[_indice_foco(k, n, len(focos))])
         for k, nv in enumerate(niveles)
     ]
     return [items[i : i + tam_lote] for i in range(0, len(items), tam_lote)]

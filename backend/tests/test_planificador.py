@@ -33,24 +33,70 @@ def test_perfil_por_nivel():
 def test_lotes_de_4(silabo):
     ctx = contexto_clase(silabo, "M2-S1")
     lotes = planificar(ctx, 12, "fundamentacion")
-    assert [len(l) for l in lotes] == [4, 4, 4]
-    ids = [p.item_id for l in lotes for p in l]
+    assert [len(lote) for lote in lotes] == [4, 4, 4]
+    ids = [p.item_id for lote in lotes for p in lote]
     assert ids == [f"i{k}" for k in range(1, 13)]
 
 
 def test_orden_de_menor_a_mayor_nivel(silabo):
     ctx = contexto_clase(silabo, "M2-S1")
     orden = ["receptivo", "resolutivo", "reflexivo", "critico"]
-    niveles = [orden.index(p.nivel) for l in planificar(ctx, 12, "profesional") for p in l]
+    niveles = [orden.index(p.nivel) for lote in planificar(ctx, 12, "profesional") for p in lote]
     assert niveles == sorted(niveles)
 
 
 def test_focos_distintos_m2s1_m2s2(silabo):
-    f1 = {p.foco for l in planificar(contexto_clase(silabo, "M2-S1"), 12, "fundamentacion") for p in l}
-    f2 = {p.foco for l in planificar(contexto_clase(silabo, "M2-S2"), 12, "fundamentacion") for p in l}
+    f1 = {p.foco for lote in planificar(contexto_clase(silabo, "M2-S1"), 12, "fundamentacion") for p in lote}
+    f2 = {p.foco for lote in planificar(contexto_clase(silabo, "M2-S2"), 12, "fundamentacion") for p in lote}
     assert f1 != f2
 
 
 def test_determinista(silabo):
     ctx = contexto_clase(silabo, "M2-S1")
     assert planificar(ctx, 10, "avanzado") == planificar(ctx, 10, "avanzado")
+
+
+def _plano(lotes):
+    return [p for lote in lotes for p in lote]
+
+
+def test_n_pequeno_incluye_actividad_y_contenido(silabo):
+    ctx = contexto_clase(silabo, "M2-S1")
+    focos = {p.foco for p in _plano(planificar(ctx, 3, "fundamentacion"))}
+    assert len(ctx.actividades) + len(ctx.contenidos) > 3
+    assert focos & {a.strip() for a in ctx.actividades}
+    assert focos & {c.strip() for c in ctx.contenidos}
+
+
+def test_focos_desacoplados_de_niveles(silabo):
+    plan = _plano(planificar(contexto_clase(silabo, "M2-S1"), 12, "fundamentacion"))
+    for a, b in zip(plan, plan[1:]):
+        assert a.foco != b.foco
+    niveles_por_foco = {}
+    for p in plan:
+        niveles_por_foco.setdefault(p.foco, set()).add(p.nivel)
+    repetidos = [n for f, n in niveles_por_foco.items() if sum(q.foco == f for q in plan) > 1]
+    assert repetidos and all(len(n) > 1 for n in repetidos)
+
+
+def test_perfil_desconocido():
+    with pytest.raises(ValueError):
+        tabla_especificaciones(5, "inexistente")
+
+
+def test_n_cero_y_errores(silabo):
+    ctx = contexto_clase(silabo, "M2-S1")
+    assert planificar(ctx, 0, "profesional") == []
+    with pytest.raises(ValueError):
+        tabla_especificaciones(-1, "profesional")
+    with pytest.raises(ValueError):
+        planificar(ctx, 4, "profesional", tam_lote=0)
+
+
+def test_ultimo_lote_parcial(silabo):
+    lotes = planificar(contexto_clase(silabo, "M2-S1"), 10, "profesional")
+    assert [len(lote) for lote in lotes] == [4, 4, 2]
+
+
+def test_avanzado_sin_receptivo():
+    assert tabla_especificaciones(10, "avanzado")["receptivo"] == 0
