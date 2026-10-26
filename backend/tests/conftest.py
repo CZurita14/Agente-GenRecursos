@@ -23,14 +23,18 @@ def conn():
     """
     esquema = f"prueba_{uuid.uuid4().hex[:8]}"
     c = conectar()
-    c.autocommit = True
-    c.execute(f"create schema {esquema}")
-    c.execute(f"set search_path to {esquema}")
-    aplicar_migraciones(c)
-    c._esquema = esquema
-    yield c
-    c.execute(f"drop schema {esquema} cascade")
-    c.close()
+    try:
+        c.autocommit = True
+        try:
+            c.execute(f"create schema {esquema}")
+            c.execute(f"set search_path to {esquema}")
+            aplicar_migraciones(c)
+            c._esquema = esquema
+            yield c
+        finally:
+            c.execute(f"drop schema if exists {esquema} cascade")
+    finally:
+        c.close()
 
 
 @pytest.fixture

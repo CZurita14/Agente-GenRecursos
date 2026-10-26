@@ -7,7 +7,10 @@ DIR = Path(__file__).parent / "migraciones"
 
 
 def aplicar_migraciones(conn: psycopg.Connection) -> list[str]:
-    """Aplica las migraciones pendientes y devuelve los nombres aplicados."""
+    """Aplica las migraciones pendientes y devuelve los nombres aplicados.
+
+    Espera una conexión autocommit: cada archivo corre en su propio conn.transaction().
+    """
     conn.execute(
         "create table if not exists migracion ("
         "nombre text primary key, aplicada timestamptz not null default now())"
