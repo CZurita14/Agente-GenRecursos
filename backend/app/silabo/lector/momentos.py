@@ -88,12 +88,17 @@ def leer_rubrica(filas: list[list[str | None]]) -> list[dict]:
         if not niveles:
             continue
         valores = {nivel: fila[k] if k < len(fila) else "" for nivel, k in niveles.items()}
-        if fila[0].strip():
-            rubrica.append({"indicador": limpio(fila[0]), "niveles": {n: limpio(v) for n, v in valores.items()}})
-        elif rubrica and any(v.strip() for v in valores.values()):
-            previos = rubrica[-1]["niveles"]
+        indicador = fila[0].strip()
+        # Los indicadores empiezan con mayúscula o número; en minúscula, continúan
+        # la fila anterior partida entre páginas.
+        if indicador and not (indicador[0].islower() and rubrica):
+            rubrica.append({"indicador": limpio(indicador), "niveles": {n: limpio(v) for n, v in valores.items()}})
+        elif rubrica and (indicador or any(v.strip() for v in valores.values())):
+            previa = rubrica[-1]
+            if indicador:
+                previa["indicador"] = limpio(f"{previa['indicador']} {indicador}")
             for n, v in valores.items():
-                previos[n] = limpio(f"{previos[n]} {v}")
+                previa["niveles"][n] = limpio(f"{previa['niveles'][n]} {v}")
     return rubrica
 
 
