@@ -213,3 +213,26 @@ def test_agotar_cuota_usuario_no_impide_revocar_sesion(entorno):
     assert c.get("/auth/yo").status_code == 429
     assert c.post("/auth/salir", headers={"Origin": ORIGEN}).status_code == 200
     assert app.state.auth.identificar(token) is None
+
+
+def test_peticiones_reutilizan_conexiones(nueva_conexion):
+    # Revisión A5: sin pool, cada petición autenticada abría al menos 5 conexiones (~15 ms c/u).
+    creadas = []
+
+    def contar():
+        creadas.append(1)
+        return nueva_conexion()
+
+    enviados = {}
+    auth = ServicioAuth(contar, "s" * 48, lambda c, k: enviados.update({c: k}))
+    config = Ajustes(_env_file=None, database_url="no-usar", llm_base_url="http://no-usar/v1",
+                     llm_model="m", api_origen=ORIGEN, auth_secreto="s" * 48)
+    app = crear_app(config, auth=auth, conexion=contar)
+    auth.conexion = app.state.conexion  # Como en producción: la sesión usa la fábrica de la app.
+    with TestClient(app, base_url=ORIGEN, client=("198.51.100.30", 1)) as c:
+        auth.pedir("docente@uti.edu.ec")
+        c.cookies.set("sesion", auth.verificar("docente@uti.edu.ec", enviados["docente@uti.edu.ec"]))
+        antes = len(creadas)
+        for _ in range(5):
+            assert c.get("/auth/yo").status_code == 200
+        assert len(creadas) - antes <= 2

@@ -23,6 +23,7 @@ from app.auth.correo import transporte_correo
 from app.auth.servicio import ServicioAuth
 from app.config import RAIZ, Ajustes, ajustes
 from app.db.conexion import conectar
+from app.db.pool import PoolConexiones
 from app.asignaturas.servicio import ServicioAsignaturas
 from app.recursos.servicio import ServicioRecursos
 from app.control.identidad import ProxyInvalido, ip_cliente, operacion_segura
@@ -32,7 +33,8 @@ from app.control.servicio import ControlAcceso
 
 def crear_app(config: Ajustes | None = None, *, transporte=None, auth=None, conexion=None, lector_pdf=None) -> FastAPI:
     config = config or ajustes()
-    conexion = conexion or (lambda: conectar(config.database_url))
+    # Toda conexión de la API pasa por el pool: sin él, cada petición abría al menos cinco.
+    conexion = PoolConexiones(conexion or (lambda: conectar(config.database_url)))
 
     @asynccontextmanager
     async def vida(app):
@@ -48,7 +50,10 @@ def crear_app(config: Ajustes | None = None, *, transporte=None, auth=None, cone
         async with httpx.AsyncClient(timeout=5, transport=transporte,
                                      headers={"Authorization": f"Bearer {config.llm_api_key}"}) as cliente:
             app.state.ia = cliente
-            yield
+            try:
+                yield
+            finally:
+                conexion.cerrar()
 
     app = FastAPI(lifespan=vida, docs_url=None, redoc_url=None, openapi_url=None)
     app.state.config = config
