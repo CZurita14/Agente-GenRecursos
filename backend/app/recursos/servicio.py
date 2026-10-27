@@ -8,6 +8,7 @@ from app.agentes.orquestador import SolicitudGeneracion, crear_trabajos
 from app.agentes.planificador import perfil_por_nivel
 from app.agentes.workers import WORKERS
 from app.asignaturas.servicio import exigir_acceso
+from app.herramientas.sin_ia import HERRAMIENTAS_SIN_IA, generar_sin_ia
 from app.recursos.validacion import EdicionInvalida, validar_contenido
 from app.silabo.contexto import contexto_clase
 from app.silabo.modelo import SilaboUTI
@@ -35,12 +36,27 @@ def _contexto(recurso, asignatura):
         raise HTTPException(409, "El contexto original del recurso no está disponible") from None
 
 
+def _actualizado_sin_ia(recurso, asignatura) -> bool:
+    """Sin IA: cambió si regenerar con el sílabo actual da otro contenido que con la instantánea."""
+    try:
+        original = generar_sin_ia(recurso["herramienta"], SilaboUTI.model_validate(recurso["snapshot"]["silabo"]),
+                                  recurso["ambito_id"])
+        actual = generar_sin_ia(recurso["herramienta"], SilaboUTI.model_validate(asignatura["silabo"]),
+                                recurso["ambito_id"])
+    except (ValueError, KeyError, TypeError):
+        return True
+    return original != actual
+
+
 def _detalle(recurso, asignatura):
     campos = ("id", "trabajo_id", "asignatura_id", "ambito_id", "herramienta", "version_silabo",
               "version_esquema", "contenido", "evidencia", "estado", "revision", "creado",
               "actualizado", "verificacion_edicion")
     resultado = {k: recurso[k] for k in campos}
     resultado["evidencia_vigente"] = recurso["revision"] == 0
+    if recurso["herramienta"] in HERRAMIENTAS_SIN_IA:
+        resultado["silabo_actualizado"] = _actualizado_sin_ia(recurso, asignatura)
+        return resultado
     actualizado = recurso["version_silabo"] != asignatura["version_silabo"]
     try:
         original = _contexto(recurso, asignatura)
@@ -69,14 +85,17 @@ class ServicioRecursos:
         with self._acceso(aid, correo) as (_, a):
             silabo = SilaboUTI.model_validate(a["silabo"])
             recomendaciones = self.perfiles[a["agente"]].herramientas_recomendadas.get(ambito, [])
-            disponibles = list(WORKERS) if ambito == "clase" else []
+            disponibles = (list(WORKERS) if ambito == "clase" else
+                           [h for h, tipo in HERRAMIENTAS_SIN_IA.items() if tipo == ambito])
             orden = [h for h in recomendaciones if h in disponibles]
             orden += sorted(h for h in disponibles if h not in orden)
             return {"ambito": ambito, "perfil_sugerido": perfil_por_nivel(silabo.proyecto_formativo.nivel),
                     "herramientas": [{"id": h, "recomendada": h in recomendaciones} for h in orden]}
 
     def generar(self, aid, correo, ambito, herramientas, cantidad, instrucciones, perfil):
-        with self._acceso(aid, correo, editar=True) as (conn, _):
+        with self._acceso(aid, correo, editar=True) as (conn, a):
+            if any(h in HERRAMIENTAS_SIN_IA for h in herramientas):
+                return self._generar_sin_ia(conn, aid, a, ambito, herramientas)
             try:
                 ids = crear_trabajos(conn, SolicitudGeneracion(aid, ambito, herramientas,
                                       cantidad=cantidad, instrucciones=instrucciones, perfil_dificultad=perfil))
@@ -84,6 +103,33 @@ class ServicioRecursos:
                 raise HTTPException(422, "Selección de generación no válida") from None
             return {"trabajos": [{"id": str(tid), "herramienta": h, "estado": "en_cola"}
                                  for tid, h in zip(ids, herramientas)]}
+
+    @staticmethod
+    def _generar_sin_ia(conn, aid, asignatura, ambito, herramientas):
+        """Al instante y en la transacción del pedido: trabajo ya `listo` + recurso, sin cola ni modelo."""
+        if len(set(herramientas)) != len(herramientas) or any(
+                HERRAMIENTAS_SIN_IA.get(h) != ambito.tipo for h in herramientas):
+            raise HTTPException(422, "Selección de generación no válida")
+        silabo = SilaboUTI.model_validate(asignatura["silabo"])
+        try:
+            contenidos = [generar_sin_ia(h, silabo, ambito.id) for h in herramientas]
+        except ValueError:
+            raise HTTPException(422, "El sílabo no tiene lo necesario para esta herramienta") from None
+        parametros = {"silabo": asignatura["silabo"], "version_silabo": asignatura["version_silabo"]}
+        evidencia = {"origen": "silabo", "sin_ia": True, "ambito": {"tipo": ambito.tipo, "id": ambito.id}}
+        trabajos = []
+        for herramienta, contenido in zip(herramientas, contenidos):
+            tid = conn.execute(
+                "insert into trabajo (asignatura_id,agente,ambito_tipo,ambito_id,herramienta,parametros,estado) "
+                "values (%s,%s,%s,%s,%s,%s,'listo') returning id",
+                (aid, asignatura["agente"], ambito.tipo, ambito.id, herramienta, Jsonb(parametros))).fetchone()["id"]
+            rid = conn.execute(
+                "insert into recurso (trabajo_id,asignatura_id,ambito_id,herramienta,version_silabo,contenido,"
+                "evidencia,estado) values (%s,%s,%s,%s,%s,%s,%s,'listo') returning id",
+                (tid, aid, ambito.id, herramienta, asignatura["version_silabo"], Jsonb(contenido),
+                 Jsonb(evidencia))).fetchone()["id"]
+            trabajos.append({"id": str(tid), "herramienta": herramienta, "estado": "listo", "recurso_id": str(rid)})
+        return {"trabajos": trabajos}
 
     def trabajos(self, aid, correo, limite, desde):
         with self._acceso(aid, correo) as (conn, _):
@@ -111,6 +157,9 @@ class ServicioRecursos:
     def editar(self, aid, rid, correo, revision, contenido):
         with self._acceso(aid, correo, editar=True) as (conn, a):
             r = _recurso(conn, aid, rid, editar=True)
+            if r["herramienta"] in HERRAMIENTAS_SIN_IA:
+                # Reproducen el sílabo: se cambian subiendo una versión nueva del sílabo.
+                raise HTTPException(422, "Esta herramienta reproduce el sílabo y no se edita")
             if r["revision"] != revision:
                 raise HTTPException(409, "El recurso cambió; recárguelo antes de editar")
             try:
