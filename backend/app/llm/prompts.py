@@ -43,7 +43,16 @@ class Sello:
     fecha: date
 
     def linea(self) -> str:
-        return f"[Asignatura {self.codigo_pf} · Clase {self.clase_id} · {self.fecha:%d/%m/%Y}]"
+        return f"[Asignatura {self.codigo_pf} · {_ambito(self.clase_id)} · {self.fecha:%d/%m/%Y}]"
+
+
+def _ambito(clase_id: str) -> str:
+    """«Clase M2-S1», «Momento M2» o «Asignatura» según el id del contexto (P3b)."""
+    if clase_id == "asignatura":
+        return "Asignatura"
+    if re.fullmatch(r"M\d+", clase_id):
+        return f"Momento {clase_id}"
+    return f"Clase {clase_id}"
 
 
 def _limpio(texto: str) -> str:
@@ -65,7 +74,7 @@ def _lista(titulo: str, items: list[str]) -> str:
 def _seccion_clase(c: ContextoClase) -> str:
     ra = [f"{r.id}: {r.texto} (evidencia: {r.evidencia})" for r in c.ra]
     partes = [
-        f"## Clase {_limpio(c.clase_id)} · {_limpio(c.momento_titulo)}",
+        f"## {_ambito(_limpio(c.clase_id))} · {_limpio(c.momento_titulo)}",
         _lista("Contenidos:", c.contenidos),
         _lista("Actividades:", c.actividades),
         _lista("Resultados de aprendizaje:", ra),
