@@ -67,3 +67,9 @@ def _barajar(item: ItemCuestionario, tarea: TareaLote) -> ItemCuestionario:
         "opciones": [item.opciones[i] for i in orden],
         "correcta": orden.index(item.correcta),
     })
+
+
+class WorkerSimulacro(WorkerCuestionario):
+    """Simulacro del momento (catálogo #11): el mismo flujo de ítems con el contexto del
+    momento. El solucionario son la clave, las justificaciones y el razonamiento de cada ítem."""
+    herramienta = "simulacro"

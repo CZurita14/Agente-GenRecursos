@@ -25,6 +25,7 @@ class Definicion:
 
 DEFINICIONES: dict[str, Definicion] = {
     "cuestionario": Definicion("clase", es_quiz=True),
+    "simulacro": Definicion("momento", es_quiz=True),
     "ficha_clase": Definicion("clase", secciones=("conceptual", "aplicacion"),
                               modelos=(FichaConceptual, FichaAplicacion)),
 }

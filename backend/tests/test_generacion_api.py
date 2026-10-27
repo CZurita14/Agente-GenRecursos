@@ -76,8 +76,9 @@ def test_catalogo_solo_workers_disponibles_y_orden_de_facultad(entorno):
     assert r.status_code == 200
     assert [h["id"] for h in r.json()["herramientas"]] == ["cuestionario", "ficha_clase"]
     assert r.json()["perfil_sugerido"] == "fundamentacion"
-    # P3a: el ámbito momento ya ofrece las herramientas sin IA (no hay workers de IA de momento).
-    assert all(h["id"] not in WORKERS for h in d.get(f"/asignaturas/{aid}/herramientas?ambito=momento").json()["herramientas"])
+    # P3a/P3b: el ámbito momento ofrece sus propias herramientas, nunca las de clase.
+    momento = [h["id"] for h in d.get(f"/asignaturas/{aid}/herramientas?ambito=momento").json()["herramientas"]]
+    assert "cuestionario" not in momento and "ficha_clase" not in momento
 
 
 def test_generar_encola_una_vez_por_herramienta_y_no_expone_snapshot(entorno, conn):

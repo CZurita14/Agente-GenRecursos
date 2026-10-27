@@ -7,6 +7,7 @@ from psycopg.types.json import Jsonb
 from app.agentes.orquestador import SolicitudGeneracion, crear_trabajos
 from app.agentes.planificador import perfil_por_nivel
 from app.agentes.workers import WORKERS
+from app.agentes.workers.definiciones import DEFINICIONES
 from app.asignaturas.servicio import exigir_acceso
 from app.herramientas.sin_ia import HERRAMIENTAS_SIN_IA, generar_sin_ia
 from app.recursos.validacion import EdicionInvalida, validar_contenido
@@ -85,8 +86,8 @@ class ServicioRecursos:
         with self._acceso(aid, correo) as (_, a):
             silabo = SilaboUTI.model_validate(a["silabo"])
             recomendaciones = self.perfiles[a["agente"]].herramientas_recomendadas.get(ambito, [])
-            disponibles = (list(WORKERS) if ambito == "clase" else
-                           [h for h, tipo in HERRAMIENTAS_SIN_IA.items() if tipo == ambito])
+            disponibles = ([h for h in WORKERS if h in DEFINICIONES and DEFINICIONES[h].ambito == ambito]
+                           + [h for h, tipo in HERRAMIENTAS_SIN_IA.items() if tipo == ambito])
             orden = [h for h in recomendaciones if h in disponibles]
             orden += sorted(h for h in disponibles if h not in orden)
             return {"ambito": ambito, "perfil_sugerido": perfil_por_nivel(silabo.proyecto_formativo.nivel),
