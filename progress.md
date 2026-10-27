@@ -3,7 +3,7 @@
 > **Para qué sirve:** es la memoria del proyecto. Al retomar, **se lee primero este archivo** y solo después, si hace falta, el documento puntual que enlaza.
 > No hace falta recorrer el repositorio completo.
 >
-> **Última actualización:** 2026-10-27 · **Fase:** 1 · **Bloque activo:** P4 A1 implementada en `codex/p4-api-acceso`; siguiente A2
+> **Última actualización:** 2026-10-27 · **Fase:** 1 · **Bloque activo:** P4 A2 implementada en `codex/p4-api-acceso`; siguiente A3
 
 ## Cómo se actualiza
 
@@ -21,7 +21,7 @@ Estados: `⬜ pendiente` · `🔄 en curso` · `🔁 devuelta (ronda n)` · `✅
 
 ## Estado en una línea
 
-P1 y P2 publicados en `origin/p1/nucleo` y `origin/p2/lector`. Las capturas del usuario muestran los PR #1 (P1 → main) y #2 (P2 → P1), abiertos; no se han fusionado en esta continuación. Suite heredada comprobada: 256 pruebas pasan y 1 real omitida. P4 empieza en `codex/p4-api-acceso`: base FastAPI, salud, origen exacto y cierre de acceso; A2 (sesiones/códigos) sigue pendiente.
+P1 y P2 publicados en `origin/p1/nucleo` y `origin/p2/lector`. Las capturas del usuario muestran los PR #1 (P1 → main) y #2 (P2 → P1), abiertos; no se han fusionado en esta continuación. P4 avanza en `codex/p4-api-acceso`: A1 (base HTTP) y A2 (códigos y sesiones PostgreSQL) implementadas. Sigue A3, asignaturas y permisos; envío SMTP institucional pendiente de B4.
 
 ## Documentos de referencia
 
@@ -69,7 +69,7 @@ P1 y P2 publicados en `origin/p1/nucleo` y `origin/p2/lector`. Las capturas del 
 |---|---|---|---|
 | P2 Lector y menú | ✅ | [plan](docs/superpowers/plans/2026-10-27-p2-lector-y-menu.md) | Rama `p2/lector`, publicada; PR #2 sobre P1 según capturas. Ruta de respaldo con IA (L7) pendiente de B7 |
 | P3 Herramientas | ⬜ | Por escribir | H8 bloqueada por la plantilla académica |
-| P4 API y acceso | 🔄 | [plan](docs/superpowers/plans/2026-10-27-p4-api-y-acceso.md) | A1 implementada; A2–A5 pendientes. Envío real de códigos bloqueado por SMTP |
+| P4 API y acceso | 🔄 | [plan](docs/superpowers/plans/2026-10-27-p4-api-y-acceso.md) | A1–A2 implementadas; A3–A5 pendientes. Envío real de códigos bloqueado por SMTP |
 | P5 Chat de ajustes | ⬜ | Por escribir | |
 | P6 Entrega y frontend | ⬜ | Por escribir | |
 | P7 Despliegue | ⬜ | Por escribir | D4 bloqueada por TI |
@@ -89,7 +89,7 @@ P1 y P2 publicados en `origin/p1/nucleo` y `origin/p2/lector`. Las capturas del 
 | 9 | M2-S1 y M2-S2 producen herramientas distintas | P1, P3 | 🔄 Contexto y focos distintos (`test_silabo`, `test_planificador`); generación real en P3 |
 | 10 | Chat regenera solo la pregunta pedida | P5 | ⬜ |
 | 11 | Caída del servidor → "en espera" y reanuda | P1 | ✅ `test_servidor_caido_queda_en_espera`, `test_retoma_tras_caida` |
-| 12 / 12b / 12c | Dominios, permisos, bloqueo tras 5 intentos | P4 | ⬜ |
+| 12 / 12b / 12c | Dominios, permisos, bloqueo tras 5 intentos | P4 | 🔄 12 y 12c probados en A2; 12b pendiente de A3, correo real pendiente B4 |
 | 13 | Instalación limpia | P7 | ⬜ |
 | 14 | Aislamiento entre asignaturas | P1 | ✅ `test_aislamiento_dos_asignaturas` |
 
@@ -143,6 +143,9 @@ P1 y P2 publicados en `origin/p1/nucleo` y `origin/p2/lector`. Las capturas del 
 - **Continuación en Codex tras Claude:** contrastadas capturas con ramas; P1/P2 ya tienen upstream y `main` local incluye el merge `9eba803`. Las notas anteriores de «sin push» y «crear PR» quedaron obsoletas. PR #1/#2 abiertos según capturas; estado remoto en vivo no consultado.
 - **P4 A1:** rama `codex/p4-api-acceso` desde P2. Fábrica FastAPI con lifespan, `/salud` contra `/v1/models`, modelo y ventana 8192, CORS/Origin exacto, rutas privadas cerradas hasta A2 y errores sin datos recibidos. 19 pruebas HTTP nuevas pasan; no se repitió humo GPU.
 - **Validación A1:** suite completa 275 pasan y 1 omitida (58 s); `/salud` real HTTP 200 con agentes `general` e `ingenierias`. Revisión estática independiente sin hallazgos accionables. Autenticación y rutas de negocio aún no implementadas.
+- **P4 A2:** migración `004_auth.sql`, códigos HMAC de 6 dígitos/10 min, cinco fallos → bloqueo persistente 15 min, sesiones revocables (8 h inactividad/7 días), rutas auth y cookies seguras. SMTP deshabilitado por defecto; consola solo en desarrollo explícito. Configuración en `docs/desarrollo-api.md`.
+- **Revisión A2:** dos revisores independientes detectaron enumeración por rechazo SMTP y bloqueo SQL durante envío; corregidos con respuesta uniforme y reto persistido antes del transporte. Producción exige origen HTTPS. Pruebas adicionales comprueban hashes exactos y contención real de filas, reenvío, revocación y SMTP simulado; sin correos reales ni humo GPU.
+- **Cierre A2:** ambos revisores confirmaron las correcciones sin pendientes sustantivos. Suite completa: **314 pasan y 1 omitida** (68 s), 39 pruebas nuevas sobre A1. Solo se migraron esquemas temporales de prueba; la BD de la aplicación requiere aplicar `004_auth.sql` según la guía antes de habilitar ingreso.
 - **P2 · Lector y menú** (rama `p2/lector`, ejecución en línea con revisión final por un subagente opus):
   - Segmentación por posición en la página: se descartan las secciones I y VII, el índice y el pie «Generado por <usuario>», que también es un dato personal.
   - Las sesiones que empiezan al pie de página no tienen borde inferior: se reconstruye esa fila abierta. Sin esto se perdían 2 de 11 sesiones en Datos y 3 de 6 en TIC.
@@ -218,6 +221,6 @@ P1 y P2 publicados en `origin/p1/nucleo` y `origin/p2/lector`. Las capturas del 
 
 1. Entregar y revisar con el usuario la propuesta institucional en `docs/propuestas/`.
 2. Fase de calidad (en pausa hasta la plantilla): variar los tipos de enunciado (3 de 4 eran «¿Qué tipo de prueba…?») y que el código calcule los valores críticos.
-3. Continuar P4 con A2: códigos de ingreso, sesiones persistentes, expiración y bloqueo por intentos; luego A3 (lector y permisos).
+3. Continuar P4 con A3: subir sílabo con límites y aislamiento del lector, listar asignaturas, menú y compartir como editor/lector; luego A4/A5.
 4. Mantener los PR apilados: integrar #1 antes de #2 cuando se decida fusionarlos. Los PR ya están creados según las capturas; no repetir creación.
 5. Preparar el spec v1.3 antes de P3 y adaptar formatos finales cuando llegue la plantilla académica.

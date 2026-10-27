@@ -5,13 +5,19 @@ import httpx
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
+import psycopg
 
 from app.agentes.facultades import cargar_perfiles
+from app.api.auth import router as auth_router
 from app.api.errores import registrar_errores
+from app.auth.correo import transporte_correo
+from app.auth.servicio import ServicioAuth
 from app.config import RAIZ, Ajustes, ajustes
+from app.db.conexion import conectar
 
 
-def crear_app(config: Ajustes | None = None, *, transporte=None) -> FastAPI:
+def crear_app(config: Ajustes | None = None, *, transporte=None, auth=None) -> FastAPI:
     config = config or ajustes()
 
     @asynccontextmanager
@@ -26,17 +32,30 @@ def crear_app(config: Ajustes | None = None, *, transporte=None) -> FastAPI:
             yield
 
     app = FastAPI(lifespan=vida, docs_url=None, redoc_url=None, openapi_url=None)
+    app.state.auth = auth
+    if auth is None and config.auth_secreto is not None:
+        app.state.auth = ServicioAuth(lambda: conectar(config.database_url),
+                                      config.auth_secreto.get_secret_value(), transporte_correo(config))
     registrar_errores(app)
+    app.include_router(auth_router)
 
     @app.middleware("http")
     async def acceso(request: Request, siguiente):
-        # A2 sustituirá este cierre por validación de sesión persistente.
-        # No basta con presentar una cookie para entrar.
         if request.method not in {"GET", "HEAD", "OPTIONS"}:
             if request.headers.get("origin") != config.api_origen:
                 return JSONResponse({"detail": "Origen no permitido"}, status_code=403)
-        if request.url.path != "/salud":
-            return JSONResponse({"detail": "Sesión requerida"}, status_code=401)
+        publica = ((request.url.path == "/salud")
+                   or (request.method == "POST" and request.url.path in {"/auth/codigo", "/auth/verificar"}))
+        if not publica:
+            usuario = None
+            if app.state.auth is not None and request.cookies.get("sesion"):
+                try:
+                    usuario = await run_in_threadpool(app.state.auth.identificar, request.cookies["sesion"])
+                except psycopg.Error:
+                    return JSONResponse({"detail": "Servicio temporalmente no disponible"}, status_code=503)
+            if usuario is None:
+                return JSONResponse({"detail": "Sesión requerida"}, status_code=401)
+            request.state.usuario = usuario
         return await siguiente(request)
 
     # CORS envuelve también los rechazos del control de acceso.
