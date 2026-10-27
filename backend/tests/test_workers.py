@@ -138,3 +138,14 @@ def test_ficha_dos_secciones(silabo):
     FichaConceptual.model_validate(e1.contenido[0])
     FichaAplicacion.model_validate(e2.contenido[0])
     assert cliente.llamadas[0]["esquema"] != cliente.llamadas[1]["esquema"]
+
+
+def test_caso_por_item_llega_al_pedido(silabo):
+    ctx = contexto_clase(silabo, "M2-S1")
+    tarea = _tarea(ctx)
+    plan = [p.model_copy(update={"caso": f"escenario {k}"}) for k, p in enumerate(tarea.plan)]
+    tarea = tarea.model_copy(update={"plan": plan})
+    cliente = ClienteSimulado({"worker": [_lote_json(ctx)]})
+    WorkerCuestionario().generar(tarea, cliente)
+    pedido = cliente.llamadas[-1]["mensajes"][-1]["content"]
+    assert all(f"caso: escenario {k}" in pedido for k in range(4))

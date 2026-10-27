@@ -64,9 +64,10 @@ class Coordinador:
         worker = self.workers[trabajo.herramienta]
         es_quiz = trabajo.herramienta == "cuestionario"
         cantidad = trabajo.parametros.get("cantidad", 12)
-        planes = planificar(contexto, cantidad, encargo.perfil_dificultad) if es_quiz else [[], []]
-        ids = dict(trabajo_id=trabajo.id, asignatura_id=trabajo.asignatura_id)
         estilo = estilo_para(self.perfil, encargo.carrera)
+        planes = (planificar(contexto, cantidad, encargo.perfil_dificultad, escenarios=estilo.escenarios)
+                  if es_quiz else [[], []])
+        ids = dict(trabajo_id=trabajo.id, asignatura_id=trabajo.asignatura_id)
 
         def bloquear():
             fila = conn.execute(

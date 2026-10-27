@@ -5,9 +5,12 @@ Decide cuántos ítems hay de cada nivel cognitivo (spec §6.2), asigna a cada
 reparte el plan en lotes que caben en el contexto del modelo (§5.3).
 No usa aleatoriedad: el mismo contexto produce siempre el mismo plan.
 """
+import hashlib
+import re
 from itertools import zip_longest
 from math import gcd
 
+from app.agentes.facultades import normalizar
 from app.agentes.mensajes import PlanItem
 from app.silabo.contexto import ContextoClase
 
@@ -79,8 +82,19 @@ def _indice_foco(k: int, n: int, m: int) -> int:
     return (k * paso) % m
 
 
+def _palabras(texto: str) -> set[str]:
+    return {p for p in re.findall(r"\w+", normalizar(texto)) if len(p) >= 6}
+
+
+def _casos_libres(escenarios: list[str], entregables: list[str]) -> list[str]:
+    """Escenarios que no comparten palabras clave con los entregables (§9.4 regla 1)."""
+    vetadas = set().union(*(_palabras(e) for e in entregables)) if entregables else set()
+    return [e for e in escenarios if not _palabras(e) & vetadas]
+
+
 def planificar(
-    contexto: ContextoClase, n: int, perfil: str, tam_lote: int = 4
+    contexto: ContextoClase, n: int, perfil: str, tam_lote: int = 4,
+    escenarios: list[str] = (),
 ) -> list[list[PlanItem]]:
     """Plan de `n` ítems `i1…in`, de menor a mayor nivel, en lotes de `tam_lote`.
 
@@ -88,14 +102,21 @@ def planificar(
     actividad primero) y se asignan con `_indice_foco`: dos clases con el mismo
     contenido pero distintas actividades obtienen focos distintos, sin perder
     contenidos en cuestionarios cortos. Es totalmente determinista.
+
+    Con `escenarios`, cada ítem recibe un caso que no se parece a los entregables
+    del momento; la rotación arranca en un punto fijo por clase para que dos
+    clases no repitan la misma secuencia.
     """
     if tam_lote < 1:
         raise ValueError("tam_lote debe ser >= 1")
     tabla = tabla_especificaciones(n, perfil)
     focos = _focos(contexto)
+    casos = _casos_libres(list(escenarios), contexto.entregables_momento)
+    inicio = int(hashlib.sha256(contexto.clase_id.encode()).hexdigest(), 16) % len(casos) if casos else 0
     niveles = [nv for nv in NIVELES for _ in range(tabla[nv])]
     items = [
-        PlanItem(item_id=f"i{k + 1}", nivel=nv, foco=focos[_indice_foco(k, n, len(focos))])
+        PlanItem(item_id=f"i{k + 1}", nivel=nv, foco=focos[_indice_foco(k, n, len(focos))],
+                 caso=casos[(inicio + k) % len(casos)] if casos else "")
         for k, nv in enumerate(niveles)
     ]
     return [items[i : i + tam_lote] for i in range(0, len(items), tam_lote)]

@@ -69,3 +69,9 @@ def test_carrera_sin_ajustes_hereda(fing):
 
 def test_carrera_desconocida(fing):
     assert estilo_para(fing, "ASTRONAUTICA") == fing.estilo
+
+
+def test_escenarios_de_software(perfiles):
+    estilo = estilo_para(perfiles["ingenierias"], "SOFTWARE")
+    assert len(estilo.escenarios) >= 6
+    assert estilo_para(perfiles["general"], "X").escenarios == []

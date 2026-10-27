@@ -100,3 +100,33 @@ def test_ultimo_lote_parcial(silabo):
 
 def test_avanzado_sin_receptivo():
     assert tabla_especificaciones(10, "avanzado")["receptivo"] == 0
+
+
+ESCENARIOS = ["picos de tráfico en una tienda en línea", "tiempos de respuesta de una API REST",
+              "fallos de compilación en un repositorio Git", "consultas lentas en una base de datos"]
+
+
+def test_casos_evitan_el_escenario_del_entregable(silabo):
+    # §9.4 regla 1: el entregable de M3 habla de «picos de tráfico»; ese escenario se descarta.
+    ctx = contexto_clase(silabo, "M3-S4")
+    plan = [p for lote in planificar(ctx, 12, "fundamentacion", escenarios=ESCENARIOS) for p in lote]
+    casos = [p.caso for p in plan]
+    assert set(casos) == set(ESCENARIOS[1:])
+    assert all(a != b for a, b in zip(casos, casos[1:]))
+    assert planificar(ctx, 12, "fundamentacion", escenarios=ESCENARIOS) == planificar(
+        ctx, 12, "fundamentacion", escenarios=ESCENARIOS)
+
+
+def test_casos_varian_entre_clases(silabo):
+    a, b = (contexto_clase(silabo, c) for c in ("M2-S1", "M2-S2"))
+    caso = lambda ctx: planificar(ctx, 4, "fundamentacion", escenarios=ESCENARIOS[1:])[0][0].caso
+    assert {caso(a), caso(b)} <= set(ESCENARIOS[1:])
+    assert [p.caso for p in planificar(a, 3, "fundamentacion", escenarios=ESCENARIOS[1:])[0]] != \
+           [p.caso for p in planificar(b, 3, "fundamentacion", escenarios=ESCENARIOS[1:])[0]]
+
+
+def test_sin_escenarios_libres_no_se_asigna_caso(silabo):
+    ctx = contexto_clase(silabo, "M3-S4")
+    plan = planificar(ctx, 4, "fundamentacion", escenarios=["picos de tráfico de red"])[0]
+    assert all(p.caso == "" for p in plan)
+    assert all(p.caso == "" for p in planificar(ctx, 4, "fundamentacion")[0])

@@ -48,7 +48,10 @@ class WorkerCuestionario:
     @staticmethod
     def _pedido(tarea: TareaLote) -> str:
         lineas = [f"Genera {len(tarea.plan)} ítems, uno por cada fila del plan y en ese orden:"]
-        lineas += [f"- {p.item_id} · nivel {p.nivel} · foco: {p.foco}" for p in tarea.plan]
+        lineas += [f"- {p.item_id} · nivel {p.nivel} · foco: {p.foco}" + (f" · caso: {p.caso}" if p.caso else "")
+                   for p in tarea.plan]
+        if any(p.caso for p in tarea.plan):
+            lineas.append("Cada ítem ambienta su situación en el caso indicado, con datos ficticios propios.")
         lineas += ["", PLANTILLAS]
         comun = bloque_comun(tarea)
         if comun:

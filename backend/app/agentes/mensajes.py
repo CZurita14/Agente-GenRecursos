@@ -18,12 +18,14 @@ class EstiloFacultad(BaseInmutable):
     tipos_de_caso: list[str]
     software_habitual: list[str]
     vocabulario: str = ""
+    escenarios: list[str] = []  # Casos concretos que el planificador reparte por ítem.
 
 
 class PlanItem(BaseInmutable):
     item_id: str
     nivel: Literal["receptivo", "resolutivo", "reflexivo", "critico"]
     foco: str
+    caso: str = ""  # Escenario asignado por código, distinto del entregable (§9.4).
 
 
 class Mensaje(BaseInmutable):

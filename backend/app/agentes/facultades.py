@@ -34,7 +34,7 @@ def normalizar(texto: str) -> str:
 
 def _estilo_carrera(datos: dict[str, Any] | None) -> EstiloFacultad:
     # Lo omitido queda vacío: así hereda el estilo de la facultad.
-    base = {"tipos_de_caso": [], "software_habitual": [], "vocabulario": ""}
+    base = {"tipos_de_caso": [], "software_habitual": [], "vocabulario": "", "escenarios": []}
     return EstiloFacultad(**(base | (datos or {})))
 
 
@@ -85,6 +85,7 @@ def estilo_para(perfil: PerfilFacultad, carrera: str) -> EstiloFacultad:
         tipos_de_caso=ajuste.tipos_de_caso or base.tipos_de_caso,
         software_habitual=ajuste.software_habitual or base.software_habitual,
         vocabulario=ajuste.vocabulario or base.vocabulario,
+        escenarios=ajuste.escenarios or base.escenarios,
     )
 
 

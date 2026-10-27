@@ -165,6 +165,7 @@ ficha de M2-S1, Qwen3-8B-AWQ, ~12 min por corrida, ninguna llamada sobre
 | 1 (`humo-p1`) | Ninguno | 1 de 4 | 1 de 4 `ok`; 3 devueltos por integridad; 1 casi duplicado |
 | 2 (`-integridad`) | Criterio de integridad del revisor alineado con §9.4 regla 1 | 0 de 4 | 2 de 4 `ok`; 1 casi duplicado |
 | 3 (`-entregables`) | La evidencia del momento entra en `entregables_momento`; el worker debe usar otros casos y datos; las correcciones que fallan la verificación se reintentan | 2 de 4 | 3 de 4 `ok`; 4 de 4 verificados |
+| 4 (`-escenarios`) | El planificador asigna a cada ítem un escenario del perfil de la carrera y descarta los que comparten palabras clave con el entregable | 3 de 4 | **4 de 4 `ok`, `listo`**; 12 llamadas y 400 s (antes 19–24 llamadas y 680–964 s) |
 
 **Causa raíz.** Todas las devoluciones de la corrida 1 fueron por integridad
 («resuelve el entregable…»), no por la clave. El revisor tenía razón a medias:
@@ -174,7 +175,14 @@ entregable, porque solo tomaba los entregables por sesión, vacíos en este
 sílabo. El worker no sabía qué caso evitar y el revisor lo deducía de la
 rúbrica.
 
-**Lo que queda.** En la corrida 3 el revisor real también devolvió claves
+**Corrida 4.** Los casos (tienda en línea, inicio de sesión fallido, API REST y
+compilación en Git) salen de `escenarios` en `agentes/ingenierias.yaml`. Solo se
+devolvió el ítem del caso más cercano a seguridad, «intentos de inicio de sesión
+fallidos», y quedó `ok` en la 2.ª ronda. Defectos para la fase de calidad: 3 de los
+4 enunciados son «¿Qué tipo de prueba…?», y los valores críticos del ítem
+reflexivo los inventa el modelo (falta «el código calcula» de §5).
+
+**Lo que quedaba tras la corrida 3.** En la corrida 3 el revisor real también devolvió claves
 dudosas (i2: «opción 4, no la 2»; i4: «opciones 2 y 4»), que es su trabajo. Un
 ítem seguía en el escenario de picos de tráfico. Para variar los casos hace
 falta darle al worker tipos de caso concretos distintos del entregable, junto
