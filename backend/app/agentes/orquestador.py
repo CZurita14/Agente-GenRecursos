@@ -10,9 +10,10 @@ from app.agentes.facultades import enrutar
 from app.agentes.mensajes import Encargo
 from app.agentes.planificador import PERFILES, perfil_por_nivel
 from app.agentes.workers import WORKERS
+from app.agentes.workers.definiciones import DEFINICIONES
 from app.cola.trabajos import Ambito, encolar, poner_en_espera, renovar_lease, terminar, tomar_siguiente
 from app.llm.cliente import JsonInvalido, ServidorNoDisponible
-from app.silabo.contexto import contexto_clase
+from app.silabo.contexto import contexto_ambito
 from app.silabo.modelo import SilaboUTI
 
 registro = logging.getLogger(__name__)
@@ -45,10 +46,10 @@ class SolicitudGeneracion:
 def crear_trabajos(conn, solicitud: SolicitudGeneracion) -> list[UUID]:
     if solicitud.perfil_dificultad is not None and solicitud.perfil_dificultad not in PERFILES:
         raise ValueError("perfil de dificultad desconocido")
-    if solicitud.ambito.tipo != "clase":
-        raise ValueError("solo se admite el ámbito clase en el P1")
-    if not solicitud.herramientas or any(h not in WORKERS for h in solicitud.herramientas):
+    if not solicitud.herramientas or any(h not in WORKERS or h not in DEFINICIONES for h in solicitud.herramientas):
         raise ValueError("herramienta desconocida o selección vacía")
+    if any(DEFINICIONES[h].ambito != solicitud.ambito.tipo for h in solicitud.herramientas):
+        raise ValueError("herramienta de otro ámbito")
     if type(solicitud.cantidad) is not int or not 1 <= solicitud.cantidad <= 40:
         raise ValueError("cantidad debe ser un entero entre 1 y 40")
     if len(set(solicitud.herramientas)) != len(solicitud.herramientas):
@@ -58,7 +59,7 @@ def crear_trabajos(conn, solicitud: SolicitudGeneracion) -> list[UUID]:
         if asignatura is None:
             raise ValueError("asignatura inexistente")
         silabo = SilaboUTI.model_validate(asignatura["silabo"])
-        contexto_clase(silabo, solicitud.ambito.id)  # Falla antes de encolar si la clase no existe.
+        contexto_ambito(silabo, solicitud.ambito)  # Falla antes de encolar si el ámbito no existe.
         # El trabajo conserva una instantánea: subir otro sílabo no cambia un trabajo en curso.
         parametros = dict(cantidad=solicitud.cantidad, instrucciones=solicitud.instrucciones,
                           silabo=asignatura["silabo"], version_silabo=asignatura["version_silabo"])
@@ -79,7 +80,7 @@ def procesar_uno(conn, cliente, perfiles, worker_id: str, lease_s: int) -> bool:
             terminar(conn, trabajo.id, "error", "límite de recuperaciones agotado", **cerco)
             return True
         silabo = SilaboUTI.model_validate(trabajo.parametros["silabo"])
-        ctx = contexto_clase(silabo, trabajo.ambito.id)
+        ctx = contexto_ambito(silabo, trabajo.ambito)
         encargo = Encargo(
             trabajo_id=trabajo.id, asignatura_id=trabajo.asignatura_id,
             codigo_pf=ctx.codigo_pf, version_silabo=ctx.version_silabo,

@@ -11,10 +11,11 @@ from app.agentes.mensajes import (
 )
 from app.agentes.planificador import NIVELES, planificar, tabla_especificaciones
 from app.agentes.revisor import revisar_ficha, revisar_items
-from app.agentes.verificador import verificar_distribucion, verificar_ficha, verificar_items
-from app.herramientas.esquemas import FichaAplicacion, FichaConceptual, ItemCuestionario
+from app.agentes.verificador import verificar_distribucion, verificar_items
+from app.agentes.workers.definiciones import DEFINICIONES
+from app.herramientas.esquemas import ItemCuestionario
 from app.llm.cliente import JsonInvalido
-from app.silabo.contexto import contexto_clase
+from app.silabo.contexto import contexto_ambito
 from app.silabo.modelo import SilaboUTI
 
 
@@ -59,14 +60,15 @@ class Coordinador:
         if asignatura is None or asignatura["codigo_pf"] != contexto.codigo_pf:
             raise ValueError("contexto ajeno a la asignatura persistida")
         fuente = SilaboUTI.model_validate(trabajo.parametros.get("silabo", asignatura["silabo"]))
-        if contexto_clase(fuente, trabajo.ambito.id) != contexto:
+        if contexto_ambito(fuente, trabajo.ambito) != contexto:
             raise ValueError("el contexto no corresponde al sílabo del trabajo")
         worker = self.workers[trabajo.herramienta]
-        es_quiz = trabajo.herramienta == "cuestionario"
+        definicion = DEFINICIONES[trabajo.herramienta]
+        es_quiz = definicion.es_quiz
         cantidad = trabajo.parametros.get("cantidad", 12)
         estilo = estilo_para(self.perfil, encargo.carrera)
         planes = (planificar(contexto, cantidad, encargo.perfil_dificultad, escenarios=estilo.escenarios)
-                  if es_quiz else [[], []])
+                  if es_quiz else [[] for _ in definicion.secciones])
         ids = dict(trabajo_id=trabajo.id, asignatura_id=trabajo.asignatura_id)
 
         def bloquear():
@@ -122,7 +124,7 @@ class Coordinador:
                 for item in entrega.contenido:
                     contenido[item["item_id"]] = item
             else:
-                secciones["conceptual" if entrega.lote == 1 else "aplicacion"] = entrega.contenido[0]
+                secciones[definicion.secciones[entrega.lote - 1]] = entrega.contenido[0]
 
         for entrega in entregas:
             incorporar(entrega)
@@ -136,9 +138,8 @@ class Coordinador:
                     raise JsonInvalido("la entrega no contiene exactamente los ítems del plan")
                 previos = [i["pregunta"] for k, i in contenido.items() if k not in {p.item_id for p in plan}]
                 return verificar_items(items, plan, contexto, previos, entrega.asignatura_id, trabajo.asignatura_id)
-            modelo = FichaConceptual if entrega.lote == 1 else FichaAplicacion
-            modelo.model_validate(entrega.contenido[0])
-            return {"ficha": verificar_ficha(entrega.contenido[0], contexto)}
+            definicion.modelos[entrega.lote - 1].model_validate(entrega.contenido[0])
+            return {definicion.id_revision: definicion.verificar(entrega.contenido[0], contexto)}
 
         def generar(lote, plan, ronda, devoluciones):
             tarea = TareaLote(**ids, lote=lote, ronda=ronda, contexto=contexto, estilo=estilo,
@@ -185,7 +186,7 @@ class Coordinador:
             """Revisa los objetivos (None = todos) y guarda el veredicto completo, fusionado."""
             persistir(estado="revisando")
             if not es_quiz:
-                resultados = [revisar_ficha(secciones, contexto, cliente, **ids)]
+                resultados = [revisar_ficha(secciones, contexto, cliente, item_id=definicion.id_revision, **ids)]
             else:
                 nuevos = revisar_items([ItemCuestionario.model_validate(contenido[p.item_id])
                                         for p in plan_total if objetivos is None or p.item_id in objetivos],
@@ -215,13 +216,14 @@ class Coordinador:
                     break
                 ronda_hecha += 1
                 motivos = {r.item_id: r.motivo for r in devueltos}
-                pendientes = list(motivos) if es_quiz else ["ficha-1", "ficha-2"]
+                pendientes = (list(motivos) if es_quiz else
+                              [f"{definicion.id_revision}-{k}" for k in range(1, len(definicion.secciones) + 1)])
                 checkpoint = CheckpointRevision(**ids, ronda=ronda_hecha, pendientes=pendientes, motivos=motivos)
                 persistir([checkpoint], ronda=ronda_hecha)
             for objetivo in list(checkpoint.pendientes):
-                item_id = objetivo if es_quiz else "ficha"
+                item_id = objetivo if es_quiz else definicion.id_revision
                 numero = (1 + next(i for i, lote in enumerate(planes) if any(p.item_id == item_id for p in lote))
-                          if es_quiz else int(objetivo[-1]))
+                          if es_quiz else int(objetivo.rsplit("-", 1)[1]))
                 plan = [p for p in plan_total if p.item_id == item_id] if es_quiz else []
                 devolucion = Devolucion(**ids, item_id=item_id, motivo=checkpoint.motivos[item_id], ronda=checkpoint.ronda)
                 persistir([devolucion])
@@ -247,7 +249,7 @@ class Coordinador:
             reales = {n: sum(i.nivel == n for i in items) for n in NIVELES}
             recurso_contenido = [i.model_dump() for i in items]
         else:
-            fallos = {"ficha": verificar_ficha(secciones, contexto)}
+            fallos = {definicion.id_revision: definicion.verificar(secciones, contexto)}
             tabla, reales, distribucion, recurso_contenido = {}, {}, [], secciones
         estado = "requiere_revision" if (any(fallos.values()) or distribucion or
                                          any(r.revisor != "ok" for r in resultados)) else "listo"

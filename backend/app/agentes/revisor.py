@@ -161,14 +161,14 @@ def revisar_items(items: list[ItemCuestionario], contexto: ContextoClase, client
 
 def revisar_ficha(ficha: dict, contexto: ContextoClase, cliente: ClienteLLM, *,
                   trabajo_id: UUID, asignatura_id: UUID,
-                  timeout_s: float | None = None) -> ResultadoItem:
+                  timeout_s: float | None = None, item_id: str = "ficha") -> ResultadoItem:
     """Solo integridad académica (§10.2, 2.º punto): la ficha no tiene clave que resolver."""
     v = _consultar(cliente, contexto, _pedido_ficha(ficha), _Integridad,
                    trabajo_id, asignatura_id, timeout_s)
     if v is None:
-        return ResultadoItem(item_id="ficha", fallos_verificacion=[], revisor="sin_veredicto",
+        return ResultadoItem(item_id=item_id, fallos_verificacion=[], revisor="sin_veredicto",
                              motivo=SIN_VEREDICTO)
     if v.resuelve_entregable:
-        return ResultadoItem(item_id="ficha", fallos_verificacion=[], revisor="devuelto",
+        return ResultadoItem(item_id=item_id, fallos_verificacion=[], revisor="devuelto",
                              motivo=_motivo_integridad(v))
-    return ResultadoItem(item_id="ficha", fallos_verificacion=[], revisor="ok")
+    return ResultadoItem(item_id=item_id, fallos_verificacion=[], revisor="ok")
