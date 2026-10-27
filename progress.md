@@ -3,7 +3,7 @@
 > **Para qué sirve:** es la memoria del proyecto. Al retomar, **se lee primero este archivo** y solo después, si hace falta, el documento puntual que enlaza.
 > No hace falta recorrer el repositorio completo.
 >
-> **Última actualización:** 2026-10-27 · **Fase:** 1 · **Bloque activo:** P2 cerrado en la rama `p2/lector` (sin push); siguiente: P3 o P4
+> **Última actualización:** 2026-10-27 · **Fase:** 1 · **Bloque activo:** P4 A1 implementada en `codex/p4-api-acceso`; siguiente A2
 
 ## Cómo se actualiza
 
@@ -21,7 +21,7 @@ Estados: `⬜ pendiente` · `🔄 en curso` · `🔁 devuelta (ronda n)` · `✅
 
 ## Estado en una línea
 
-P1 cerrado y en GitHub (`p1/nucleo`). Con Qwen real, el cuestionario queda `listo` con 4/4 ítems tras corregir integridad y escenarios. P2 cerrado en `p2/lector` (local, sin push): el lector lee los 2 sílabos reales sin IA ni datos personales y el menú sale por semana; suite: 256 pruebas pasan y 1 real omitida. Falta unir el `main` de GitHub (solo README) con el local para abrir los PR.
+P1 y P2 publicados en `origin/p1/nucleo` y `origin/p2/lector`. Las capturas del usuario muestran los PR #1 (P1 → main) y #2 (P2 → P1), abiertos; no se han fusionado en esta continuación. Suite heredada comprobada: 256 pruebas pasan y 1 real omitida. P4 empieza en `codex/p4-api-acceso`: base FastAPI, salud, origen exacto y cierre de acceso; A2 (sesiones/códigos) sigue pendiente.
 
 ## Documentos de referencia
 
@@ -67,9 +67,9 @@ P1 cerrado y en GitHub (`p1/nucleo`). Con Qwen real, el cuestionario queda `list
 
 | Bloque | Estado | Plan detallado | Nota |
 |---|---|---|---|
-| P2 Lector y menú | ✅ | [plan](docs/superpowers/plans/2026-10-27-p2-lector-y-menu.md) | Rama `p2/lector`, `4f04747`…`7c26525`; sin push. Ruta de respaldo con IA (L7) pendiente de B7 |
+| P2 Lector y menú | ✅ | [plan](docs/superpowers/plans/2026-10-27-p2-lector-y-menu.md) | Rama `p2/lector`, publicada; PR #2 sobre P1 según capturas. Ruta de respaldo con IA (L7) pendiente de B7 |
 | P3 Herramientas | ⬜ | Por escribir | H8 bloqueada por la plantilla académica |
-| P4 API y acceso | ⬜ | Por escribir | Envío real de códigos bloqueado por SMTP |
+| P4 API y acceso | 🔄 | [plan](docs/superpowers/plans/2026-10-27-p4-api-y-acceso.md) | A1 implementada; A2–A5 pendientes. Envío real de códigos bloqueado por SMTP |
 | P5 Chat de ajustes | ⬜ | Por escribir | |
 | P6 Entrega y frontend | ⬜ | Por escribir | |
 | P7 Despliegue | ⬜ | Por escribir | D4 bloqueada por TI |
@@ -140,6 +140,9 @@ P1 cerrado y en GitHub (`p1/nucleo`). Con Qwen real, el cuestionario queda `list
 ## Bitácora (lo ya hecho)
 
 ### 2026-10-27
+- **Continuación en Codex tras Claude:** contrastadas capturas con ramas; P1/P2 ya tienen upstream y `main` local incluye el merge `9eba803`. Las notas anteriores de «sin push» y «crear PR» quedaron obsoletas. PR #1/#2 abiertos según capturas; estado remoto en vivo no consultado.
+- **P4 A1:** rama `codex/p4-api-acceso` desde P2. Fábrica FastAPI con lifespan, `/salud` contra `/v1/models`, modelo y ventana 8192, CORS/Origin exacto, rutas privadas cerradas hasta A2 y errores sin datos recibidos. 19 pruebas HTTP nuevas pasan; no se repitió humo GPU.
+- **Validación A1:** suite completa 275 pasan y 1 omitida (58 s); `/salud` real HTTP 200 con agentes `general` e `ingenierias`. Revisión estática independiente sin hallazgos accionables. Autenticación y rutas de negocio aún no implementadas.
 - **P2 · Lector y menú** (rama `p2/lector`, ejecución en línea con revisión final por un subagente opus):
   - Segmentación por posición en la página: se descartan las secciones I y VII, el índice y el pie «Generado por <usuario>», que también es un dato personal.
   - Las sesiones que empiezan al pie de página no tienen borde inferior: se reconstruye esa fila abierta. Sin esto se perdían 2 de 11 sesiones en Datos y 3 de 6 en TIC.
@@ -215,6 +218,6 @@ P1 cerrado y en GitHub (`p1/nucleo`). Con Qwen real, el cuestionario queda `list
 
 1. Entregar y revisar con el usuario la propuesta institucional en `docs/propuestas/`.
 2. Fase de calidad (en pausa hasta la plantilla): variar los tipos de enunciado (3 de 4 eran «¿Qué tipo de prueba…?») y que el código calcule los valores críticos.
-3. Unir el `main` de GitHub (solo README) con el local, hacer push de `p2/lector` y abrir los PR de P1 y P2, con autorización del usuario.
-5. Siguiente bloque: P3 (herramientas, H8 bloqueada por la plantilla) o P4 (API y acceso, que usa el lector: `POST /silabos` → `leer_silabo`, `SilaboIlegible` → 422, borrar el PDF tras leerlo).
-4. Preparar el spec v1.3 antes de P3 y adaptar formatos finales cuando llegue la plantilla académica.
+3. Continuar P4 con A2: códigos de ingreso, sesiones persistentes, expiración y bloqueo por intentos; luego A3 (lector y permisos).
+4. Mantener los PR apilados: integrar #1 antes de #2 cuando se decida fusionarlos. Los PR ya están creados según las capturas; no repetir creación.
+5. Preparar el spec v1.3 antes de P3 y adaptar formatos finales cuando llegue la plantilla académica.
