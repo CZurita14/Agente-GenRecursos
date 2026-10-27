@@ -1,4 +1,5 @@
 """Generación, seguimiento y recursos, con permisos y pertenencia transaccionales."""
+import re
 from contextlib import closing, contextmanager
 
 from fastapi import HTTPException
@@ -11,7 +12,8 @@ from app.agentes.workers.definiciones import DEFINICIONES
 from app.asignaturas.servicio import exigir_acceso
 from app.herramientas.sin_ia import HERRAMIENTAS_SIN_IA, generar_sin_ia
 from app.recursos.validacion import EdicionInvalida, validar_contenido
-from app.silabo.contexto import contexto_clase
+from app.herramientas.politica import excluye_ia_en_evaluacion
+from app.silabo.contexto import contexto_por_id
 from app.silabo.modelo import SilaboUTI
 
 
@@ -32,9 +34,22 @@ def _contexto(recurso, asignatura):
         # una instantánea ausente por el sílabo actual para validar una edición.
         raise HTTPException(409, "El contexto original del recurso no está disponible")
     try:
-        return contexto_clase(SilaboUTI.model_validate(datos), recurso["ambito_id"])
+        return contexto_por_id(SilaboUTI.model_validate(datos), recurso["ambito_id"])
     except (ValueError, KeyError):
         raise HTTPException(409, "El contexto original del recurso no está disponible") from None
+
+
+def _restriccion(silabo: SilaboUTI, tipo: str, ambito_id: str | None) -> str | None:
+    """§9.4 regla 2: motivo si el momento del ámbito excluye la IA en una evaluación."""
+    numero = None
+    if tipo in ("clase", "momento") and ambito_id:
+        m = re.fullmatch(r"M(\d+)(?:-S\d+)?", ambito_id)
+        numero = int(m.group(1)) if m else None
+    momento = next((x for x in silabo.momentos if x.numero == numero), None)
+    if momento is not None and excluye_ia_en_evaluacion(momento.politica_ia):
+        return ("La política de IA de este momento excluye la IA en una evaluación: solo se ofrecen "
+                "herramientas sin IA y el repaso de momentos anteriores (§9.4).")
+    return None
 
 
 def _actualizado_sin_ia(recurso, asignatura) -> bool:
@@ -61,7 +76,7 @@ def _detalle(recurso, asignatura):
     actualizado = recurso["version_silabo"] != asignatura["version_silabo"]
     try:
         original = _contexto(recurso, asignatura)
-        actual = contexto_clase(SilaboUTI.model_validate(asignatura["silabo"]), recurso["ambito_id"])
+        actual = contexto_por_id(SilaboUTI.model_validate(asignatura["silabo"]), recurso["ambito_id"])
         actualizado = actualizado or original.model_dump(exclude={"version_silabo"}) != actual.model_dump(exclude={"version_silabo"})
     except (HTTPException, ValueError, KeyError):
         actualizado = True
@@ -82,21 +97,26 @@ class ServicioRecursos:
                 asignatura, _ = exigir_acceso(conn, aid, correo, editar=editar)
                 yield conn, asignatura
 
-    def catalogo(self, aid, correo, ambito):
+    def catalogo(self, aid, correo, ambito, ambito_id=None):
         with self._acceso(aid, correo) as (_, a):
             silabo = SilaboUTI.model_validate(a["silabo"])
+            motivo = _restriccion(silabo, ambito, ambito_id)
             recomendaciones = self.perfiles[a["agente"]].herramientas_recomendadas.get(ambito, [])
-            disponibles = ([h for h in WORKERS if h in DEFINICIONES and DEFINICIONES[h].ambito == ambito]
-                           + [h for h, tipo in HERRAMIENTAS_SIN_IA.items() if tipo == ambito])
+            con_ia = [] if motivo else [h for h in WORKERS if h in DEFINICIONES and DEFINICIONES[h].ambito == ambito]
+            disponibles = con_ia + [h for h, tipo in HERRAMIENTAS_SIN_IA.items() if tipo == ambito]
             orden = [h for h in recomendaciones if h in disponibles]
             orden += sorted(h for h in disponibles if h not in orden)
-            return {"ambito": ambito, "perfil_sugerido": perfil_por_nivel(silabo.proyecto_formativo.nivel),
+            return {"ambito": ambito, "restringido": motivo is not None, "motivo": motivo,
+                    "perfil_sugerido": perfil_por_nivel(silabo.proyecto_formativo.nivel),
                     "herramientas": [{"id": h, "recomendada": h in recomendaciones} for h in orden]}
 
     def generar(self, aid, correo, ambito, herramientas, cantidad, instrucciones, perfil):
         with self._acceso(aid, correo, editar=True) as (conn, a):
             if any(h in HERRAMIENTAS_SIN_IA for h in herramientas):
                 return self._generar_sin_ia(conn, aid, a, ambito, herramientas)
+            motivo = _restriccion(SilaboUTI.model_validate(a["silabo"]), ambito.tipo, ambito.id)
+            if motivo:
+                raise HTTPException(422, motivo)
             try:
                 ids = crear_trabajos(conn, SolicitudGeneracion(aid, ambito, herramientas,
                                       cantidad=cantidad, instrucciones=instrucciones, perfil_dificultad=perfil))

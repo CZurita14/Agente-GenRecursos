@@ -131,3 +131,12 @@ def contexto_ambito(silabo: SilaboUTI, ambito) -> ContextoClase:
     if ambito.tipo == "asignatura" and ambito.id == "asignatura":
         return contexto_asignatura(silabo)
     raise KeyError(ambito.id)
+
+
+def contexto_por_id(silabo: SilaboUTI, ambito_id: str) -> ContextoClase:
+    """Contexto a partir del id guardado en el recurso: `asignatura`, `M<n>` o una clase."""
+    if ambito_id == "asignatura":
+        return contexto_asignatura(silabo)
+    if re.fullmatch(r"M\d+", ambito_id):
+        return contexto_momento(silabo, ambito_id)
+    return contexto_clase(silabo, ambito_id)

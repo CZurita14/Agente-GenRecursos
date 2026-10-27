@@ -32,8 +32,10 @@ class Edicion(BaseModel):
 
 
 @router.get("/herramientas")
-def catalogo(asig: UUID, request: Request, ambito: Literal["clase", "momento", "asignatura"] = "clase"):
-    return request.app.state.recursos.catalogo(asig, request.state.usuario, ambito)
+def catalogo(asig: UUID, request: Request, ambito: Literal["clase", "momento", "asignatura"] = "clase",
+             id: str | None = Query(None, min_length=1, max_length=100)):
+    # Con `id`, el catálogo aplica la regla §9.4.2 del momento concreto.
+    return request.app.state.recursos.catalogo(asig, request.state.usuario, ambito, id)
 
 
 @router.post("/generar", status_code=202)

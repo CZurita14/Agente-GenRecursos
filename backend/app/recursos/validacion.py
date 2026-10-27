@@ -4,6 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.agentes.verificador import verificar_ficha, verificar_items
+from app.agentes.workers.definiciones import DEFINICIONES
 from app.herramientas.esquemas import (
     Ejemplo, FichaAplicacion, FichaConceptual, ItemCuestionario, Opcion,
 )
@@ -87,7 +88,7 @@ def validar_contenido(
     consulta el sílabo vigente ni se produce un veredicto de IA.
     """
     try:
-        if herramienta == "cuestionario":
+        if herramienta in ("cuestionario", "simulacro"):
             anteriores = _ids_original(original)
             items = _items(contenido, contexto)
             if not {i.item_id for i in items} <= anteriores:
@@ -99,6 +100,13 @@ def validar_contenido(
         if herramienta == "ficha_clase":
             ficha = _Ficha.model_validate(contenido).model_dump(mode="json")
             return ficha, {"ficha": verificar_ficha(ficha, contexto)}
-        raise EdicionInvalida
+        definicion = DEFINICIONES.get(herramienta)
+        if definicion is None or definicion.es_quiz or not isinstance(contenido, dict)                 or set(contenido) != set(definicion.secciones):
+            raise EdicionInvalida
+        canonico = {s: m.model_validate(contenido[s]).model_dump(mode="json")
+                    for s, m in zip(definicion.secciones, definicion.modelos)}
+        if herramienta == "estudio_caso" and canonico["caso"]["escenario"] != original["caso"]["escenario"]:
+            raise EdicionInvalida  # El escenario lo fija el código (C9).
+        return canonico, {definicion.id_revision: definicion.verificar(canonico, contexto)}
     except (ValidationError, EdicionInvalida, TypeError, AttributeError):
         raise EdicionInvalida("El contenido editado no es válido.") from None
