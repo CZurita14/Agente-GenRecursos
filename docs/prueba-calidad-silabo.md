@@ -187,3 +187,22 @@ dudosas (i2: «opción 4, no la 2»; i4: «opciones 2 y 4»), que es su trabajo.
 ítem seguía en el escenario de picos de tráfico. Para variar los casos hace
 falta darle al worker tipos de caso concretos distintos del entregable, junto
 con las mejoras de §5 (en pausa hasta la plantilla académica).
+
+## 7. Humo de herramientas de momento y asignatura (P3b, 2026-10-27)
+
+Prueba `test_humo_momento` en `backend/tests/test_humo_servidor.py`, con Qwen3-8B-AWQ
+real y la fixture de Datos. Traza en `pruebas/resultados/20261027-humo-p3b-momento.json`.
+
+| Herramienta | Ámbito | Estado | Revisor de integridad | Verificador |
+|---|---|---|---|---|
+| Simulacro (4 ítems) | M3 | `requiere_revision` | 3/4 ítems `ok`; i3 marcado «resuelve el entregable» (H0/H1 en ANOVA) | sin fallos |
+| Guía de la evidencia | M3 | `listo` | `ok` | sin fallos |
+| Estudio de caso | M3 | `listo` | `ok` | sin fallos |
+| Guía del producto final | asignatura | `listo` | `ok` | sin fallos |
+
+17 llamadas en 503 s; la más grande usó 5 614 tokens (límite 8 192). La única
+devolución es el mismo falso positivo de integridad que el P1 (§6): una pregunta
+conceptual sobre la técnica del entregable. Con `/tokenize` real, el prompt más
+grande de momento o asignatura mide 3 708 tokens. La corrida usó el código anterior
+a las correcciones de la revisión, que no cambian lo generado (controles de copia,
+requisitos del sílabo y contexto de asignatura sin contenidos por sesión).

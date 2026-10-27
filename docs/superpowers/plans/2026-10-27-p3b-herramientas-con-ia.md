@@ -55,14 +55,14 @@ El orquestador y el coordinador obtienen el contexto con `contexto_ambito`. Los 
 - `contexto_ambito(silabo, Ambito) -> ContextoClase`: según el tipo, usa `contexto_clase`, `contexto_momento` o `contexto_asignatura`.
 - `prompts._seccion_clase`: el título dice «Momento M2 · …» o «Asignatura · …» según el `clase_id`, y el sello dice «Momento M2» o «Asignatura».
 
-- [ ] Pruebas:
+- [x] Pruebas:
   - `test_contexto_momento_m3`: 4 sesiones de contenidos y la evidencia como primer entregable.
   - `test_contexto_asignatura`: todos los RA y la rúbrica final.
   - `test_momento_inexistente`: `KeyError`.
   - `test_momento_sin_politica`.
   - `test_politica_tic_m3`: averigua con el PDF real si la política de TIC M3 está vacía en el documento. Si es un defecto del lector, se corrige con su propia prueba en `tests/lector`.
   - `test_prompt_de_momento_cabe` (marca `servidor`): mide con `/tokenize` del vLLM real el prompt más grande de los dos sílabos, para todo ámbito y herramienta. Deben quedar ≥ 3 500 tokens para la salida.
-- [ ] RED, implementación y GREEN; commit `feat(silabo): contexto de momento y de asignatura`.
+- [x] RED, implementación y GREEN; commit `feat(silabo): contexto de momento y de asignatura`.
 
 ### Task 2: Política de IA restrictiva (§9.4 regla 2)
 
@@ -70,11 +70,11 @@ El orquestador y el coordinador obtienen el contexto con `contexto_ambito`. Los 
 
 **Interfaces — Produces:** `excluye_ia_en_evaluacion(politica: str) -> bool`, sobre el texto normalizado. Detecta «sin (asistencia|uso|apoyo) de (la )?IA», «no se permite (el uso de )?(la )?IA» y «prohibido el uso de (la )?IA». No se activa con «se permite… IA».
 
-- [ ] Pruebas:
+- [x] Pruebas:
   - `test_politica_restrictiva_tic_m4`: la política real de TIC M4 da `True`.
   - `test_politicas_permisivas`: las de Datos M1–M4 y TIC M1–M2 dan `False`.
   - Casos sintéticos de cada patrón y la frase vacía.
-- [ ] Commit `feat(herramientas): detección de política de IA restrictiva`.
+- [x] Commit `feat(herramientas): detección de política de IA restrictiva`.
 
 ### Task 3: Núcleo por ámbito
 
@@ -85,11 +85,11 @@ El orquestador y el coordinador obtienen el contexto con `contexto_ambito`. Los 
 - `procesar_uno` y `Coordinador.ejecutar` usan `contexto_ambito`.
 - Cada worker declara `lotes: int`. El coordinador usa `planificar` si `worker.es_quiz` y, si no, `[[]] * worker.lotes`, en lugar de distinguir por nombre de herramienta.
 
-- [ ] Pruebas de regresión: toda la suite de P1 sigue en verde sin cambios de comportamiento para `cuestionario` y `ficha_clase`.
-- [ ] Pruebas nuevas:
+- [x] Pruebas de regresión: toda la suite de P1 sigue en verde sin cambios de comportamiento para `cuestionario` y `ficha_clase`.
+- [x] Pruebas nuevas:
   - `test_trabajo_de_momento_simulado`: un worker simulado de momento produce un recurso `listo`.
   - `test_retoma_trabajo_de_momento`: caída y reanudación.
-- [ ] Commit `refactor(agentes): núcleo por ámbito con lotes declarados por el worker`.
+- [x] Commit `refactor(agentes): núcleo por ámbito con lotes declarados por el worker`.
 
 ### Task 4: Simulacro
 
@@ -98,10 +98,10 @@ El orquestador y el coordinador obtienen el contexto con `contexto_ambito`. Los 
 - El `simulacro` es el `WorkerCuestionario` con el contexto del momento. `cantidad` por defecto: 12. El solucionario son la clave, las justificaciones por opción y el razonamiento que ya trae cada ítem.
 - La tabla de especificaciones se reparte sobre los contenidos del momento, y los focos salen de las actividades de todas sus sesiones.
 
-- [ ] Pruebas, con el cliente simulado:
+- [x] Pruebas, con el cliente simulado:
   - `test_simulacro_m3`: 12 ítems con contenidos de las 4 sesiones de M3, la tabla del perfil y `borrador = true`.
   - `test_simulacro_con_clase_ajena_se_devuelve`: el verificador rechaza un contenido de otro momento.
-- [ ] Commit `feat(workers): simulacro por momento`.
+- [x] Commit `feat(workers): simulacro por momento`.
 
 ### Task 5: Repaso integrador, guía de la evidencia y estudio de caso
 
@@ -125,13 +125,13 @@ El orquestador y el coordinador obtienen el contexto con `contexto_ambito`. Los 
 
 **Revisor:** `revisar_ficha` (solo integridad, con `CRITERIO_INTEGRIDAD`) se reutiliza para las tres herramientas.
 
-- [ ] Pruebas:
+- [x] Pruebas:
   - `test_repaso_m3`;
   - `test_guia_no_reproduce_la_evidencia`;
   - `test_caso_distinto_del_evaluado`;
   - `test_esquemas_rechazan_campos_extra`;
   - `test_revisor_devuelve_guia_que_resuelve` (revisor simulado).
-- [ ] Commit `feat(workers): repaso integrador, guía de la evidencia y estudio de caso`.
+- [x] Commit `feat(workers): repaso integrador, guía de la evidencia y estudio de caso`.
 
 ### Task 6: Guía del producto final (asignatura)
 
@@ -142,10 +142,10 @@ El orquestador y el coordinador obtienen el contexto con `contexto_ambito`. Los 
   - `criterios: [{indicador (enum de la rúbrica final), como_prepararse}]`;
   - `recomendaciones: 3–5`.
 - La ruta parte de las evidencias de cada momento, que el código pasa al prompt. El modelo solo redacta el aporte, sin resolver el producto.
-- [ ] Pruebas:
+- [x] Pruebas:
   - `test_guia_producto_final`: un elemento de la ruta por momento y criterios de la rúbrica final;
   - `test_sin_rubrica_final_422`.
-- [ ] Commit `feat(workers): guía del producto final`.
+- [x] Commit `feat(workers): guía del producto final`.
 
 ### Task 7: API — catálogo, generación y ediciones
 
@@ -157,25 +157,25 @@ El orquestador y el coordinador obtienen el contexto con `contexto_ambito`. Los 
   - en un momento restringido: `422`, salvo `repaso_momento` de un momento anterior;
   - pedidos mixtos (con y sin IA): `422`.
 - `validar_contenido`: el simulacro se valida como el cuestionario; las tres secciones de T5 y la guía de T6 se validan contra su esquema y con `verificar_seccion`.
-- [ ] Pruebas:
+- [x] Pruebas:
   - `test_generar_simulacro_encola`;
   - `test_generar_restringido_422`;
   - `test_catalogo_restringido_tic_m4` (con el PDF real, si está disponible);
   - `test_edicion_de_guia_valida`;
   - `test_edicion_de_guia_que_copia_la_evidencia_se_rechaza`.
-- [ ] Commit `feat(recursos): herramientas con IA de momento y asignatura en la API`.
+- [x] Commit `feat(recursos): herramientas con IA de momento y asignatura en la API`.
 
 ### Task 8: Humo real con Qwen (puerta: GPU y autorización del usuario)
 
 **Files:** Modify `backend/tests/test_humo_servidor.py` (caso nuevo con marca `servidor`).
 
 - Datos M3: `simulacro` (4 ítems), `guia_evidencia` y `estudio_caso`. Asignatura: `guia_producto_final`. Con `HUMO_GUARDAR`.
-- [ ] Registrar en `docs/prueba-calidad-silabo.md` §7:
+- [x] Registrar en `docs/prueba-calidad-silabo.md` §7:
   - estado de cada recurso;
   - devoluciones y sus motivos;
   - tokens máximos por llamada (≤ 8 192);
   - tiempos.
-- [ ] Commit `test: humo real de herramientas de momento`.
+- [x] Commit `test: humo real de herramientas de momento`.
 
 ## Cierre
 
