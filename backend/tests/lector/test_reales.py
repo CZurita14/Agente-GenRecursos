@@ -80,3 +80,11 @@ def test_errores_internos_no_filtran_texto_del_pdf(pdf_real, monkeypatch):
     with pytest.raises(SilaboIlegible) as e:
         leer_silabo(pdf_real("datos"))
     assert "TEXTO DEL PDF" not in str(e.value)
+
+
+def test_politica_tic_m3(pdf_real):
+    # Defecto hallado en el P3b: la fila de la política de TIC M3 empieza al pie de página.
+    s = leer_silabo(pdf_real("tic"))
+    assert all(m.politica_ia for m in s.momentos)
+    m3 = next(m for m in s.momentos if m.numero == 3)
+    assert m3.politica_ia.startswith("SE PERMITE LA IA COMO APOYO PARA IDENTIFICAR RIESGOS")

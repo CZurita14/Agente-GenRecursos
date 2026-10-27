@@ -119,7 +119,8 @@ def _fila_abierta(pagina, tabla) -> list[str | None] | None:
     x0, _, x1, abajo = tabla.bbox
     palabras = pagina.within_bbox((x0, abajo + 0.5, x1, pagina.bbox[3])).extract_words()
     referencia = tabla.rows[-1].cells
-    if not palabras or sum(c is not None for c in referencia) < 3:
+    # Basta con dos celdas: «rótulo | texto» (recursos, política) también se parte entre páginas.
+    if not palabras or sum(c is not None for c in referencia) < 2:
         return None
     celdas: list[list[dict]] = [[] for _ in referencia]
     for p in palabras:

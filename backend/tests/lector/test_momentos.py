@@ -144,3 +144,13 @@ def test_sesion_con_celda_partida_no_se_pierde_en_silencio():
     partida = ["Sesión 2", "Clase", None, "6.0", "", "", "", "", "• X"]
     with pytest.raises(SilaboIlegible):
         leer_momentos([_cabecera() + [SESION_1, partida] + _cierre()], INICIO)
+
+
+def test_politica_partida_entre_paginas_se_une():
+    # TIC M3: la fila de la política empieza al pie y sigue en la página siguiente.
+    cierre = _cierre()[:2] + [["Política de gobernanza crítica y\nética de la IA", None,
+                               "SE PERMITE LA IA COMO APOYO", None, None, None, None, None, None]]
+    continuacion = [["", None, "PARA IDENTIFICAR RIESGOS.", None, None, None, None, None, None]]
+    [m] = leer_momentos([_cabecera() + [SESION_1] + cierre, continuacion, RUBRICA], INICIO)
+    assert m["politica_ia"] == "SE PERMITE LA IA COMO APOYO PARA IDENTIFICAR RIESGOS."
+    assert m["recursos"] == "Escenarios: entorno virtual"

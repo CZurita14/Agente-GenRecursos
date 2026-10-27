@@ -125,6 +125,7 @@ def leer_momentos(tablas_iv: list[Tabla], inicio_periodo: date) -> list[dict]:
     columnas: dict[str, int] = {}
     crudas: list[dict] = []
     filas_rubrica: list[list[str | None]] = []
+    abierto: str | None = None  # Campo de texto que una fila partida podría continuar.
 
     def cerrar():
         if momentos:
@@ -149,14 +150,19 @@ def leer_momentos(tablas_iv: list[Tabla], inicio_periodo: date) -> list[dict]:
             if estado == "rubrica":
                 filas_rubrica.append(original)
                 continue
+            if not clave and abierto and estado in ("cabecera", "despues") and _valor(fila):
+                # Fila partida entre páginas: continúa el último campo de texto leído.
+                actual[abierto] = limpio(f"{actual[abierto]} {_valor(fila)}")
+                continue
+            abierto = None
             if clave.startswith("SESION -"):
                 columnas, estado = _columnas(fila), "sesiones"
             elif clave.startswith("TOTAL"):
                 estado = "despues"
             elif clave.startswith("RECURSOS PARA EL APRENDIZAJE"):
-                actual["recursos"] = _valor(fila)
+                actual["recursos"], abierto = _valor(fila), "recursos"
             elif clave.startswith("POLITICA DE GOBERNANZA"):
-                actual["politica_ia"] = _valor(fila)
+                actual["politica_ia"], abierto = _valor(fila), "politica_ia"
             elif clave.startswith("RUBRICA DE EVALUACION"):
                 estado = "rubrica"
             elif estado == "cabecera" and clave.startswith("FECHA"):
@@ -165,7 +171,7 @@ def leer_momentos(tablas_iv: list[Tabla], inicio_periodo: date) -> list[dict]:
             elif estado == "cabecera" and clave.startswith("RESULTADOS DE APRENDIZAJE"):
                 actual["ra"] = re.findall(r"RA\d+", _valor(fila))
             elif estado == "cabecera" and clave.startswith("EVIDENCIA DE DESEMPENO"):
-                actual["evidencia"] = _valor(fila)
+                actual["evidencia"], abierto = _valor(fila), "evidencia"
             elif estado == "sesiones":
                 def celda(rol: str) -> str:
                     k = columnas.get(rol)
