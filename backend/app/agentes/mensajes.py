@@ -57,6 +57,7 @@ class TareaLote(Mensaje):
     ya_generado: list[str]
     resultados_calculados: list[str] = []
     devoluciones: list[Devolucion] = []
+    instrucciones: str = ""
 
 
 class EntregaLote(Mensaje):
@@ -77,6 +78,13 @@ class Veredicto(Mensaje):
     resultados: list[ResultadoItem]
 
 
+class CheckpointRevision(Mensaje):
+    """Objetivos aún pendientes de una ronda; se guarda junto a cada corrección."""
+    ronda: int
+    pendientes: list[str]
+    motivos: dict[str, str]
+
+
 class Cierre(Mensaje):
     recurso_id: UUID
     estado: Literal["listo", "requiere_revision"]
@@ -84,7 +92,7 @@ class Cierre(Mensaje):
 
 
 _TIPOS: dict[str, type[Mensaje]] = {
-    c.__name__: c for c in (Encargo, TareaLote, EntregaLote, Devolucion, Veredicto, Cierre)
+    c.__name__: c for c in (Encargo, TareaLote, EntregaLote, Devolucion, Veredicto, Cierre, CheckpointRevision)
 }
 M = TypeVar("M", bound=Mensaje)
 
