@@ -63,6 +63,7 @@ class Trabajo:
     error: str | None
     creado: datetime
     actualizado: datetime
+    lease_version: int
 
 
 def _trabajo(f: dict) -> Trabajo:
@@ -98,7 +99,7 @@ def tomar_siguiente(conn: psycopg.Connection, worker_id: str, lease_s: int) -> T
             f = conn.execute(
                 "update trabajo set"
                 " intentos = intentos + case when estado = any(%s) then 1 else 0 end,"
-                " estado = 'generando', worker_id = %s,"
+                " lease_version = lease_version + 1, estado = 'generando', worker_id = %s,"
                 " lease_hasta = now() + make_interval(secs => %s), actualizado = now()"
                 " where id = %s returning *",
                 (list(ACTIVOS), worker_id, lease_s, f["id"]),
@@ -109,30 +110,32 @@ def tomar_siguiente(conn: psycopg.Connection, worker_id: str, lease_s: int) -> T
 
 
 def renovar_lease(conn: psycopg.Connection, trabajo_id: UUID, worker_id: str,
-                  lease_s: int) -> bool:
+                  lease_s: int, *, lease_version: int | None = None) -> bool:
     """Extiende el lease; False si el trabajo ya no es de este worker o no está activo."""
     with conn.transaction():
         f = conn.execute(
             "update trabajo set lease_hasta = now() + make_interval(secs => %s),"
             " actualizado = now()"
-            " where id = %s and worker_id = %s and estado = any(%s) returning id",
-            (lease_s, trabajo_id, worker_id, list(ACTIVOS)),
+            " where id = %s and worker_id = %s and estado = any(%s) "
+            "and lease_hasta > clock_timestamp() and (%s::bigint is null or lease_version=%s) returning id",
+            (lease_s, trabajo_id, worker_id, list(ACTIVOS), lease_version, lease_version),
         ).fetchone()
     return f is not None
 
 
-def _cerco(trabajo_id: UUID, worker_id: str | None) -> tuple[str, tuple]:
+def _cerco(trabajo_id: UUID, worker_id: str | None, lease_version: int | None = None) -> tuple[str, tuple]:
     """WHERE por id; con worker_id, además exige que siga siendo suyo y activo."""
     if worker_id is None:
         return " where id = %s", (trabajo_id,)
-    return (" where id = %s and worker_id = %s and estado = any(%s)",
-            (trabajo_id, worker_id, list(ACTIVOS)))
+    return (" where id = %s and worker_id = %s and estado = any(%s) "
+            "and lease_hasta > clock_timestamp() and (%s::bigint is null or lease_version=%s)",
+            (trabajo_id, worker_id, list(ACTIVOS), lease_version, lease_version))
 
 
 def registrar_avance(conn: psycopg.Connection, trabajo_id: UUID, *, estado: str | None = None,
                      lotes_total: int | None = None, lotes_hechos: int | None = None,
                      rondas_revision: int | None = None, tokens: tuple[int, int] = (0, 0),
-                     worker_id: str | None = None) -> bool:
+                     worker_id: str | None = None, lease_version: int | None = None) -> bool:
     """Actualiza los campos dados (None = sin cambio) y suma los tokens.
 
     `estado` solo admite estados activos; los finales se fijan con terminar().
@@ -140,7 +143,7 @@ def registrar_avance(conn: psycopg.Connection, trabajo_id: UUID, *, estado: str 
     """
     if estado is not None and estado not in ACTIVOS:
         raise ValueError(f"estado no activo: {estado}")
-    donde, args = _cerco(trabajo_id, worker_id)
+    donde, args = _cerco(trabajo_id, worker_id, lease_version)
     with conn.transaction():
         cur = conn.execute(
             "update trabajo set estado = coalesce(%s, estado),"
@@ -156,12 +159,13 @@ def registrar_avance(conn: psycopg.Connection, trabajo_id: UUID, *, estado: str 
 
 def terminar(conn: psycopg.Connection, trabajo_id: UUID,
              estado: Literal["listo", "requiere_revision", "error"],
-             error: str | None = None, *, worker_id: str | None = None) -> bool:
+             error: str | None = None, *, worker_id: str | None = None,
+             lease_version: int | None = None) -> bool:
     """Fija el estado final y libera el lease (y con él el carril).
 
     Con worker_id no toca un trabajo que otro worker ya retomó. True si actualizó.
     """
-    donde, args = _cerco(trabajo_id, worker_id)
+    donde, args = _cerco(trabajo_id, worker_id, lease_version)
     with conn.transaction():
         cur = conn.execute(
             "update trabajo set estado = %s, error = %s, worker_id = null, lease_hasta = null,"
@@ -172,14 +176,14 @@ def terminar(conn: psycopg.Connection, trabajo_id: UUID,
 
 
 def poner_en_espera(conn: psycopg.Connection, trabajo_id: UUID, *,
-                    worker_id: str | None = None) -> datetime | None:
+                    worker_id: str | None = None, lease_version: int | None = None) -> datetime | None:
     """Suma un intento, libera el carril y devuelve cuándo vuelve a estar disponible.
 
     Espera = min(30·2^(intentos−1), 600) s con los intentos ya sumados; en el SET,
     `intentos` es el valor anterior, de ahí 2^intentos. None si no actualizó nada
     (id desconocido o, con worker_id, trabajo que ya no es suyo).
     """
-    donde, args = _cerco(trabajo_id, worker_id)
+    donde, args = _cerco(trabajo_id, worker_id, lease_version)
     with conn.transaction():
         f = conn.execute(
             "update trabajo set estado = 'en_espera', intentos = intentos + 1,"

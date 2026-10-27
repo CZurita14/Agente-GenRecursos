@@ -17,6 +17,12 @@ MSJ = [{"role": "user", "content": "hola"}]
 ESQUEMA = {"type": "object", "properties": {"a": {"type": "integer"}}, "required": ["a"]}
 
 
+def test_cierre_del_cliente_libera_conexiones():
+    cliente = ClienteVLLM(BASE, "m", 1, 1, lambda _: None)
+    cliente.close()
+    assert cliente._http.is_closed
+
+
 def _respuesta_chat(content, reasoning=None, finish="stop"):
     mensaje = {"role": "assistant", "content": content}
     if reasoning is not None:

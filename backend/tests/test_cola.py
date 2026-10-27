@@ -16,6 +16,13 @@ AMBITO = Ambito("clase", "M2-C1")
 TOLERANCIA = timedelta(seconds=5)
 
 
+def test_lease_vencido_no_se_renueva(conn):
+    tid = _encolar(conn, asignatura(conn))
+    tomar_siguiente(conn, "w", 360)
+    conn.execute("update trabajo set lease_hasta=now()-interval '1 second' where id=%s", (tid,))
+    assert renovar_lease(conn, tid, "w", 360) is False
+
+
 def asignatura(conn) -> uuid.UUID:
     """Inserta una asignatura mínima y devuelve su id."""
     fila = conn.execute(

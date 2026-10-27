@@ -69,6 +69,10 @@ def separar_razonamiento(contenido: str, campo: str | None) -> tuple[str, str]:
 
 
 class ClienteVLLM:
+    def close(self) -> None:
+        """Cierra el pool HTTP una vez que terminaron los hilos consumidores."""
+        self._sdk.close()
+
     def __init__(self, base_url: str, modelo: str, timeout_s: float, max_concurrencia: int,
                  registrar: Callable[[dict], None], api_key: str = "no-se-necesita",
                  transporte: httpx.BaseTransport | None = None):

@@ -4,7 +4,7 @@ import random
 from app.agentes.mensajes import EntregaLote, TareaLote
 from app.agentes.workers.base import REGLAS_COMUNES, bloque_comun, pedir
 from app.herramientas.esquemas import ItemCuestionario, LoteCuestionario, esquema_cuestionario
-from app.llm.cliente import ClienteLLM
+from app.llm.cliente import ClienteLLM, JsonInvalido
 
 # Plantillas por nivel medidas en la ronda de calidad v3 (pruebas/prueba_calidad_v3.py).
 PLANTILLAS = """Plantillas por nivel (obligatorias):
@@ -34,6 +34,8 @@ class WorkerCuestionario:
             tarea, cliente, instrucciones=INSTRUCCIONES, pedido=self._pedido(tarea),
             modelo=LoteCuestionario, esquema=esquema_cuestionario(len(tarea.plan), ras, contenidos),
         )
+        if len(salida.items) != len(tarea.plan):
+            raise JsonInvalido("cantidad de ítems distinta del plan")
         items = [
             _barajar(ItemCuestionario(item_id=plan.item_id, **item.model_dump()), tarea)
             for plan, item in zip(tarea.plan, salida.items)

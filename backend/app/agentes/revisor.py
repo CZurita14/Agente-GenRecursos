@@ -6,7 +6,7 @@ herramienta resuelve un entregable del momento (§9.4), la devuelve aunque el í
 """
 from uuid import UUID
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ValidationError, field_validator
 
 from app.agentes.mensajes import EstiloFacultad, ResultadoItem
 from app.config import ajustes
@@ -20,7 +20,7 @@ from app.silabo.contexto import ContextoClase
 # así que se pide más salida y el cliente la ajusta a lo que quede de los 8 192 (H4).
 SALIDA_PROMPT = 3500
 MAX_SALIDA_REVISOR = 7000
-INTENTOS = 2  # 1 + 1 reintento ante JSON ilegible
+INTENTOS = 2  # 1 + 1 reintento ante veredicto inválido o incompleto
 SIN_VEREDICTO = "revisor sin veredicto"
 _SIN_ESTILO = EstiloFacultad(tipos_de_caso=[], software_habitual=[])
 
@@ -56,6 +56,13 @@ class _Integridad(BaseModel):
 class _VeredictoItem(_Integridad):
     veredictos: list[_VeredictoOpcion]
 
+    @field_validator("veredictos")
+    @classmethod
+    def validar_opciones(cls, veredictos: list[_VeredictoOpcion]) -> list[_VeredictoOpcion]:
+        if len(veredictos) != 4 or {v.opcion for v in veredictos} != {0, 1, 2, 3}:
+            raise ValueError("Se exige un único veredicto por opción: 0, 1, 2 y 3")
+        return veredictos
+
 
 def _pedido_item(item: ItemCuestionario) -> str:
     opciones = "\n".join(f"{k}) {o.texto}" for k, o in enumerate(item.opciones))
@@ -81,7 +88,7 @@ def _pedido_ficha(ficha: dict) -> str:
 
 def _consultar(cliente: ClienteLLM, contexto: ContextoClase, pedido: str, modelo: type[BaseModel],
                trabajo_id: UUID, asignatura_id: UUID, timeout_s: float | None) -> BaseModel | None:
-    """Pide el veredicto; reintenta una vez si el JSON no se puede leer. None = sin veredicto."""
+    """Reintenta una vez ante un veredicto inválido o incompleto. None = sin veredicto."""
     mensajes = construir_prompt(
         sello=Sello(codigo_pf=contexto.codigo_pf, clase_id=contexto.clase_id, fecha=contexto.fecha),
         instrucciones=INSTRUCCIONES, contexto=contexto, estilo=_SIN_ESTILO, ya_generado=[],
@@ -93,6 +100,8 @@ def _consultar(cliente: ClienteLLM, contexto: ContextoClase, pedido: str, modelo
             mensajes, rol="revisor", esquema=None, temperatura=0, max_tokens=MAX_SALIDA_REVISOR,
             pensar=True, trabajo_id=trabajo_id, asignatura_id=asignatura_id, timeout_s=timeout,
         )
+        if respuesta.finish_reason == "length":
+            continue
         try:
             return modelo.model_validate(ultimo_json(respuesta.texto))
         except (ValueError, ValidationError):

@@ -57,6 +57,17 @@ def test_cuestionario_lote(silabo):
     assert llamada["esquema"] is not None
 
 
+def test_cantidad_incorrecta_no_se_oculta_con_zip(silabo):
+    import pytest
+    from app.llm.cliente import JsonInvalido
+    ctx = contexto_clase(silabo, "M2-S1")
+    datos = json.loads(_lote_json(ctx))
+    datos["items"].append(datos["items"][0])
+    cliente = ClienteSimulado({"worker": [json.dumps(datos)]})
+    with pytest.raises(JsonInvalido):
+        WorkerCuestionario().generar(_tarea(ctx), cliente)
+
+
 def test_esquema_obliga_ra_y_contenido_de_la_clase(silabo):
     ctx = contexto_clase(silabo, "M2-S1")
     cliente = ClienteSimulado({"worker": [_lote_json(ctx)]})

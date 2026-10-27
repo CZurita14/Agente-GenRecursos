@@ -49,6 +49,7 @@ def pedir(tarea: TareaLote, cliente: ClienteLLM, *, instrucciones: str, pedido: 
     mensajes = construir_prompt(
         sello=sello_de(tarea), instrucciones=instrucciones, contexto=tarea.contexto,
         estilo=tarea.estilo, ya_generado=tarea.ya_generado, pedido=pedido,
+        indicaciones_docente=tarea.instrucciones,
         salida_max=SALIDA_WORKER, contar=cliente.contar_tokens,
     )
     salida, respuesta = pedir_json(

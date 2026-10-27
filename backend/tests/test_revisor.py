@@ -1,5 +1,6 @@
 """Revisor a ciegas y de integridad (Tarea 12)."""
 import json
+from dataclasses import replace
 from uuid import uuid4
 
 import pytest
@@ -119,3 +120,48 @@ def test_revisar_ficha(ctx):
         {"resuelve_entregable": True, "entregable": "PAE 1", "motivo": "copia la PAE"})]}),
         trabajo_id=T, asignatura_id=A)
     assert mal.revisor == "devuelto" and "PAE 1" in mal.motivo
+
+
+@pytest.mark.parametrize("indices", [
+    [], [2], [0, 1, 2], [0, 1, 2, 3, 3], [0, 1, 2, 2],
+    [-1, 1, 2, 3], [0, 1, 2, 4], [0, 1, 2, 3, 2],
+], ids=["vacio", "parcial", "falta", "extra", "duplicado", "negativo",
+        "fuera_de_rango", "contradictorio"])
+@pytest.mark.parametrize("recupera", [False, True])
+def test_veredictos_invalidos_reintentan(ctx, indices, recupera):
+    invalido = json.dumps({
+        "veredictos": [{"opcion": k, "valida": k == 2 and i == 2}
+                       for i, k in enumerate(indices)],
+        "resuelve_entregable": False,
+    })
+    cliente = ClienteSimulado({"revisor": [
+        invalido, _veredicto([2]) if recupera else invalido,
+    ]})
+    [r] = _revisar(ctx, cliente, [_item(ctx)])
+    assert r.revisor == ("ok" if recupera else "sin_veredicto")
+    if not recupera:
+        assert r.motivo == "revisor sin veredicto"
+    assert len(cliente.llamadas) == 2
+
+
+@pytest.mark.parametrize("ficha", [False, True])
+@pytest.mark.parametrize("recupera", [False, True])
+def test_length_con_json_completo_reintenta(ctx, monkeypatch, ficha, recupera):
+    cliente = ClienteSimulado({"revisor": [_veredicto([2]), _veredicto([2])]})
+    completar = cliente.completar
+
+    def respuesta(*args, **kwargs):
+        resultado = completar(*args, **kwargs)
+        return replace(resultado, finish_reason=(
+            "stop" if recupera and len(cliente.llamadas) == 2 else "length"))
+
+    monkeypatch.setattr(cliente, "completar", respuesta)
+    if ficha:
+        r = revisar_ficha({"ideas_clave": ["a"]}, ctx, cliente,
+                          trabajo_id=T, asignatura_id=A)
+    else:
+        [r] = _revisar(ctx, cliente, [_item(ctx)])
+    assert r.revisor == ("ok" if recupera else "sin_veredicto")
+    if not recupera:
+        assert r.motivo == "revisor sin veredicto"
+    assert len(cliente.llamadas) == 2
