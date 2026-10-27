@@ -104,6 +104,46 @@ def segmentar(pdf) -> dict[str, list]:
     return secciones
 
 
+def _fila_abierta(pagina, tabla) -> list[str | None] | None:
+    """Fila que empieza bajo el último borde de la tabla y sigue en la página siguiente.
+
+    No tiene borde inferior, así que pdfplumber no la ve: se arma asignando cada
+    palabra a la celda de la última fila de la tabla (con sus celdas combinadas)
+    que cubre el centro de la palabra.
+    """
+    x0, _, x1, abajo = tabla.bbox
+    palabras = pagina.within_bbox((x0, abajo + 0.5, x1, pagina.bbox[3])).extract_words()
+    referencia = tabla.rows[-1].cells
+    if not palabras or sum(c is not None for c in referencia) < 3:
+        return None
+    celdas: list[list[dict]] = [[] for _ in referencia]
+    for p in palabras:
+        centro = (p["x0"] + p["x1"]) / 2
+        k = next((i for i, c in enumerate(referencia) if c and c[0] <= centro < c[2]), None)
+        if k is not None:
+            celdas[k].append(p)
+
+    def texto(ps: list[dict]) -> str:
+        lineas: dict[int, list[dict]] = {}
+        for p in ps:
+            lineas.setdefault(round(p["top"]), []).append(p)
+        return "\n".join(" ".join(w["text"] for w in sorted(lineas[t], key=lambda w: w["x0"]))
+                         for t in sorted(lineas))
+
+    return [texto(c) if referencia[k] else None for k, c in enumerate(celdas)]
+
+
+def tablas(pagina) -> list[list[list[str | None]]]:
+    """Tablas de una página recortada, con la fila abierta al pie si la hay."""
+    halladas = pagina.find_tables()
+    resultado = [t.extract() for t in halladas]
+    if halladas:
+        fila = _fila_abierta(pagina, halladas[-1])
+        if fila is not None:
+            resultado[-1].append(fila)
+    return resultado
+
+
 def seccion_privada(pdf, nombre: str) -> list:
     """Recorte de la sección I o VII. Solo para pruebas de no-fuga: nunca se extrae en producción."""
     titulos = _titulos(pdf)

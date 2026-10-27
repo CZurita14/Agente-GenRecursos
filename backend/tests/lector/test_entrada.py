@@ -1,4 +1,6 @@
 """Entrada y segmentación del lector (P2, Tarea 1)."""
+import re
+
 import pytest
 
 from app.silabo.lector import SilaboIlegible
@@ -90,3 +92,13 @@ def test_sin_pie_de_pagina(pdf_real, nombre):
         texto = "\n".join(p.extract_text() or "" for s in SECCIONES_UTILES for p in secciones[s])
     assert "Generado por" not in texto
     assert "Página " not in texto
+
+
+@pytest.mark.parametrize("nombre, esperadas", [("datos", 11), ("tic", 6)])
+def test_filas_abiertas_al_pie_se_recuperan(pdf_real, nombre, esperadas):
+    # Una sesión que empieza al pie de página no tiene borde inferior: debe recuperarse igual.
+    from app.silabo.lector.entrada import tablas
+    with abrir(pdf_real(nombre)) as pdf:
+        primeras = [(f[0] or "") for p in segmentar(pdf)["IV"] for t in tablas(p) for f in t]
+    sesiones = [c for c in primeras if re.match(r"Sesión \d+\s+\d{2}/\d{2}/\d{4}", c)]
+    assert len(sesiones) == esperadas
