@@ -8,6 +8,7 @@ import re
 from difflib import SequenceMatcher
 from uuid import UUID
 
+from app.agentes.facultades import normalizar
 from app.agentes.mensajes import PlanItem
 from app.herramientas.esquemas import ItemCuestionario
 from app.silabo.contexto import ContextoClase
@@ -105,4 +106,57 @@ def verificar_ficha(ficha: dict, contexto: ContextoClase) -> list[str]:
         fallos.append("hay campos vacíos")
     if any(PROHIBIDAS.search(t) for t in textos):
         fallos.append("frase prohibida (todas/ninguna de las anteriores)")
+    return fallos
+
+
+# --- Herramientas de momento y asignatura (P3b) -----------------------------------
+
+def _seccion(datos: dict, nombre: str) -> dict:
+    """El coordinador verifica la sección suelta y, al cerrar, el recurso {nombre: sección}."""
+    return datos[nombre] if set(datos) == {nombre} else datos
+
+
+def _palabras(texto: str) -> set[str]:
+    return set(re.findall(r"\w{6,}", normalizar(texto)))
+
+
+def verificar_repaso(datos: dict, contexto: ContextoClase) -> list[str]:
+    d = _seccion(datos, "repaso")
+    fallos = verificar_ficha(d, contexto)
+    sesiones = {a.split(":", 1)[0] for a in contexto.actividades}
+    ids = [s.get("clase_id") for s in d.get("sesiones", [])]
+    if any(i not in sesiones for i in ids) or len(ids) != len(set(ids)):
+        fallos.append("sesiones ajenas al momento o repetidas")
+    return fallos
+
+
+def verificar_guia_evidencia(datos: dict, contexto: ContextoClase) -> list[str]:
+    """§9.4: la guía explica la evidencia, no la resuelve ni la copia fuera de «qué se pide»."""
+    d = _seccion(datos, "guia")
+    fallos = verificar_ficha(d, contexto)
+    indicadores = {f.indicador for f in contexto.rubrica}
+    if any(c.get("indicador") not in indicadores for c in d.get("como_se_valora", [])):
+        fallos.append("indicador ajeno a la rúbrica del momento")
+    evidencia = normalizar(contexto.entregables_momento[0] if contexto.entregables_momento else "").split()
+    resto = " ".join(normalizar(t) for t in _textos({k: v for k, v in d.items() if k != "que_se_pide"}))
+    if any(" ".join(evidencia[i:i + 12]) in resto for i in range(max(0, len(evidencia) - 11))):
+        fallos.append("copia el texto de la evidencia fuera de «qué se pide»")
+    return fallos
+
+
+def verificar_estudio_caso(datos: dict, contexto: ContextoClase) -> list[str]:
+    """C9: el escenario lo asigna el código y el caso debe ambientarse en él."""
+    d = _seccion(datos, "caso")
+    fallos = verificar_ficha({k: v for k, v in d.items() if k != "escenario"}, contexto)
+    if d.get("ra") not in {r.id for r in contexto.ra}:
+        fallos.append("RA ajeno al momento")
+    escenario = _palabras(d.get("escenario", ""))
+    if not escenario:
+        fallos.append("sin escenario asignado")
+    else:
+        vetadas = set().union(*(_palabras(e) for e in contexto.entregables_momento)) if contexto.entregables_momento else set()
+        if escenario & vetadas:
+            fallos.append("el escenario coincide con el de un entregable")
+        if not escenario & _palabras(d.get("caso", "")):
+            fallos.append("el caso no se ambienta en el escenario asignado")
     return fallos

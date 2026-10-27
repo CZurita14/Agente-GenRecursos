@@ -6,7 +6,7 @@ el modelo: lo asigna el código según el plan.
 """
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 Nivel = Literal["receptivo", "resolutivo", "reflexivo", "critico"]
 NIVELES = ["receptivo", "resolutivo", "reflexivo", "critico"]
@@ -97,3 +97,85 @@ ESQUEMA_FICHA_APLICACION = {"type": "object", "properties": {
         "required": ["enunciado", "pasos", "resultado"]},
     "autocomprobacion": {**_LISTA, "minItems": 3, "maxItems": 5}},
     "required": ["ejemplo", "autocomprobacion"]}
+
+
+# --- Herramientas de momento y asignatura (P3b) -----------------------------------
+# Esquemas cerrados; las listas cerradas (ids, indicadores, RA) van como enum en el JSON
+# pedido al modelo y el verificador vuelve a comprobar la pertenencia.
+
+class _Cerrado(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class RepasoSesion(_Cerrado):
+    clase_id: str
+    ideas_clave: list[str] = Field(min_length=3, max_length=5)
+
+
+class RepasoMomento(_Cerrado):
+    sesiones: list[RepasoSesion] = Field(min_length=1)
+    conexion_ra: str = Field(min_length=40)
+    preguntas_repaso: list[str] = Field(min_length=3, max_length=5)
+
+
+class CriterioGuia(_Cerrado):
+    indicador: str
+    que_observar: str = Field(min_length=20)
+
+
+class GuiaEvidencia(_Cerrado):
+    que_se_pide: str = Field(min_length=40, max_length=600)
+    como_se_valora: list[CriterioGuia] = Field(min_length=1)
+    errores_comunes: list[str] = Field(min_length=3, max_length=5)
+    autochequeo: list[str] = Field(min_length=3, max_length=5)
+
+
+class PreguntaCaso(_Cerrado):
+    nivel: Literal["receptivo", "resolutivo", "reflexivo", "critico"]
+    pregunta: str = Field(min_length=15)
+    respuesta_orientativa: str = Field(min_length=20)
+
+
+class EstudioCaso(_Cerrado):
+    escenario: str = ""  # Lo asigna el código (C9), no el modelo.
+    caso: str = Field(min_length=300)
+    preguntas: list[PreguntaCaso] = Field(min_length=3, max_length=6)
+    ra: str
+
+
+def _enum(valores) -> dict:
+    return {"type": "string", "enum": list(valores)}
+
+
+def esquema_repaso(clase_ids: list[str]) -> dict:
+    return {"type": "object", "properties": {
+        "sesiones": {"type": "array", "minItems": 1, "maxItems": len(clase_ids), "items": {
+            "type": "object", "properties": {"clase_id": _enum(clase_ids),
+                                             "ideas_clave": {**_LISTA, "minItems": 3, "maxItems": 5}},
+            "required": ["clase_id", "ideas_clave"]}},
+        "conexion_ra": {"type": "string"},
+        "preguntas_repaso": {**_LISTA, "minItems": 3, "maxItems": 5}},
+        "required": ["sesiones", "conexion_ra", "preguntas_repaso"]}
+
+
+def esquema_guia_evidencia(indicadores: list[str]) -> dict:
+    return {"type": "object", "properties": {
+        "que_se_pide": {"type": "string"},
+        "como_se_valora": {"type": "array", "minItems": 1, "maxItems": len(indicadores), "items": {
+            "type": "object", "properties": {"indicador": _enum(indicadores), "que_observar": {"type": "string"}},
+            "required": ["indicador", "que_observar"]}},
+        "errores_comunes": {**_LISTA, "minItems": 3, "maxItems": 5},
+        "autochequeo": {**_LISTA, "minItems": 3, "maxItems": 5}},
+        "required": ["que_se_pide", "como_se_valora", "errores_comunes", "autochequeo"]}
+
+
+def esquema_estudio_caso(ras: list[str]) -> dict:
+    return {"type": "object", "properties": {
+        "caso": {"type": "string"},
+        "preguntas": {"type": "array", "minItems": 3, "maxItems": 6, "items": {
+            "type": "object", "properties": {
+                "nivel": _enum(["receptivo", "resolutivo", "reflexivo", "critico"]),
+                "pregunta": {"type": "string"}, "respuesta_orientativa": {"type": "string"}},
+            "required": ["nivel", "pregunta", "respuesta_orientativa"]}},
+        "ra": _enum(ras)},
+        "required": ["caso", "preguntas", "ra"]}

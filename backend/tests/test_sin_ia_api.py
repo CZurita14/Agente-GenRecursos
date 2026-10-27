@@ -29,7 +29,8 @@ def test_catalogo_por_ambito(entorno):
     _, _, d, aid, _ = entorno
     momento = [h["id"] for h in d.get(f"/asignaturas/{aid}/herramientas?ambito=momento").json()["herramientas"]]
     # Orden del perfil FING (simulacro, …, autoevaluacion_rubrica, …) y luego las no recomendadas.
-    assert momento[:2] == ["simulacro", "autoevaluacion_rubrica"] and "lista_evidencia" in momento
+    assert momento == ["simulacro", "estudio_caso", "autoevaluacion_rubrica", "repaso_momento",
+                       "guia_evidencia", "lista_evidencia"]
     asignatura = [h["id"] for h in d.get(f"/asignaturas/{aid}/herramientas?ambito=asignatura").json()["herramientas"]]
     assert sorted(asignatura) == ["autoevaluacion_final", "hoja_ruta"]
 
