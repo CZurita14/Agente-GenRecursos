@@ -34,9 +34,17 @@ Archivos: migración `004_auth.sql`, `app/auth/servicio.py` (retos y sesiones en
 
 ## A3 · Asignaturas y permisos
 
-- [ ] Leer PDF en subproceso con tiempo/memoria y tamaño limitados; eliminar archivo temporal en éxito y error. Usar `leer_silabo` de P2 y no persistir PDF.
-- [ ] Implementar `/silabos`, listado, menú, compartir y retirar acceso: UUID y dueño/editor/lector en cada operación. 415 tipo incorrecto; 422 ilegible.
-- [ ] Probar dos dueños, un editor y un lector; impedir lectura cruzada y escritura de lectores.
+- [x] Leer PDF en subproceso con tiempo/memoria y tamaño limitados; eliminar archivo temporal en éxito y error. Usar `leer_silabo` de P2 y no persistir PDF.
+- [x] Implementar `/silabos`, listado, menú, compartir y retirar acceso: UUID y dueño/editor/lector en cada operación. 415 tipo incorrecto; 422 ilegible.
+- [x] Probar dos dueños, un editor y un lector; impedir lectura cruzada y escritura de lectores con la guardia `editar=True` que reutilizará A4.
+- [x] Forzar retirada/degradación mientras una autorización espera; bloqueo de asignatura y lectura posterior de permiso bajo READ COMMITTED.
+- [x] Serializar primeras subidas por dueño+código con advisory lock para comparar contra la versión realmente anterior.
+- [x] Acotar recepción del cuerpo a 30 s y lector a 20 s/512 MB; limpiar temporales y liberar cupos también en desconexión. Tamaño 10 MB contado sobre bytes reales; dos cargas simultáneas por proceso API.
+- [x] Integración HTTP con ambos PDF reales: Datos 6 semanas/11 sesiones; TIC 4/6. Sin IA ni correos reales.
+
+Archivos: `app/api/asignaturas.py`, `app/asignaturas/servicio.py`, `app/silabo/aislado.py`, migración `005_asignatura_acceso.sql`; pruebas `test_asignaturas_api.py`, `test_asignaturas_concurrencia.py`, `test_pdf_recepcion.py`, `test_lector_aislado.py`.
+
+Decisión de transporte: `POST /silabos` usa cuerpo PDF binario, no multipart, para contar y limitar la recepción antes de cualquier parseo. El cliente no elige dueño, nombre de archivo ni UUID de asignatura. JobObject comprobado en Windows; RLIMIT_AS se validará en el despliegue Linux de P7.
 
 ## A4 · Generación y recursos
 

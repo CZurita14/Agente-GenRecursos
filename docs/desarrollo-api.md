@@ -39,4 +39,28 @@ El reto se confirma antes de enviar correo: no hay locks SQL ni conexiones reten
 
 Incluye vencimiento, bloqueo, consumo único, revocación, TLS y no enumeración de buzones. Las pruebas concurrentes retienen una fila y comprueban en `pg_stat_activity` que los competidores esperan un lock antes de liberarla. No activan el humo GPU salvo que se configure `LLM_REAL=1`.
 
-P4 todavía necesita A3 (asignaturas/permisos), A4 (generación/recursos) y A5 (límites por IP, consumo y privacidad). No publicar la API como servicio de producción antes de completar esos controles y el despliegue P7.
+## Asignaturas y sílabos (A3)
+
+Aplicar también la migración `005_asignatura_acceso.sql` con el mismo comando del inicio. El UUID identifica la asignatura, no su código PF: dos docentes pueden subir un mismo PF y conservan asignaturas independientes.
+
+- `POST /silabos`: cuerpo **binario PDF** con `Content-Type: application/pdf`, cookie de sesión y `Origin`. No usa multipart ni acepta un dueño elegido por el cliente. Devuelve 201 con `id`, `agente`, `menu` por semanas y `clases_cambiadas`.
+- `GET /asignaturas`: lista las propias y compartidas; incluye el rol efectivo, sin el cuerpo del sílabo.
+- `GET /asignaturas/{UUID}/menu`: menú y versión, solo para dueño/editor/lector. Una asignatura ajena devuelve 403; una inexistente, 404.
+- `POST /asignaturas/{UUID}/compartir`: JSON `{"correo":"colega@uti.edu.ec","rol":"lector"}` o `editor`. Solo el dueño puede crear o cambiar este acceso. El destinatario no necesita haber ingresado todavía; al verificar su correo verá la asignatura.
+- `DELETE /asignaturas/{UUID}/compartir/{correo}`: retira acceso, solo el dueño. Codificar el correo al construir la URL.
+
+El frontend puede enviar un `File` directamente como `body` de `fetch`, con `credentials: 'include'` y Content-Type PDF. El navegador añade Origin. Los clientes de pruebas deben enviarlo explícitamente.
+
+El tamaño máximo predeterminado es 10 MB, contando bytes recibidos aunque no haya Content-Length o sea incorrecto. Se permiten dos cargas/lecturas simultáneas por proceso API; si están ocupadas, 503. Recepción limitada a 30 s (408 al vencer), lectura a 20 s en un subproceso con 512 MB de memoria. El subproceso usa JobObject en Windows y RLIMIT_AS en POSIX; son límites de recursos, no una cuenta de sistema separada. La comprobación de Windows se ejecuta en las pruebas locales; POSIX necesita validación en el despliegue Linux.
+
+El PDF y la salida JSON son temporales y se eliminan en éxito, error, timeout o desconexión. No se guarda el original en PostgreSQL ni se envía a IA. El texto de errores del lector y las salidas del hijo no se imprimen ni se devuelven al cliente. Un archivo no PDF da 415, un PDF vacío/ilegible da 422 y el exceso de tamaño da 413.
+
+Repetir la subida para el mismo dueño y PF reemplaza la versión conservando UUID y accesos compartidos. La respuesta identifica las clases cuyo contexto cambió; cambiar solo el número de versión no marca clases. Las primeras subidas concurrentes se serializan por dueño y código para comparar con la versión realmente anterior. Los trabajos existentes conservan su instantánea del sílabo y los recursos previos mantienen su versión; A4 conectará su consulta HTTP.
+
+Las operaciones retienen un bloqueo sobre la asignatura y **después** consultan el permiso en una nueva sentencia, para no usar un acceso que se retiró durante la espera. La comprobación `editar=True` permite dueño/editor y rechaza lector; A4 la utilizará al generar y editar recursos. Las pruebas fuerzan tanto retirada como degradación mientras otra conexión espera.
+
+```powershell
+../.venv/Scripts/python.exe -m pytest tests/test_asignaturas_api.py tests/test_asignaturas_concurrencia.py tests/test_pdf_recepcion.py tests/test_lector_aislado.py -q
+```
+
+P4 todavía necesita A4 (generación/recursos) y A5 (límites por IP, consumo y privacidad). No publicar la API como servicio de producción antes de completar esos controles y el despliegue P7.

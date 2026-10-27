@@ -32,6 +32,10 @@ class Ajustes(BaseSettings):
     smtp_remitente: str = ""
     smtp_usuario: str = ""
     smtp_clave: SecretStr | None = None
+    pdf_max_bytes: int = Field(default=10 * 1024 * 1024, ge=1, le=50 * 1024 * 1024)
+    pdf_timeout_s: float = Field(default=20, gt=0, le=120)
+    pdf_memoria_mb: int = Field(default=512, ge=128, le=2048)
+    pdf_recepcion_timeout_s: float = Field(default=30, gt=0, le=120)
 
     @model_validator(mode="after")
     def https_en_produccion(self):
