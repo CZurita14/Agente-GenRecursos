@@ -9,10 +9,11 @@ from dataclasses import dataclass, field
 from pydantic import BaseModel
 
 from app.agentes.verificador import (
-    verificar_estudio_caso, verificar_ficha, verificar_guia_evidencia, verificar_repaso,
+    verificar_estudio_caso, verificar_ficha, verificar_guia_evidencia, verificar_guia_producto_final,
+    verificar_repaso,
 )
 from app.herramientas.esquemas import (
-    EstudioCaso, FichaAplicacion, FichaConceptual, GuiaEvidencia, RepasoMomento,
+    EstudioCaso, FichaAplicacion, FichaConceptual, GuiaEvidencia, GuiaProductoFinal, RepasoMomento,
 )
 from app.silabo.contexto import ContextoClase
 
@@ -38,4 +39,6 @@ DEFINICIONES: dict[str, Definicion] = {
                                  verificar=verificar_guia_evidencia, id_revision="guia"),
     "estudio_caso": Definicion("momento", secciones=("caso",), modelos=(EstudioCaso,),
                                verificar=verificar_estudio_caso, id_revision="caso"),
+    "guia_producto_final": Definicion("asignatura", secciones=("guia_final",), modelos=(GuiaProductoFinal,),
+                                      verificar=verificar_guia_producto_final, id_revision="guia_final"),
 }

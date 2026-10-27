@@ -32,7 +32,7 @@ def test_catalogo_por_ambito(entorno):
     assert momento == ["simulacro", "estudio_caso", "autoevaluacion_rubrica", "repaso_momento",
                        "guia_evidencia", "lista_evidencia"]
     asignatura = [h["id"] for h in d.get(f"/asignaturas/{aid}/herramientas?ambito=asignatura").json()["herramientas"]]
-    assert sorted(asignatura) == ["autoevaluacion_final", "hoja_ruta"]
+    assert sorted(asignatura) == ["autoevaluacion_final", "guia_producto_final", "hoja_ruta"]
 
 
 def test_ambito_incorrecto_no_crea_nada(entorno):

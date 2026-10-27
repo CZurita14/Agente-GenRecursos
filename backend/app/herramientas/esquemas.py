@@ -179,3 +179,31 @@ def esquema_estudio_caso(ras: list[str]) -> dict:
             "required": ["nivel", "pregunta", "respuesta_orientativa"]}},
         "ra": _enum(ras)},
         "required": ["caso", "preguntas", "ra"]}
+
+
+class PasoRuta(_Cerrado):
+    momento: str
+    aporte: str = Field(min_length=30)
+
+
+class CriterioFinal(_Cerrado):
+    indicador: str
+    como_prepararse: str = Field(min_length=20)
+
+
+class GuiaProductoFinal(_Cerrado):
+    ruta: list[PasoRuta] = Field(min_length=1)
+    criterios: list[CriterioFinal] = Field(min_length=1)
+    recomendaciones: list[str] = Field(min_length=3, max_length=5)
+
+
+def esquema_guia_producto_final(momentos: list[str], indicadores: list[str]) -> dict:
+    return {"type": "object", "properties": {
+        "ruta": {"type": "array", "minItems": len(momentos), "maxItems": len(momentos), "items": {
+            "type": "object", "properties": {"momento": _enum(momentos), "aporte": {"type": "string"}},
+            "required": ["momento", "aporte"]}},
+        "criterios": {"type": "array", "minItems": 1, "maxItems": len(indicadores), "items": {
+            "type": "object", "properties": {"indicador": _enum(indicadores), "como_prepararse": {"type": "string"}},
+            "required": ["indicador", "como_prepararse"]}},
+        "recomendaciones": {**_LISTA, "minItems": 3, "maxItems": 5}},
+        "required": ["ruta", "criterios", "recomendaciones"]}

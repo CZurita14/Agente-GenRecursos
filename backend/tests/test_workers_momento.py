@@ -137,3 +137,55 @@ def test_repaso_con_sesion_ajena(silabo):
 def test_esquemas_rechazan_campos_extra(modelo, datos):
     with pytest.raises(ValidationError):
         modelo.model_validate(datos)
+
+
+# --- T6: guía del producto final (asignatura) ------------------------------------
+from app.agentes.verificador import verificar_guia_producto_final  # noqa: E402
+from app.agentes.workers.momento import GUIA_PRODUCTO_FINAL  # noqa: E402
+from app.silabo.contexto import contexto_asignatura  # noqa: E402
+from app.silabo.modelo import SilaboUTI  # noqa: E402
+
+
+def _guia_final(ctx):
+    return {"ruta": [{"momento": a.split(":", 1)[0], "aporte": "Su evidencia aporta una parte verificable del producto."}
+                     for a in ctx.actividades],
+            "criterios": [{"indicador": f.indicador, "como_prepararse": "Revisar cada momento con su rúbrica."}
+                          for f in ctx.rubrica],
+            "recomendaciones": ["Planificar", "Validar", "Documentar"]}
+
+
+def test_guia_producto_final(conn, silabo):
+    ctx = contexto_asignatura(silabo)
+    aid = conn.execute("insert into asignatura (dueno,codigo_pf,version_silabo,agente,silabo) "
+                       "values ('p@uti.edu.ec',%s,%s,'ingenierias',%s) returning id",
+                       (ctx.codigo_pf, ctx.version_silabo, Jsonb(silabo.model_dump(mode="json")))).fetchone()["id"]
+    encolar(conn, asignatura_id=aid, agente="ingenierias", ambito=Ambito("asignatura", "asignatura"),
+            herramienta="guia_producto_final", parametros={})
+    t = tomar_siguiente(conn, "w1", 360)
+    e = Encargo(trabajo_id=t.id, asignatura_id=aid, codigo_pf=ctx.codigo_pf, version_silabo=ctx.version_silabo,
+                carrera=ctx.carrera, nivel=ctx.nivel, ambito=t.ambito, herramienta="guia_producto_final",
+                perfil_dificultad="fundamentacion")
+    cliente = ClienteSimulado({"worker": lambda m: json.dumps(_guia_final(ctx)), "revisor": _revisor()})
+    cierre = Coordinador(PERFIL, {"guia_producto_final": GUIA_PRODUCTO_FINAL}, cliente).ejecutar(
+        conn, t, e, ctx, lambda: True)
+    r = conn.execute("select * from recurso").fetchone()
+    assert cierre.estado == "listo", json.dumps(r["evidencia"]["verificaciones"])
+    assert [p["momento"] for p in r["contenido"]["guia_final"]["ruta"]] == ["M2", "M3"]
+
+
+def test_guia_final_verificacion(silabo):
+    ctx = contexto_asignatura(silabo)
+    bueno = _guia_final(ctx)
+    assert verificar_guia_producto_final(bueno, ctx) == []
+    assert "un paso" in " ".join(verificar_guia_producto_final({**bueno, "ruta": bueno["ruta"][:1]}, ctx))
+    copia = " ".join(ctx.entregables_momento[0].split()[:13])
+    assert "copia" in " ".join(verificar_guia_producto_final({**bueno, "recomendaciones": ["a", "b", copia]}, ctx))
+
+
+def test_sin_rubrica_final_no_genera(silabo):
+    sin_final = SilaboUTI.model_validate({**silabo.model_dump(), "rubrica_producto_final": []})
+    tarea = TareaLote(trabajo_id=uuid4(), asignatura_id=uuid4(), lote=1, ronda=0,
+                      contexto=contexto_asignatura(sin_final),
+                      estilo=EstiloFacultad(tipos_de_caso=[], software_habitual=[]), plan=[], ya_generado=[])
+    with pytest.raises(ValueError):
+        GUIA_PRODUCTO_FINAL.generar(tarea, ClienteSimulado({"worker": ["{}"]}))

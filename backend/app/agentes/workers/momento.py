@@ -13,7 +13,8 @@ from app.agentes.mensajes import EntregaLote, TareaLote
 from app.agentes.planificador import _casos_libres
 from app.agentes.workers.base import REGLAS_COMUNES, bloque_comun, pedir
 from app.herramientas.esquemas import (
-    EstudioCaso, GuiaEvidencia, RepasoMomento, esquema_estudio_caso, esquema_guia_evidencia, esquema_repaso,
+    EstudioCaso, GuiaEvidencia, GuiaProductoFinal, RepasoMomento, esquema_estudio_caso, esquema_guia_evidencia,
+    esquema_guia_producto_final, esquema_repaso,
 )
 from app.llm.cliente import ClienteLLM
 from app.silabo.contexto import ContextoClase
@@ -101,4 +102,22 @@ ESTUDIO_CASO = WorkerSeccion(
         "ficticios (al menos 300 caracteres) y de 3 a 6 preguntas de menor a mayor nivel (receptivo, "
         "resolutivo, reflexivo, critico), cada una con una respuesta orientativa. Indica el RA que trabaja.")),
     completar=_con_escenario,
+)
+
+
+def _esquema_final(c: ContextoClase) -> dict:
+    if not c.rubrica:
+        raise ValueError("el sílabo no trae la rúbrica del producto final")
+    return esquema_guia_producto_final([a.split(":", 1)[0] for a in c.actividades], [f.indicador for f in c.rubrica])
+
+
+GUIA_PRODUCTO_FINAL = WorkerSeccion(
+    "guia_producto_final",
+    REGLAS_COMUNES + " Preparas la guía de preparación del producto final de la asignatura: cómo "
+    "aporta cada momento y cómo prepararse para cada criterio de su rúbrica, SIN resolverlo." + NO_RESOLVER,
+    _Seccion(GuiaProductoFinal, _esquema_final, lambda t: (
+        "Guía del producto final (el primer entregable de la lista; las evidencias de cada momento "
+        "le siguen): en «ruta», un paso por momento (M1, M2, …) que diga qué aporta su evidencia al "
+        "producto final; en «criterios», para cada indicador de la rúbrica, cómo prepararse; y de 3 a 5 "
+        "recomendaciones. No redactes partes del producto.")),
 )

@@ -160,3 +160,25 @@ def verificar_estudio_caso(datos: dict, contexto: ContextoClase) -> list[str]:
         if not escenario & _palabras(d.get("caso", "")):
             fallos.append("el caso no se ambienta en el escenario asignado")
     return fallos
+
+
+def _copia(texto_fuente: str, textos: list[str], n: int = 12) -> bool:
+    """¿Alguna secuencia de `n` palabras del texto fuente aparece literal en los textos?"""
+    fuente = normalizar(texto_fuente).split()
+    resto = " ".join(normalizar(t) for t in textos)
+    return any(" ".join(fuente[i:i + n]) in resto for i in range(max(0, len(fuente) - n + 1)))
+
+
+def verificar_guia_producto_final(datos: dict, contexto: ContextoClase) -> list[str]:
+    d = _seccion(datos, "guia_final")
+    fallos = verificar_ficha(d, contexto)
+    momentos = [a.split(":", 1)[0] for a in contexto.actividades]
+    ruta = [p.get("momento") for p in d.get("ruta", [])]
+    if sorted(ruta) != sorted(momentos):
+        fallos.append("la ruta no tiene un paso por cada momento")
+    indicadores = {f.indicador for f in contexto.rubrica}
+    if any(c.get("indicador") not in indicadores for c in d.get("criterios", [])):
+        fallos.append("indicador ajeno a la rúbrica del producto final")
+    if contexto.entregables_momento and _copia(contexto.entregables_momento[0], _textos(d)):
+        fallos.append("copia el texto del producto final")
+    return fallos
