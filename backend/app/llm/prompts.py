@@ -31,7 +31,8 @@ AVISO_DATOS = (
 )
 REGLA_INTEGRIDAD = (
     "Nunca resuelvas, redactes ni respondas los entregables del momento y respeta "
-    "la política de uso de IA indicada."
+    "la política de uso de IA indicada. Trabaja los mismos contenidos con otros casos y datos: "
+    "no uses el escenario, la organización ni los datos que describen los entregables."
 )
 
 

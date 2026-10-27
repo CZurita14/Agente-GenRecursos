@@ -21,6 +21,13 @@ def test_contexto_m2_s1(silabo):
     assert [r.id for r in c.ra] == ["RA2"] and c.nivel == 3
 
 
+def test_evidencia_del_momento_es_entregable(silabo):
+    # §9.4: la evidencia del momento se protege aunque las sesiones no listen entregables.
+    c = contexto_clase(silabo, "M3-S4")
+    momento = next(m for m in silabo.momentos if any(s.id == "M3-S4" for s in m.sesiones))
+    assert c.entregables_momento[0] == momento.evidencia
+
+
 def test_clases_con_mismo_contenido_difieren_en_actividades(silabo):
     a, b = contexto_clase(silabo, "M2-S1"), contexto_clase(silabo, "M2-S2")
     assert a.contenidos == b.contenidos

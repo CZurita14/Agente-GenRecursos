@@ -215,6 +215,24 @@ def test_ronda_revisa_solo_los_devueltos(conn, silabo):
     assert evidencia["veredictos"]["i1"] == "ok"
 
 
+def test_correccion_que_falla_verificacion_se_reintenta(conn, silabo):
+    t, e, ctx = preparar(conn, silabo, cantidad=4)
+    class CorrigeMal(WorkerPrueba):
+        """La 1.ª corrección de la ronda 1 trae "Todas las anteriores"."""
+        historial = []
+        def generar(self, tarea, cliente):
+            self.prohibida = tarea.ronda == 1 and not any(x.ronda == 1 for x in self.historial)
+            self.historial.append(tarea)
+            self.tareas = []  # WorkerPrueba solo siembra la frase cuando hay una tarea.
+            return super().generar(tarea, cliente)
+    worker = CorrigeMal()
+    cliente, _ = revisor_contado(ambiguos=["i3"])
+    coordinador(worker, cliente).ejecutar(conn, t, e, ctx, lambda: True)
+    ronda1 = [x for x in worker.historial if x.ronda == 1 and x.plan[0].item_id == "i3"]
+    assert len(ronda1) == 2
+    assert any("prohibida" in d.motivo for d in ronda1[1].devoluciones)
+
+
 def test_retoma_sin_repetir_revision_guardada(conn, silabo):
     t, e, ctx = preparar(conn, silabo, cantidad=2)
     class Caida(Exception):

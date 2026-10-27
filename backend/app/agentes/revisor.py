@@ -41,6 +41,16 @@ FORMATO_FICHA = (
 )
 
 
+# §9.4 regla 1: trabajar los mismos contenidos con otros casos y datos es lo esperado.
+# Sin esta precisión, Qwen marcaba cualquier pregunta sobre la técnica del entregable (humo T15).
+CRITERIO_INTEGRIDAD = (
+    "Solo responde true si entrega la solución o un borrador de un entregable del momento: "
+    "su caso o sus datos propios resueltos, el análisis o el resultado que el estudiante debe "
+    "producir, o un texto que podría copiar en él. Practicar los mismos contenidos o técnicas "
+    "con otros casos y datos es el propósito de la herramienta y NO resuelve el entregable."
+)
+
+
 class _VeredictoOpcion(BaseModel):
     opcion: int
     valida: bool
@@ -70,8 +80,8 @@ def _pedido_item(item: ItemCuestionario) -> str:
         f"Situación: {item.contexto}\nPregunta: {item.pregunta}\nOpciones:\n{opciones}\n\n"
         "1. Juzga CADA opción por separado: ¿es una respuesta válida y técnicamente exacta a la "
         "pregunta? Sé estricto con la redacción; puede haber cero, una o varias válidas.\n"
-        "2. ¿Este ítem resuelve, total o parcialmente, alguno de los entregables del momento "
-        "indicados en el sílabo?\n"
+        "2. ¿Este ítem resuelve alguno de los entregables del momento indicados en el sílabo? "
+        f"{CRITERIO_INTEGRIDAD}\n"
         f"Redacta los motivos en español.\n{FORMATO_ITEM}"
     )
 
@@ -80,8 +90,8 @@ def _pedido_ficha(ficha: dict) -> str:
     secciones = "\n".join(f"- {k}: {v}" for k, v in ficha.items())
     return (
         f"Sección de la ficha de estudio:\n{secciones}\n\n"
-        "¿Esta ficha resuelve, total o parcialmente, alguno de los entregables del momento "
-        "indicados en el sílabo, o contradice su política de uso de IA?\n"
+        "¿Esta ficha resuelve alguno de los entregables del momento indicados en el sílabo, "
+        f"o contradice su política de uso de IA? {CRITERIO_INTEGRIDAD}\n"
         f"Redacta el motivo en español.\n{FORMATO_FICHA}"
     )
 
@@ -132,9 +142,7 @@ def revisar_items(items: list[ItemCuestionario], contexto: ContextoClase, client
                                             revisor="sin_veredicto", motivo=SIN_VEREDICTO))
             continue
         validas = sorted({x.opcion for x in v.veredictos if x.valida})
-        if v.resuelve_entregable:
-            estado, motivo = "devuelto", _motivo_integridad(v)
-        elif validas == [item.correcta]:
+        if validas == [item.correcta]:
             estado, motivo = "ok", ""
         elif not validas:
             estado, motivo = "devuelto", "el revisor no considera válida ninguna opción"
@@ -143,6 +151,9 @@ def revisar_items(items: list[ItemCuestionario], contexto: ContextoClase, client
         else:
             estado, motivo = "devuelto", (f"el revisor considera correcta la opción {_numeros(validas)}, "
                                           f"no la {item.correcta + 1}")
+        if v.resuelve_entregable:
+            # La integridad manda, pero el veredicto de la clave se conserva para el worker.
+            estado, motivo = "devuelto", _motivo_integridad(v) + (f"; además, {motivo}" if motivo else "")
         resultados.append(ResultadoItem(item_id=item.item_id, fallos_verificacion=[],
                                         revisor=estado, motivo=motivo))
     return resultados

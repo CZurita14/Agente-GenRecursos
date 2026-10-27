@@ -45,7 +45,8 @@ def contexto_clase(silabo: SilaboUTI, clase_id: str) -> ContextoClase:
                 sesion.practico.texto,
                 sesion.autonomo.texto,
             ]
-            entregables: list[str] = []
+            # La evidencia del momento es un entregable (§9.4) aunque las sesiones no listen ninguno.
+            entregables: list[str] = [momento.evidencia] if momento.evidencia.strip() else []
             for s in momento.sesiones:
                 for e in s.entregables:
                     if e not in entregables:

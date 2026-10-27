@@ -1,4 +1,5 @@
 """Prueba real optativa: LLM_REAL=1; usa únicamente el vLLM configurado."""
+import json
 import os
 import time
 from pathlib import Path
@@ -15,6 +16,26 @@ from app.llm.cliente import ClienteVLLM
 from worker import registrar_llamada
 
 RAIZ = Path(__file__).resolve().parents[2]
+
+
+def guardar_traza(conn, destino: Path, resumen: dict, llamadas: list) -> None:
+    """Escribe mensajes, recursos y tiempos por llamada; sin prompts ni razonamiento."""
+    trabajos = {}
+    for t in conn.execute("select id,herramienta,ambito_id,estado from trabajo").fetchall():
+        trabajos[str(t["id"])] = {
+            "herramienta": t["herramienta"], "clase": t["ambito_id"], "estado": t["estado"],
+            "mensajes": [{"tipo": m["tipo"], "cuerpo": m["cuerpo"]} for m in conn.execute(
+                "select tipo,cuerpo from mensaje where trabajo_id=%s order by id", (t["id"],)).fetchall()],
+        }
+    recursos = [{"herramienta": r["herramienta"], "estado": r["estado"], "contenido": r["contenido"],
+                 "evidencia": r["evidencia"]}
+                for r in conn.execute("select * from recurso order by creado").fetchall()]
+    detalle = [{"rol": c["rol"], "trabajo_id": str(c["trabajo_id"]), "segundos": c["segundos"],
+                "tokens": [c["tokens_entrada"], c["tokens_salida"]], "ok": c["ok"]} for c in llamadas]
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    destino.write_text(json.dumps({"resumen": resumen, "llamadas": detalle, "trabajos": trabajos,
+                                   "recursos": recursos}, ensure_ascii=False, indent=1, default=str),
+                       encoding="utf-8")
 
 
 @pytest.mark.servidor
@@ -66,6 +87,9 @@ def test_humo_nucleo(silabo, conn, nueva_conexion, record_property):
                "tokens_salida": sum(c["tokens_salida"] for c in llamadas)}
     record_property("humo", resumen)
     print("HUMO_LOCAL", resumen)
+    if destino := os.getenv("HUMO_GUARDAR"):
+        # Conserva el diálogo coordinador-worker-revisor antes de que se borre el esquema de prueba.
+        guardar_traza(conn, Path(destino), resumen, llamadas)
     for r in recursos:
         e = PaqueteEvidencia.model_validate(r["evidencia"])
         print(r["herramienta"], r["estado"], e.resumen())

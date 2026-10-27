@@ -82,6 +82,24 @@ def test_devuelto_resuelve_entregable(ctx):
     assert r.revisor == "devuelto" and "PAE 1" in r.motivo
 
 
+def test_integridad_conserva_el_veredicto_de_la_clave(ctx):
+    cliente = ClienteSimulado({"revisor": [_veredicto([0, 2], resuelve=True, entregable="PAE 1")]})
+    [r] = _revisar(ctx, cliente, [_item(ctx, correcta=2)])
+    assert r.revisor == "devuelto" and "PAE 1" in r.motivo and "1 y 3" in r.motivo
+
+
+def test_integridad_admite_mismos_contenidos_con_otros_casos(ctx):
+    # §9.4 regla 1: practicar el contenido del entregable con otro caso no lo resuelve.
+    cliente = ClienteSimulado({"revisor": [_veredicto([2])]})
+    _revisar(ctx, cliente, [_item(ctx)])
+    pedido = cliente.llamadas[0]["mensajes"][-1]["content"]
+    assert "otros casos y datos" in pedido and "total o parcialmente" not in pedido
+    ficha = {"ideas_clave": ["a", "b", "c"], "relacion_ra": "r", "errores_frecuentes": ["e"]}
+    cliente = ClienteSimulado({"revisor": [json.dumps({"resuelve_entregable": False})]})
+    revisar_ficha(ficha, ctx, cliente, trabajo_id=T, asignatura_id=A)
+    assert "otros casos y datos" in cliente.llamadas[0]["mensajes"][-1]["content"]
+
+
 def test_sin_veredicto_tras_reintento(ctx):
     cliente = ClienteSimulado({"revisor": ["no sé", "no sé"]})
     [r] = _revisar(ctx, cliente, [_item(ctx)])

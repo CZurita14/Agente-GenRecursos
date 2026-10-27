@@ -144,6 +144,7 @@ P1 en ejecución: T1–T14 cerradas en commits (`c01f9c0`, `e384002`, `05af50f`)
 - Revisión de T13 por el coordinador: se corrigieron dos costos de tiempo. Las rondas de revisión revisaban de nuevo los 12 ítems (≈33 s cada uno); ahora solo los devueltos. Al reanudar se repetía una revisión ya guardada; ahora se reutiliza el último `Veredicto`. 2 pruebas nuevas.
 - T14 revisada sin hallazgos que bloqueen (solo imports de `worker.py`).
 - **T15 con Qwen3-8B-AWQ real:** pasa en 964 s. 24 llamadas, 63 196 tokens de entrada y 25 273 de salida. Worker ≈66 s por llamada (máx. 6 359 tokens); revisor ≈25–30 s por llamada (máx. 3 523). Cuestionario M3-S4 de 4 ítems → `requiere_revision`, 4 verificados, 7 devoluciones; ficha M2-S1 → `listo`, sin devoluciones. Los motivos del revisor no se conservaron (el esquema de prueba se borra al terminar). La ejecución de ayer en Codex se había cortado en la ronda 2 y dejó el esquema `prueba_6c0146d0` en la BD.
+- **Análisis de las devoluciones del revisor** (3 corridas reales, trazas en `pruebas/resultados/20261027-humo-p1*.json`, detalle en `docs/prueba-calidad-silabo.md` §6). Causa: la evidencia del momento no llegaba como entregable y el worker copiaba su escenario. Cambios: evidencia en `entregables_momento`, regla de otros casos y datos para el worker, criterio de integridad del revisor según §9.4, veredicto de la clave conservado, reintento de las correcciones que fallan la verificación. Cuestionario: de 1/4 a 3/4 ítems `ok` y 4/4 verificados. Suite: 189 pruebas.
 - Revisión final del P1 (coordinador): sin `.env` ni claves versionadas, fixtures sin datos personales, logs solo con ids y tipo de error.
 - Commits: `c01f9c0` (lease_version, veredicto completo, cantidad exacta), `e384002` (T13), `05af50f` (T14). Sin push.
 
@@ -205,6 +206,6 @@ P1 en ejecución: T1–T14 cerradas en commits (`c01f9c0`, `e384002`, `05af50f`)
 ## Siguiente paso
 
 1. Entregar y revisar con el usuario la propuesta institucional en `docs/propuestas/`.
-2. Analizar por qué el revisor real devuelve los ítems del cuestionario: repetir el humo guardando los motivos y anotar el resultado en `docs/prueba-calidad-silabo.md`.
+2. Variar los casos del worker con tipos de caso distintos del entregable (queda 1 de 4 ítems en el escenario del entregable); va con las mejoras de calidad en pausa.
 3. Push de `p1/nucleo` cuando el usuario lo autorice; arrancar el plan del P2.
 4. Preparar el spec v1.3 antes de P3 y adaptar formatos finales cuando llegue la plantilla académica.

@@ -171,6 +171,7 @@ def test_politica_ia_y_entregables_en_la_clase(silabo):
     assert "Se permite IA solo para depurar." in user
     assert "Informe de EDA" in user and "Tablero" in user
     assert "Nunca resuelvas" in user
+    assert "otros casos y datos" in user  # §9.4 regla 1: no reutilizar el escenario del entregable.
     # La clase nunca se recorta: sigue ahí aunque se descarte todo lo demás.
     ya = [f"Enunciado {i}: " + "x" * 60 for i in range(200)]
     assert "Informe de EDA" in _armar(ctx, ya=ya)[1]["content"]

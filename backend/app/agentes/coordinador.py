@@ -224,7 +224,13 @@ class Coordinador:
                 plan = [p for p in plan_total if p.item_id == item_id] if es_quiz else []
                 devolucion = Devolucion(**ids, item_id=item_id, motivo=checkpoint.motivos[item_id], ronda=checkpoint.ronda)
                 persistir([devolucion])
-                entrega, _ = generar(numero, plan, checkpoint.ronda, [devolucion])
+                entrega, fallos = generar(numero, plan, checkpoint.ronda, [devolucion])
+                if any(fallos.values()):
+                    # Una corrección que rompe la verificación se reintenta una vez con sus fallos.
+                    reintento = [Devolucion(**ids, item_id=k, motivo="; ".join(f), ronda=checkpoint.ronda)
+                                 for k, f in fallos.items() if f]
+                    persistir(reintento)
+                    entrega, _ = generar(numero, plan, checkpoint.ronda, [devolucion, *reintento])
                 siguiente = checkpoint.model_copy(update={"pendientes": [p for p in checkpoint.pendientes if p != objetivo]})
                 # Entrega y avance de ronda se confirman juntos; una caída no omite objetivos.
                 persistir([entrega, siguiente])
