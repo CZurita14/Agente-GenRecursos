@@ -3,7 +3,7 @@
 > **Para qué sirve:** es la memoria del proyecto. Al retomar, **se lee primero este archivo** y solo después, si hace falta, el documento puntual que enlaza.
 > No hace falta recorrer el repositorio completo.
 >
-> **Última actualización:** 2026-10-26 · **Fase:** 1 · **Bloque activo:** P1 (sin empezar)
+> **Última actualización:** 2026-10-27 · **Fase:** 1 · **Bloque activo:** P1 en desarrollo y validación
 
 ## Cómo se actualiza
 
@@ -21,7 +21,7 @@ Estados: `⬜ pendiente` · `🔄 en curso` · `🔁 devuelta (ronda n)` · `✅
 
 ## Estado en una línea
 
-P1 en ejecución: T1–T12 hechas, 138 pruebas pasan en `p1/nucleo`. Siguiente: T13 (coordinador de facultad), brief en .superpowers/sdd/…/task-13-brief.md. Luego T14, T15 y revisión final. El clasificador de permisos bloquea lanzar subagentes nuevos: las revisiones las hace el coordinador. El P2 ya puede arrancar en paralelo.
+P1 en ejecución: T1–T14 cerradas en commits (`c01f9c0`, `e384002`, `05af50f`); suite: 185 pruebas pasan y 1 prueba real omitida por defecto. T15 pasó con Qwen real (16 min, 24 llamadas, ninguna sobre 8 192 tokens). El cuestionario quedó `requiere_revision`: hay que analizar por qué el revisor devuelve los ítems. Revisión final del P1 hecha; push pendiente de autorización. Se retomaron revisores independientes en Codex. El P2 puede avanzar desde el contrato del sílabo. La última solicitud del usuario prioriza la propuesta institucional «Desarrollo de materiales para el aprendizaje».
 
 ## Documentos de referencia
 
@@ -36,6 +36,7 @@ P1 en ejecución: T1–T12 hechas, 138 pruebas pasan en `p1/nucleo`. Siguiente: 
 | [docs/prueba-calidad-silabo.md](docs/prueba-calidad-silabo.md) | Rondas de calidad con Qwen3-8B |
 | [docs/arquitectura-agentica-hive.md](docs/arquitectura-agentica-hive.md) | Mapa de Hive y patrones que se copian |
 | Página visual del plan | https://claude.ai/artifact/DREtxrkEt9TSsoCueev3Hy (privada) |
+| [Propuesta institucional del proyecto](docs/propuestas/propuesta-desarrollo-materiales-aprendizaje-formato-institucional.docx) | Versión ilustrada de 10 páginas: objetivos, alcance, colmena, 3 mockups conceptuales, gráfico de tiempos, recursos, cronograma e indicadores; conserva el formato de Asana |
 
 ---
 
@@ -57,10 +58,10 @@ P1 en ejecución: T1–T12 hechas, 138 pruebas pasan en `p1/nucleo`. Siguiente: 
 | T10 Workers | 5 | ✅ | `65afc4c` | Hecha por el coordinador (subagentes bloqueados) |
 | T11 Verificador | 6 | ✅ | `a518a1d` | Regex ampliada: "Todas las anteriores" |
 | T12 Revisor | 6 | ✅ | `a6c470a` | 1 ítem por llamada, a ciegas, integridad |
-| T13 Coordinador de facultad | 7 | ⬜ | — | |
-| T14 Orquestador y worker | 8 | ⬜ | — | |
-| T15 Prueba con Qwen real | 9 | ⬜ | — | El servidor es alcanzable desde la PC de desarrollo |
-| Revisión final P1 | — | ⬜ | — | |
+| T13 Coordinador de facultad | 7 | ✅ | `e384002` | Correcciones de lease (`c01f9c0`); cada ronda revisa solo los devueltos y la reanudación reutiliza el último veredicto |
+| T14 Orquestador y worker | 8 | ✅ | `05af50f` | Pruebas de enrutamiento, caída y aislamiento. Revisado por el coordinador |
+| T15 Prueba con Qwen real | 9 | ✅ | ver bitácora 2026-10-27 | Pasa. Cuestionario M3-S4 (4 ítems) → `requiere_revision` con 7 devoluciones; ficha M2-S1 → `listo` |
+| Revisión final P1 | — | ✅ | — | Coordinador: sin secretos ni datos personales versionados; logs sin prompts. Push pendiente |
 
 ### P2–P7
 
@@ -79,18 +80,18 @@ P1 en ejecución: T1–T12 hechas, 138 pruebas pasan en `p1/nucleo`. Siguiente: 
 |---|---|---|---|
 | 1 | Los 2 sílabos se leen sin IA | P2 | ⬜ |
 | 2 | Menú por semana (6 y 4 semanas) | P2 | ⬜ |
-| 3 | Enrutamiento por facultad | P1 | ⬜ |
-| 4 | Ninguna llamada > 8 192 tokens | P1 | ⬜ |
-| 5 | Sin datos personales en prompts | P1, P2 | ⬜ |
-| 6 | Cuestionario de 12 con tabla de especificaciones | P1, P3 | ⬜ |
-| 7 | Ítem ambiguo → "requiere revisión" | P1 | ⬜ |
-| 8 | Herramienta que resuelve una tarea → devuelta | P1 | ⬜ |
-| 9 | M2-S1 y M2-S2 producen herramientas distintas | P1, P3 | ⬜ |
+| 3 | Enrutamiento por facultad | P1 | ✅ `test_enruta_al_crear` |
+| 4 | Ninguna llamada > 8 192 tokens | P1 | ✅ Simulado y real (T15: máx. ≈6 360) |
+| 5 | Sin datos personales en prompts | P1, P2 | 🔄 Parte P1: `test_sin_datos_personales`; falta el lector (P2) |
+| 6 | Cuestionario de 12 con tabla de especificaciones | P1, P3 | 🔄 Simulado: `test_camino_feliz`; calidad real con H8 (P3) |
+| 7 | Ítem ambiguo → "requiere revisión" | P1 | ✅ `test_item_ambiguo_requiere_revision` |
+| 8 | Herramienta que resuelve una tarea → devuelta | P1 | ✅ `test_devuelto_resuelve_entregable` |
+| 9 | M2-S1 y M2-S2 producen herramientas distintas | P1, P3 | 🔄 Contexto y focos distintos (`test_silabo`, `test_planificador`); generación real en P3 |
 | 10 | Chat regenera solo la pregunta pedida | P5 | ⬜ |
-| 11 | Caída del servidor → "en espera" y reanuda | P1 | ⬜ |
+| 11 | Caída del servidor → "en espera" y reanuda | P1 | ✅ `test_servidor_caido_queda_en_espera`, `test_retoma_tras_caida` |
 | 12 / 12b / 12c | Dominios, permisos, bloqueo tras 5 intentos | P4 | ⬜ |
 | 13 | Instalación limpia | P7 | ⬜ |
-| 14 | Aislamiento entre asignaturas | P1 | ⬜ |
+| 14 | Aislamiento entre asignaturas | P1 | ✅ `test_aislamiento_dos_asignaturas` |
 
 ---
 
@@ -122,21 +123,29 @@ P1 en ejecución: T1–T12 hechas, 138 pruebas pasan en `p1/nucleo`. Siguiente: 
 | 2026-10-26 | Ejecución con subagentes: coordinador + implementador + 2 revisores por tarea; olas paralelas en worktrees | Plan P1 *Equipo de ejecución* |
 | 2026-10-26 | Motor de razonamiento: **solo** el Qwen3-8B local, usando el SDK `openai` | Plan P1 *Motor de IA* |
 | 2026-10-26 | Revisor de 1 ítem por llamada; límite de 120 s para workers y 240 s para el revisor; lease de 360 s; `recurso.version_silabo`; ajustes de estilo por carrera (R1, R2, R4, R5) | Plan P1 (T1, T2, T6, T8, T12) |
-| 2026-10-26 | Propuesta de especialización en 4 niveles (configuración → memoria de reglas → ejemplares → LoRA por facultad). Fase 1 solo con el Nivel 0. Protocolo de alta por facultad con conjunto dorado y criterio de graduación | Revisión §4–§5 (D1–D5 por decidir) |
+| 2026-10-26 | Especialización en 4 niveles (configuración → memoria de reglas → ejemplares → LoRA por facultad). Fase 1 solo con el Nivel 0. El usuario aprobó D1–D5; las consultas a TI y las designaciones institucionales siguen pendientes de ejecución | Revisión §4–§5 y aprobación del usuario en la conversación |
 
-### Preguntas abiertas para el usuario
+### Decisiones D1 a D5 aprobadas por el usuario
 
-| # | Pregunta | Recomendación |
+| # | Decisión aprobada | Ejecución pendiente o alcance |
 |---|---|---|
-| D1 | ¿Ajustes de estilo por carrera desde la Fase 1? | Sí (ya incluido en T8) |
-| D2 | ¿Consultar a TI sobre `--enable-lora` y GPU (Nivel 3)? | Consultar sin comprometerse |
-| D3 | ¿Usar las ediciones de los docentes para mejorar el sistema? | Sí, con aviso y opción de excluirse (LOPDP), aprobado por la universidad |
-| D4 | ¿Quién valida el perfil de FING? | Un coordinador por carrera (Software y TI primero) |
-| D5 | ¿Emitir el spec v1.3 antes del P3? | Sí |
+| D1 | Ajustes de estilo por carrera desde la Fase 1 | Incluidos en T8 |
+| D2 | Consultar a TI sobre `--enable-lora` y GPU | Consulta pendiente; no incorpora LoRA al alcance inicial |
+| D3 | Usar ediciones docentes para mejorar el sistema | Mantener aviso, exclusión y autorización institucional antes de recolectarlas para ese fin |
+| D4 | Un coordinador por carrera valida el perfil de FING, empezando por Software y TI | Personas responsables por designar |
+| D5 | Emitir el spec v1.3 antes del P3 | Pendiente de elaboración |
 
 ---
 
 ## Bitácora (lo ya hecho)
+
+### 2026-10-27
+- Suite con PostgreSQL real: 183 → 185 pruebas pasan (1 omitida).
+- Revisión de T13 por el coordinador: se corrigieron dos costos de tiempo. Las rondas de revisión revisaban de nuevo los 12 ítems (≈33 s cada uno); ahora solo los devueltos. Al reanudar se repetía una revisión ya guardada; ahora se reutiliza el último `Veredicto`. 2 pruebas nuevas.
+- T14 revisada sin hallazgos que bloqueen (solo imports de `worker.py`).
+- **T15 con Qwen3-8B-AWQ real:** pasa en 964 s. 24 llamadas, 63 196 tokens de entrada y 25 273 de salida. Worker ≈66 s por llamada (máx. 6 359 tokens); revisor ≈25–30 s por llamada (máx. 3 523). Cuestionario M3-S4 de 4 ítems → `requiere_revision`, 4 verificados, 7 devoluciones; ficha M2-S1 → `listo`, sin devoluciones. Los motivos del revisor no se conservaron (el esquema de prueba se borra al terminar). La ejecución de ayer en Codex se había cortado en la ronda 2 y dejó el esquema `prueba_6c0146d0` en la BD.
+- Revisión final del P1 (coordinador): sin `.env` ni claves versionadas, fixtures sin datos personales, logs solo con ids y tipo de error.
+- Commits: `c01f9c0` (lease_version, veredicto completo, cantidad exacta), `e384002` (T13), `05af50f` (T14). Sin push.
 
 ### 2026-10-26
 - Análisis de lo pendiente y hoja de ruta P1–P7 con hallazgos H1–H8.
@@ -160,6 +169,11 @@ P1 en ejecución: T1–T12 hechas, 138 pruebas pasan en `p1/nucleo`. Siguiente: 
   - tarjetas de tareas con las correcciones R1–R5.
 
 ### 2026-10-26 · Ejecución del P1
+- **Olas 2–4:** T4, T5, T7, T8 y T9 cerradas; 105 pruebas comprobadas en esa etapa.
+- **Olas 5–6:** T10, T11 y T12 cerradas (`65afc4c`, `a518a1d`, `a6c470a`); 138 pruebas. La revisión automática de seguridad del commit no pudo completarse por un fallo de conexión.
+- **Continuación en Codex:** T13 y T14 implementadas sin commit; revisores independientes disponibles de nuevo. Suite comprobada: 181 pruebas y 1 omitida. Se añadieron checkpoints de corrección y versión de adquisición del lease; el cierre de revisión sigue pendiente. El usuario interrumpió para priorizar la propuesta institucional.
+- **Propuesta institucional:** se elaboró el Word «Desarrollo de materiales para el aprendizaje» a partir de la estructura y formato de la propuesta de Asana. Conserva encabezado, pie y validación institucional; distingue funciones previstas, documentación pendiente y escenario hipotético de tiempos. La referencia permanece sin cambios.
+- **Versión ilustrada solicitada por el usuario:** propuesta ajustada a 10 páginas verificadas en Word y PDF de revisión. Incluye 5 imágenes: flujo de la colmena, 3 mockups (menú, generación y revisión) y comparación hipotética de tiempos. Capturas conceptuales identificadas como simulaciones; imágenes editables de origen y PNG en `docs/propuestas/imagenes/` (fuente HTML en `.superpowers/documentos/materiales-aprendizaje/`). Revisadas visualmente las 10 páginas.
 - **Repositorio:**
   - `git init` en la carpeta del proyecto;
   - commit base `5a473ed` en `main`;
@@ -190,6 +204,7 @@ P1 en ejecución: T1–T12 hechas, 138 pruebas pasan en `p1/nucleo`. Siguiente: 
 
 ## Siguiente paso
 
-1. Que apruebes la **Ola 0** (B1) y enciendas Docker (B2).
-2. Elegir el modo de ejecución. Se recomienda por subagentes.
-3. Arranca la T1.
+1. Entregar y revisar con el usuario la propuesta institucional en `docs/propuestas/`.
+2. Analizar por qué el revisor real devuelve los ítems del cuestionario: repetir el humo guardando los motivos y anotar el resultado en `docs/prueba-calidad-silabo.md`.
+3. Push de `p1/nucleo` cuando el usuario lo autorice; arrancar el plan del P2.
+4. Preparar el spec v1.3 antes de P3 y adaptar formatos finales cuando llegue la plantilla académica.
