@@ -3,7 +3,7 @@
 > **Para qué sirve:** es la memoria del proyecto. Al retomar, **se lee primero este archivo** y solo después, si hace falta, el documento puntual que enlaza.
 > No hace falta recorrer el repositorio completo.
 >
-> **Última actualización:** 2026-10-27 · **Fase:** 1 · **Bloque activo:** P4 A4 cerrada en `codex/p4-api-acceso`; siguiente A5
+> **Última actualización:** 2026-10-27 · **Fase:** 1 · **Bloque activo:** P4 implementación cerrada en `codex/p4-api-acceso`; siguiente spec v1.3 y P3
 
 ## Cómo se actualiza
 
@@ -21,7 +21,7 @@ Estados: `⬜ pendiente` · `🔄 en curso` · `🔁 devuelta (ronda n)` · `✅
 
 ## Estado en una línea
 
-P1 y P2 publicados en `origin/p1/nucleo` y `origin/p2/lector`. Las capturas del usuario muestran los PR #1 (P1 → main) y #2 (P2 → P1), abiertos; no se han fusionado en esta continuación. P4 avanza en `codex/p4-api-acceso`: A1–A4 cerradas, hasta `c6a4fc3`. Suite: 443 pasan y 1 omitida. Sigue A5 (límites, consumo y privacidad); SMTP institucional pendiente de B4. Los commits de P4 siguen locales.
+P1 y P2 publicados en `origin/p1/nucleo` y `origin/p2/lector`. Las capturas del usuario muestran los PR #1 (P1 → main) y #2 (P2 → P1), abiertos; no se han fusionado en esta continuación. P4 A1–A5 implementadas en `codex/p4-api-acceso`, hasta `49ac905`: 514 pruebas pasan y 1 real omitida. Para activación faltan SMTP (B4), aviso aprobado (B9), administradores designados (B10) y despliegue P7. Sigue emitir spec v1.3 y avanzar P3. Los commits de P4 siguen locales.
 
 ## Documentos de referencia
 
@@ -69,7 +69,7 @@ P1 y P2 publicados en `origin/p1/nucleo` y `origin/p2/lector`. Las capturas del 
 |---|---|---|---|
 | P2 Lector y menú | ✅ | [plan](docs/superpowers/plans/2026-10-27-p2-lector-y-menu.md) | Rama `p2/lector`, publicada; PR #2 sobre P1 según capturas. Ruta de respaldo con IA (L7) pendiente de B7 |
 | P3 Herramientas | ⬜ | Por escribir | H8 bloqueada por la plantilla académica |
-| P4 API y acceso | 🔄 | [plan](docs/superpowers/plans/2026-10-27-p4-api-y-acceso.md) | A1–A4 cerradas; A5 pendiente. Envío real de códigos bloqueado por SMTP |
+| P4 API y acceso | ✅ | [plan](docs/superpowers/plans/2026-10-27-p4-api-y-acceso.md) | A1–A5 implementadas; activación institucional pendiente B4/B9/B10 y P7 |
 | P5 Chat de ajustes | ⬜ | Por escribir | |
 | P6 Entrega y frontend | ⬜ | Por escribir | |
 | P7 Despliegue | ⬜ | Por escribir | D4 bloqueada por TI |
@@ -82,7 +82,7 @@ P1 y P2 publicados en `origin/p1/nucleo` y `origin/p2/lector`. Las capturas del 
 | A2 Códigos y sesiones | ✅ | `16690a6` | 314 pasan/1 omitida; dos revisores |
 | A3 Asignaturas y permisos | ✅ | `cf4a3b0` | 359 pasan/1 omitida; dos revisores; ambos PDF reales por HTTP |
 | A4 Generación y recursos | ✅ | `c6a4fc3` | 443 pasan/1 omitida; dos revisores; generación simulada→HTTP y edición concurrente |
-| A5 Límites, consumo y privacidad | ⬜ | — | Límites por IP, administración y aviso |
+| A5 Límites, consumo y privacidad | ✅ | `49ac905` | 514 pasan/1 omitida; dos revisores; aviso técnico pendiente de aprobación |
 
 ### Criterios de aceptación de la Fase 1 (§15)
 
@@ -99,7 +99,7 @@ P1 y P2 publicados en `origin/p1/nucleo` y `origin/p2/lector`. Las capturas del 
 | 9 | M2-S1 y M2-S2 producen herramientas distintas | P1, P3 | 🔄 Contexto y focos distintos (`test_silabo`, `test_planificador`); generación real en P3 |
 | 10 | Chat regenera solo la pregunta pedida | P5 | ⬜ |
 | 11 | Caída del servidor → "en espera" y reanuda | P1 | ✅ `test_servidor_caido_queda_en_espera`, `test_retoma_tras_caida` |
-| 12 / 12b / 12c | Dominios, permisos, bloqueo tras 5 intentos | P4 | 🔄 Dominios/bloqueo y permisos de lectura/escritura probados A2–A4; SMTP real pendiente B4 y límites por IP en A5 |
+| 12 / 12b / 12c | Dominios, permisos, bloqueo tras 5 intentos | P4 | 🔄 Implementación probada A2–A5, incluidos límites IP/correo; validación de envío institucional real pendiente B4 |
 | 13 | Instalación limpia | P7 | ⬜ |
 | 14 | Aislamiento entre asignaturas | P1 | ✅ `test_aislamiento_dos_asignaturas` |
 
@@ -117,6 +117,8 @@ P1 y P2 publicados en `origin/p1/nucleo` y `origin/p2/lector`. Las capturas del 
 | B6 | Concurrencia admitida por el servidor de IA | P7 D4 | TI | Abierto |
 | B7 | Sílabos de otras facultades | P2 L7, Fase 2 | Usuario | Abierto |
 | B8 | (Opcional) activar `--reasoning-parser qwen3` en vLLM | Ninguno; el plan funciona sin él | TI | Abierto |
+| B9 | Aprobar aviso de privacidad, responsable, canales y conservación académica | P4 A5 (activación), P6, P7 | Usuario / institución / DPD | Abierto; borrador técnico en `docs/privacidad-borrador.md` |
+| B10 | Designar lista institucional de `ADMINISTRADORES` | Consumo administrativo en despliegue | Usuario / institución | Abierto; lista vacía por defecto |
 
 ---
 
@@ -135,6 +137,7 @@ P1 y P2 publicados en `origin/p1/nucleo` y `origin/p2/lector`. Las capturas del 
 | 2026-10-26 | Revisor de 1 ítem por llamada; límite de 120 s para workers y 240 s para el revisor; lease de 360 s; `recurso.version_silabo`; ajustes de estilo por carrera (R1, R2, R4, R5) | Plan P1 (T1, T2, T6, T8, T12) |
 | 2026-10-26 | Especialización en 4 niveles (configuración → memoria de reglas → ejemplares → LoRA por facultad). Fase 1 solo con el Nivel 0. El usuario aprobó D1–D5; las consultas a TI y las designaciones institucionales siguen pendientes de ejecución | Revisión §4–§5 y aprobación del usuario en la conversación |
 | 2026-10-27 | A4: historial solo operativo, `uso_mejora=false`; modificaciones reales invalidan la vigencia de la evidencia y quedan `requiere_revision`; guardar contenido idéntico no cambia estado ni revisión | `docs/desarrollo-api.md`, plan P4 A4 |
+| 2026-10-27 | A5: cuotas persistentes por ventanas UTC y HMAC, confianza explícita en proxies, bitácora sin URL/cuerpos/identidad en claro. Retención técnica propuesta de 30 días y purga explícita; aviso y administradores reales pendientes de institución | `docs/desarrollo-api.md`, `docs/privacidad-borrador.md`, plan P4 A5 |
 
 ### Decisiones D1 a D5 aprobadas por el usuario
 
@@ -163,6 +166,9 @@ P1 y P2 publicados en `origin/p1/nucleo` y `origin/p2/lector`. Las capturas del 
 - **P4 A4 (`c6a4fc3`):** catálogo de workers disponibles, generar/consultar trabajos y GET/PUT de recursos por asignatura; perfil elegido preservado en el trabajo. Migración `006_recurso_edicion.sql`: revisión optimista e historial antes/después con autor y sin uso para entrenamiento. Guía HTTP en `docs/desarrollo-api.md`.
 - **Revisión A4:** corregida edición de clases sin contenidos explícitos y limitada pregunta a 1000 caracteres antes de comparar duplicados; JSON acotado a 1 MiB/30 s. Dos revisores cerraron sus hallazgos; se explicitó que guardar sin cambios es una operación sin modificación. Evidencia original conservada, pero no atribuida a textos editados.
 - **Cierre A4:** 443 pasan/1 omitida (109 s), 84 pruebas nuevas. Polling de ocho estados, aislamiento con ambos cursos poblados, snapshot+perfil tras cambio de sílabo, lectores sin escritura y ediciones concurrentes 200/409. Sin GPU/correos reales; migraciones solo en esquemas temporales. Sigue A5.
+- **P4 A5 (`49ac905`):** migración `007_control_acceso.sql`; cuotas IP/correo atómicas, persistentes y seudonimizadas; acceso administrativo por allowlist a consumo agregado. Auditoría mínima sin cuerpos, URLs ni identidades en claro; aviso técnico en `docs/privacidad-borrador.md` y mantenimiento explícito de seguridad vencida.
+- **Revisión A5:** corregida imputación de XFF inválido a la cuota del proxy; arranque `python -m app.servidor` sin reinterpretación previa de IP ni access log crudo. Dos revisores cerraron hallazgos. Cierre de sesión no bloqueado por cuota de usuario agotada; se mantienen IP/Origin/sesión.
+- **Cierre A5/P4:** 514 pasan/1 omitida (141 s), 71 pruebas nuevas. Cuotas entre instancias y concurrentes, UTC de BD, permisos administrativos, canarios de no-fuga y purga que preserva material académico. Sin GPU/correos reales; migraciones solo en esquemas temporales. B4/B9/B10 abiertos; P7 debe programar/supervisar mantenimiento y configurar proxy/HTTPS.
 - **P2 · Lector y menú** (rama `p2/lector`, ejecución en línea con revisión final por un subagente opus):
   - Segmentación por posición en la página: se descartan las secciones I y VII, el índice y el pie «Generado por <usuario>», que también es un dato personal.
   - Las sesiones que empiezan al pie de página no tienen borde inferior: se reconstruye esa fila abierta. Sin esto se perdían 2 de 11 sesiones en Datos y 3 de 6 en TIC.
@@ -236,8 +242,8 @@ P1 y P2 publicados en `origin/p1/nucleo` y `origin/p2/lector`. Las capturas del 
 
 ## Siguiente paso
 
-1. Entregar y revisar con el usuario la propuesta institucional en `docs/propuestas/`.
-2. Fase de calidad (en pausa hasta la plantilla): variar los tipos de enunciado (3 de 4 eran «¿Qué tipo de prueba…?») y que el código calcule los valores críticos.
-3. Continuar P4 con A5: límites persistentes por IP/correo, registro de accesos sin cuerpos ni parámetros privados, consumo solo para administradores configurados y aviso de privacidad para revisión institucional.
+1. Emitir el spec v1.3 antes de P3 (D5 aprobada), consolidando decisiones H1–H8 y contratos realmente implementados en P1/P2/P4.
+2. Detallar y ejecutar P3 empezando por herramientas deterministas y cálculo que no dependen de la plantilla. Mantener pendientes H3 (validación académica), H7 (calidad/pilotos) y H8 (plantilla).
+3. Resolver puertas institucionales B4/B9/B10 antes de activar P4; preparar despliegue P7 con HTTPS, proxy y mantenimiento supervisado. La calidad final y los formatos académicos siguen condicionados a la plantilla.
 4. Mantener los PR apilados: integrar #1 antes de #2 cuando se decida fusionarlos. Los PR ya están creados según las capturas; no repetir creación.
-5. Preparar el spec v1.3 antes de P3 y adaptar formatos finales cuando llegue la plantilla académica.
+5. La propuesta institucional en `docs/propuestas/` permanece disponible para revisión del usuario; no se ha versionado ni modificado en esta continuación.
