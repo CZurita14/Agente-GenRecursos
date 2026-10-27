@@ -111,3 +111,36 @@ def test_fila_total_se_ignora_y_varios_momentos():
     assert (s["id"], s["semana_periodo"], s["practico"], s["contenidos"]) == (
         "M2-S1", 2, {"texto": "", "horas": 0.0}, ["Distribuciones", "Bayes"])
     assert m2["rubrica"] == []
+
+
+# --- Revisión final: robustez ---------------------------------------------------
+import pytest  # noqa: E402
+
+from app.silabo.lector import SilaboIlegible  # noqa: E402
+
+
+def test_encabezado_horas_docente_no_roba_el_rol():
+    enc = ["Sesión -\nfecha", "Actividades con el\ndocente", "Horas docente", "Actividades práctico-\nexperimentales",
+           "Horas", "Trabajo autónomo", "Horas", "Contenido de la sesión"]
+    fila = ["Sesión 1\n07/10/2026", "Clase", "6.0", "Práctica", "4.0", "Autónomo", "2.0", "• Datos"]
+    [s] = leer_momentos([_cabecera()[:-1] + [enc, fila] + _cierre()], INICIO)[0]["sesiones"]
+    assert s["docente"] == {"texto": "Clase", "horas": 6.0, "asincronica": None}
+    assert s["contenidos"] == ["Datos"]
+
+
+def test_columnas_irreconocibles_dan_silabo_ilegible():
+    enc = ["Sesión -\nfecha", "Actividad", "Hora", "Otra", "Hora", "Contenidos"]
+    with pytest.raises(SilaboIlegible):
+        leer_momentos([_cabecera()[:-1] + [enc, ["Sesión 1\n07/10/2026", "a", "1", "b", "2", "c"]]], INICIO)
+
+
+def test_rubrica_no_absorbe_tablas_ajenas():
+    ajena = [["Observaciones generales del docente", "texto libre"]]
+    [m] = leer_momentos([_cabecera() + [SESION_1] + _cierre(), RUBRICA, ajena], INICIO)
+    assert [f["indicador"] for f in m["rubrica"]] == ["Estructuración", "Reporte en JASP", "Línea base"]
+
+
+def test_sesion_con_celda_partida_no_se_pierde_en_silencio():
+    partida = ["Sesión 2", "Clase", None, "6.0", "", "", "", "", "• X"]
+    with pytest.raises(SilaboIlegible):
+        leer_momentos([_cabecera() + [SESION_1, partida] + _cierre()], INICIO)

@@ -15,7 +15,8 @@ MINIMO_CARACTERES = 200
 # Los sílabos reales tienen 10-15 páginas; el tope evita que un PDF malicioso agote memoria.
 MAX_PAGINAS = 60
 # El pie «Sílabo … Generado por <usuario> el <fecha> · Página n de m» identifica a una persona.
-_PIE = re.compile(r"Generado por|Página \d+ de \d+")
+_PIE = re.compile(r"Generado por|Página \d+ de \d+", re.I)
+_ZONA_PIE = 0.85  # El pie solo se busca en el 15 % inferior: el cuerpo puede citar esas palabras.
 SECCIONES_UTILES = ("portada", "II", "III", "IV", "V", "VI")
 _ORDEN = ("I", "II", "III", "IV", "V", "VI", "VII")
 _TITULO = re.compile(r"^(I|II|III|IV|V|VI|VII)\.\s+[A-ZÁÉÍÓÚÑ ]+$")
@@ -67,9 +68,13 @@ def _titulos(pdf) -> dict[str, tuple[int, float]]:
     return hallados
 
 
+def _es_pie(coincidencia: dict, alto: float) -> bool:
+    return bool(_PIE.search(coincidencia["text"])) and coincidencia["top"] >= _ZONA_PIE * alto
+
+
 def _inicio_pie(pagina) -> float:
     """Top de la primera línea del pie de página (o el alto de la página si no tiene)."""
-    tops = [m["top"] for m in pagina.search(_PIE.pattern)]
+    tops = [m["top"] for m in pagina.search(_PIE.pattern, case=False) if _es_pie(m, pagina.height)]
     return min(tops) - 1 if tops else pagina.height
 
 

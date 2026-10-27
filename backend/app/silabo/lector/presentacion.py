@@ -14,7 +14,8 @@ _VERSION = re.compile(r"v\.\s*([\d.]+)\s*\(APROBADA EL (\d{2}/\d{2}/\d{4})\)", r
 
 
 def _portada(texto: str) -> dict:
-    lineas = [l.strip() for l in texto.split("Docente:")[0].splitlines() if l.strip()]
+    # Todo lo que sigue a «Docente(s):», en cualquier grafía, se descarta sin leerlo.
+    lineas = [l.strip() for l in re.split(r"(?i)docentes?\s*:", texto)[0].splitlines() if l.strip()]
 
     def despues(rotulo: str, n: int = 1) -> str:
         for k, linea in enumerate(lineas):

@@ -102,3 +102,9 @@ def test_filas_abiertas_al_pie_se_recuperan(pdf_real, nombre, esperadas):
         primeras = [(f[0] or "") for p in segmentar(pdf)["IV"] for t in tablas(p) for f in t]
     sesiones = [c for c in primeras if re.match(r"Sesión \d+\s+\d{2}/\d{2}/\d{4}", c)]
     assert len(sesiones) == esperadas
+
+
+def test_pie_se_busca_solo_al_final_y_sin_distinguir_mayusculas():
+    from app.silabo.lector.entrada import _es_pie
+    assert _es_pie({"text": "GENERADO POR", "top": 790}, 842)
+    assert not _es_pie({"text": "Generado por", "top": 300}, 842)

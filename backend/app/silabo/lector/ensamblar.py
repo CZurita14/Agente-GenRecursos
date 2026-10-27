@@ -10,7 +10,20 @@ from app.silabo.modelo import SilaboUTI
 
 
 def leer_silabo(datos: bytes) -> SilaboUTI:
-    """No escribe el PDF en disco: borrar el archivo subido le corresponde a quien lo recibe (P4)."""
+    """No escribe el PDF en disco: borrar el archivo subido le corresponde a quien lo recibe (P4).
+
+    Cualquier error interno se convierte en SilaboIlegible sin su mensaje original,
+    que podría contener texto del PDF.
+    """
+    try:
+        return _leer(datos)
+    except SilaboIlegible:
+        raise
+    except Exception:
+        raise SilaboIlegible("El sílabo tiene un formato que no se pudo leer.") from None
+
+
+def _leer(datos: bytes) -> SilaboUTI:
     with abrir(datos) as pdf:
         secciones = segmentar(pdf)
 

@@ -82,3 +82,8 @@ def test_tablas_en_otro_orden():
     # Se localizan por rótulo, no por posición.
     c = leer_cabecera(PORTADA, list(reversed(TABLAS_II)), list(reversed(TABLAS_III)))
     assert c["proyecto_formativo"]["nivel"] == 3 and c["pis"]["aporte"] == "Este módulo aporta"
+
+
+def test_portada_con_otra_grafia_de_docente():
+    portada = PORTADA.replace("Docente:", "DOCENTES:")
+    assert "FICTICIO" not in repr(leer_cabecera(portada, TABLAS_II, TABLAS_III))

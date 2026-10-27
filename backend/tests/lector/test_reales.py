@@ -70,3 +70,13 @@ def test_sin_sesiones_fechadas_da_silabo_ilegible(pdf_real, monkeypatch):
     with pytest.raises(SilaboIlegible) as e:
         leer_silabo(pdf_real("datos"))
     assert "sesión fechada" in e.value.motivo
+
+
+def test_errores_internos_no_filtran_texto_del_pdf(pdf_real, monkeypatch):
+    import app.silabo.lector.ensamblar as ensamblar
+    def falla(*a, **k):
+        raise ValueError("could not convert string to float: 'TEXTO DEL PDF'")
+    monkeypatch.setattr(ensamblar, "leer_momentos", falla)
+    with pytest.raises(SilaboIlegible) as e:
+        leer_silabo(pdf_real("datos"))
+    assert "TEXTO DEL PDF" not in str(e.value)
