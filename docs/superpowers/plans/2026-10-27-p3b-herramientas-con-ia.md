@@ -27,7 +27,7 @@ El orquestador y el coordinador obtienen el contexto con `contexto_ambito`. Los 
 ## Review Focus
 
 1. **Momento cuya política excluye la IA** (TIC M4: «sin asistencia de IA»): no se ofrecen simulacro, estudio de caso ni guía, y el repaso solo cubre momentos anteriores. Lo cubren `test_politica_restrictiva_tic_m4` (T2) y `test_generar_restringido_422` (T7).
-- **2. Guía de la evidencia que la resuelve:** es el mayor riesgo de integridad. Debe pasar por el revisor de integridad y, además, por un control determinista que la devuelva si copia el texto de la evidencia más allá de citarla. Lo cubre `test_guia_no_reproduce_la_evidencia` (T5).
+2. **Guía de la evidencia que la resuelve:** es el mayor riesgo de integridad. Debe pasar por el revisor de integridad y, además, por un control determinista que la devuelva si copia el texto de la evidencia más allá de citarla. Lo cubre `test_guia_no_reproduce_la_evidencia` (T5).
 3. **Estudio de caso con el escenario del evaluado:** el escenario lo asigna el planificador (C9) y el verificador comprueba que no comparta palabras clave con los entregables. Lo cubre `test_caso_distinto_del_evaluado` (T5).
 4. **Momento sin sesiones, sin rúbrica o sin política** (TIC M3 sale con la política vacía): `contexto_ambito` no falla, y la herramienta que necesite la rúbrica responde `422`. Lo cubren `test_momento_sin_politica` (T1) y `test_politica_tic_m3` (T1, que primero averigua si es un defecto del lector).
 5. **Reanudación tras una caída** con un trabajo de momento a medio hacer: debe comportarse como uno de clase. Lo cubre `test_retoma_trabajo_de_momento` (T3).
