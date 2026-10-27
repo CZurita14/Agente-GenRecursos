@@ -90,3 +90,16 @@ def test_prompt_de_momento_cabe():
         cliente.close()
     print("PROMPT_MAXIMO_TOKENS", maximo)
     assert maximo <= 8192 - 3500 - 300
+
+
+def test_contexto_asignatura_no_crece_con_las_sesiones(silabo):
+    # Revisión P3b: la sección del ámbito nunca se recorta; no debe depender del n.º de sesiones.
+    datos = silabo.model_dump()
+    for m in datos["momentos"]:
+        extra = [dict(s, id=f"{s['id']}x", contenidos=[c + " (ampliado)" for c in s["contenidos"]])
+                 for s in m["sesiones"]]
+        m["sesiones"] = m["sesiones"] + extra
+    grande = SilaboUTI.model_validate(datos)
+    a, b = contexto_asignatura(silabo), contexto_asignatura(grande)
+    assert a.contenidos == [] and b.contenidos == []
+    assert len(_prompt(a)[1]["content"]) == len(_prompt(b)[1]["content"])

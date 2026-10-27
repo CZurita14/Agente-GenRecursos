@@ -83,3 +83,29 @@ def test_herramienta_de_otro_ambito_no_se_encola(conn, silabo):
         crear_trabajos(conn, SolicitudGeneracion(aid, Ambito("momento", "M3"), ["cuestionario"]))
     with pytest.raises(KeyError):  # Contrato existente: la API lo traduce a 422.
         crear_trabajos(conn, SolicitudGeneracion(aid, Ambito("clase", "M9-S1"), ["cuestionario"]))
+
+
+@pytest.mark.parametrize("herramienta, cambio", [
+    ("guia_evidencia", {"rubrica": []}), ("repaso_momento", {"sesiones": []}),
+    ("estudio_caso", {"ra": []}), ("simulacro", {"ra": []})])
+def test_requisitos_del_silabo_antes_de_encolar(conn, silabo, herramienta, cambio):
+    # Revisión P3b: sin rúbrica, sesiones o RA el esquema es imposible; no se gasta GPU.
+    from app.agentes.orquestador import SolicitudGeneracion, crear_trabajos
+    from app.silabo.modelo import SilaboUTI
+    datos = silabo.model_dump()
+    datos["momentos"][1].update(cambio)
+    aid = conn.execute("insert into asignatura (dueno,codigo_pf,version_silabo,agente,silabo) "
+                       "values ('p@uti.edu.ec','X','1','ingenierias',%s) returning id",
+                       (Jsonb(SilaboUTI.model_validate(datos).model_dump(mode="json")),)).fetchone()["id"]
+    with pytest.raises(ValueError):
+        crear_trabajos(conn, SolicitudGeneracion(aid, Ambito("momento", "M3"), [herramienta]))
+    assert conn.execute("select count(*) n from trabajo").fetchone()["n"] == 0
+
+
+def test_guia_final_sin_rubrica_final_no_se_encola(conn, silabo):
+    from app.agentes.orquestador import SolicitudGeneracion, crear_trabajos
+    aid = conn.execute("insert into asignatura (dueno,codigo_pf,version_silabo,agente,silabo) "
+                       "values ('p@uti.edu.ec','X','1','ingenierias',%s) returning id",
+                       (Jsonb({**silabo.model_dump(mode="json"), "rubrica_producto_final": []}),)).fetchone()["id"]
+    with pytest.raises(ValueError):
+        crear_trabajos(conn, SolicitudGeneracion(aid, Ambito("asignatura", "asignatura"), ["guia_producto_final"]))

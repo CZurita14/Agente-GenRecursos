@@ -11,6 +11,12 @@ from app.herramientas.politica import excluye_ia_en_evaluacion
     "No se permite el uso de IA en la evaluación cognitiva.",
     "No se permite la IA durante la defensa.",
     "Queda prohibido el uso de la IA en la evaluación.",
+    # Revisión P3b: otras redacciones habituales.
+    "La evaluación cognitiva es sin IA.",
+    "No está permitido el uso de IA durante el examen.",
+    "Examen sin uso de herramientas de IA.",
+    "Prohibida la IA en la defensa oral.",
+    "No se permite el uso de herramientas de inteligencia artificial.",
 ])
 def test_patrones_restrictivos(texto):
     assert excluye_ia_en_evaluacion(texto)

@@ -1,17 +1,18 @@
 """§9.4 regla 2: si la política del momento excluye la IA en una evaluación, en ese
 momento solo se ofrecen repasos de momentos anteriores.
 
-Detección determinista sobre el texto normalizado; ante la duda, el docente ve el
-motivo en el catálogo (`restringido`) y puede pedir el repaso.
+Detección determinista sobre el texto normalizado. Como ninguna lista de frases es
+completa, el catálogo muestra además la política del momento para que el docente juzgue.
 """
 import re
 
 from app.agentes.facultades import normalizar
 
+_IA = r"(?:(?:EL USO DE |LA )?(?:HERRAMIENTAS DE )?(?:LA )?(?:IA|INTELIGENCIA ARTIFICIAL)\b)"
 _RESTRICTIVA = re.compile(
-    r"\bSIN (?:ASISTENCIA|USO|APOYO|AYUDA) DE (?:LA )?(?:IA|INTELIGENCIA ARTIFICIAL)\b"
-    r"|\bNO SE PERMITE (?:EL USO DE )?(?:LA )?(?:IA|INTELIGENCIA ARTIFICIAL)\b"
-    r"|\bPROHIBIDO EL USO DE (?:LA )?(?:IA|INTELIGENCIA ARTIFICIAL)\b"
+    rf"\bSIN (?:(?:ASISTENCIA|USO|APOYO|AYUDA) DE )?{_IA}"
+    rf"|\bNO (?:SE PERMITE|ESTA PERMITID[OA]|SE AUTORIZA|ESTA AUTORIZAD[OA]) {_IA}"
+    rf"|\bPROHIBID[OA] (?:EL USO DE )?{_IA}"
 )
 
 

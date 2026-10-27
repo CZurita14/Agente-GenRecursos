@@ -93,3 +93,44 @@ def test_humo_nucleo(silabo, conn, nueva_conexion, record_property):
     for r in recursos:
         e = PaqueteEvidencia.model_validate(r["evidencia"])
         print(r["herramienta"], r["estado"], e.resumen())
+
+
+@pytest.mark.servidor
+@pytest.mark.skipif(os.getenv("LLM_REAL") != "1", reason="requiere LLM_REAL=1 y red UTI")
+def test_humo_momento(silabo, conn, nueva_conexion, record_property):
+    """P3b: simulacro, guía de la evidencia y estudio de caso de M3, y guía del producto final."""
+    config = ajustes()
+    perfiles = cargar_perfiles(RAIZ / "agentes")
+    aid = crear_asignatura(conn, dueno="humo@uti.edu.ec", silabo=silabo,
+                           catalogo=cargar_catalogo(RAIZ / "kb/catalogo.yaml"), perfiles=perfiles)
+    crear_trabajos(conn, SolicitudGeneracion(aid, Ambito("momento", "M3"),
+                                             ["simulacro", "guia_evidencia", "estudio_caso"], cantidad=4))
+    crear_trabajos(conn, SolicitudGeneracion(aid, Ambito("asignatura", "asignatura"), ["guia_producto_final"]))
+
+    def registrar(datos):
+        c = nueva_conexion()
+        try:
+            registrar_llamada(c, datos)
+        finally:
+            c.close()
+
+    inicio = time.monotonic()
+    cliente = ClienteVLLM(config.llm_base_url, config.llm_model, config.llm_timeout_s,
+                          config.llm_max_concurrencia, registrar, config.llm_api_key)
+    try:
+        for _ in range(4):
+            assert procesar_uno(conn, cliente, perfiles, "humo-momento", config.lease_s)
+    finally:
+        cliente.close()
+    trabajos = conn.execute("select herramienta,estado from trabajo").fetchall()
+    assert all(t["estado"] in ("listo", "requiere_revision") for t in trabajos), trabajos
+    llamadas = conn.execute("select * from llamada_llm").fetchall()
+    assert all(c["tokens_entrada"] + c["tokens_salida"] <= 8192 for c in llamadas)
+    resumen = {"segundos": round(time.monotonic() - inicio, 2), "llamadas": len(llamadas),
+               "max_tokens_llamada": max(c["tokens_entrada"] + c["tokens_salida"] for c in llamadas)}
+    record_property("humo_momento", resumen)
+    print("HUMO_MOMENTO", resumen)
+    for r in conn.execute("select herramienta,estado,evidencia from recurso order by creado").fetchall():
+        print(r["herramienta"], r["estado"], r["evidencia"]["veredictos"], r["evidencia"]["verificaciones"])
+    if destino := os.getenv("HUMO_GUARDAR"):
+        guardar_traza(conn, Path(destino), resumen, llamadas)

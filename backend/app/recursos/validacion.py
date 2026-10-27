@@ -101,7 +101,8 @@ def validar_contenido(
             ficha = _Ficha.model_validate(contenido).model_dump(mode="json")
             return ficha, {"ficha": verificar_ficha(ficha, contexto)}
         definicion = DEFINICIONES.get(herramienta)
-        if definicion is None or definicion.es_quiz or not isinstance(contenido, dict)                 or set(contenido) != set(definicion.secciones):
+        if (definicion is None or definicion.es_quiz or not isinstance(contenido, dict)
+                or set(contenido) != set(definicion.secciones)):
             raise EdicionInvalida
         canonico = {s: m.model_validate(contenido[s]).model_dump(mode="json")
                     for s, m in zip(definicion.secciones, definicion.modelos)}

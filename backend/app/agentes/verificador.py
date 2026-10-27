@@ -116,6 +116,27 @@ def _seccion(datos: dict, nombre: str) -> dict:
     return datos[nombre] if set(datos) == {nombre} else datos
 
 
+def _tokens(texto: str) -> list[str]:
+    """Palabras normalizadas, sin puntuación: una coma no debe ocultar una copia."""
+    return re.findall(r"\w+", normalizar(texto))
+
+
+def _copia(fuentes: list[str], textos: list[str], n: int = 12, minimo: int = 5) -> bool:
+    """¿Algún entregable (o 12 palabras seguidas de él) aparece literal en los textos?
+
+    Con entregables cortos basta el entregable entero, si tiene al menos `minimo` palabras.
+    """
+    resto = " " + " ".join(" ".join(_tokens(t)) for t in textos) + " "
+    for fuente in fuentes:
+        palabras = _tokens(fuente)
+        largo = min(n, len(palabras))
+        if largo < minimo:
+            continue
+        if any(f" {' '.join(palabras[i:i + largo])} " in resto for i in range(len(palabras) - largo + 1)):
+            return True
+    return False
+
+
 def _palabras(texto: str) -> set[str]:
     return set(re.findall(r"\w{6,}", normalizar(texto)))
 
@@ -137,9 +158,7 @@ def verificar_guia_evidencia(datos: dict, contexto: ContextoClase) -> list[str]:
     indicadores = {f.indicador for f in contexto.rubrica}
     if any(c.get("indicador") not in indicadores for c in d.get("como_se_valora", [])):
         fallos.append("indicador ajeno a la rúbrica del momento")
-    evidencia = normalizar(contexto.entregables_momento[0] if contexto.entregables_momento else "").split()
-    resto = " ".join(normalizar(t) for t in _textos({k: v for k, v in d.items() if k != "que_se_pide"}))
-    if any(" ".join(evidencia[i:i + 12]) in resto for i in range(max(0, len(evidencia) - 11))):
+    if _copia(contexto.entregables_momento, _textos({k: v for k, v in d.items() if k != "que_se_pide"})):
         fallos.append("copia el texto de la evidencia fuera de «qué se pide»")
     return fallos
 
@@ -162,13 +181,6 @@ def verificar_estudio_caso(datos: dict, contexto: ContextoClase) -> list[str]:
     return fallos
 
 
-def _copia(texto_fuente: str, textos: list[str], n: int = 12) -> bool:
-    """¿Alguna secuencia de `n` palabras del texto fuente aparece literal en los textos?"""
-    fuente = normalizar(texto_fuente).split()
-    resto = " ".join(normalizar(t) for t in textos)
-    return any(" ".join(fuente[i:i + n]) in resto for i in range(max(0, len(fuente) - n + 1)))
-
-
 def verificar_guia_producto_final(datos: dict, contexto: ContextoClase) -> list[str]:
     d = _seccion(datos, "guia_final")
     fallos = verificar_ficha(d, contexto)
@@ -179,6 +191,6 @@ def verificar_guia_producto_final(datos: dict, contexto: ContextoClase) -> list[
     indicadores = {f.indicador for f in contexto.rubrica}
     if any(c.get("indicador") not in indicadores for c in d.get("criterios", [])):
         fallos.append("indicador ajeno a la rúbrica del producto final")
-    if contexto.entregables_momento and _copia(contexto.entregables_momento[0], _textos(d)):
+    if _copia(contexto.entregables_momento, _textos(d)):
         fallos.append("copia el texto del producto final")
     return fallos

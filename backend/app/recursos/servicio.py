@@ -101,12 +101,24 @@ class ServicioRecursos:
         with self._acceso(aid, correo) as (_, a):
             silabo = SilaboUTI.model_validate(a["silabo"])
             motivo = _restriccion(silabo, ambito, ambito_id)
+            contexto = None
+            if ambito_id is not None:
+                try:
+                    contexto = (contexto_por_id(silabo, ambito_id)
+                                if ambito != "asignatura" or ambito_id == "asignatura" else None)
+                except KeyError:
+                    contexto = None
+                if contexto is None:
+                    raise HTTPException(404, "Ámbito inexistente en esta asignatura")
             recomendaciones = self.perfiles[a["agente"]].herramientas_recomendadas.get(ambito, [])
-            con_ia = [] if motivo else [h for h in WORKERS if h in DEFINICIONES and DEFINICIONES[h].ambito == ambito]
+            con_ia = [] if motivo else [h for h in WORKERS if h in DEFINICIONES and DEFINICIONES[h].ambito == ambito
+                                        and (contexto is None or DEFINICIONES[h].requisitos(contexto) is None)]
             disponibles = con_ia + [h for h, tipo in HERRAMIENTAS_SIN_IA.items() if tipo == ambito]
             orden = [h for h in recomendaciones if h in disponibles]
             orden += sorted(h for h in disponibles if h not in orden)
             return {"ambito": ambito, "restringido": motivo is not None, "motivo": motivo,
+                    # La detección no es exhaustiva: el docente ve siempre la política para juzgar.
+                    "politica_ia": contexto.politica_ia if contexto is not None else None,
                     "perfil_sugerido": perfil_por_nivel(silabo.proyecto_formativo.nivel),
                     "herramientas": [{"id": h, "recomendada": h in recomendaciones} for h in orden]}
 

@@ -59,7 +59,11 @@ def crear_trabajos(conn, solicitud: SolicitudGeneracion) -> list[UUID]:
         if asignatura is None:
             raise ValueError("asignatura inexistente")
         silabo = SilaboUTI.model_validate(asignatura["silabo"])
-        contexto_ambito(silabo, solicitud.ambito)  # Falla antes de encolar si el ámbito no existe.
+        contexto = contexto_ambito(silabo, solicitud.ambito)  # Falla antes de encolar si el ámbito no existe.
+        for h in solicitud.herramientas:
+            # Sin lo que el esquema necesita (rúbrica, sesiones, RA) no se gasta GPU.
+            if motivo := DEFINICIONES[h].requisitos(contexto):
+                raise ValueError(motivo)
         # El trabajo conserva una instantánea: subir otro sílabo no cambia un trabajo en curso.
         parametros = dict(cantidad=solicitud.cantidad, instrucciones=solicitud.instrucciones,
                           silabo=asignatura["silabo"], version_silabo=asignatura["version_silabo"])

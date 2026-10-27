@@ -10,7 +10,7 @@ from app.agentes.coordinador import Coordinador
 from app.agentes.facultades import cargar_perfiles, estilo_para
 from app.agentes.mensajes import Encargo, EstiloFacultad, TareaLote
 from app.agentes.verificador import verificar_estudio_caso, verificar_guia_evidencia, verificar_repaso
-from app.agentes.workers.momento import ESTUDIO_CASO, GUIA_EVIDENCIA, REPASO, escenario_para
+from app.agentes.workers.momento import ESCENARIOS_DE_RESPALDO, ESTUDIO_CASO, GUIA_EVIDENCIA, REPASO, escenario_para
 from app.cola.trabajos import Ambito, encolar, tomar_siguiente
 from app.herramientas.esquemas import EstudioCaso, GuiaEvidencia, RepasoMomento
 from app.llm.cliente import ClienteSimulado
@@ -119,7 +119,7 @@ def test_escenario_para_evita_el_entregable(silabo):
                       plan=[], ya_generado=[])
     assert escenario_para(tarea) == "tiempos de respuesta de una API REST"
     sin_libres = tarea.model_copy(update={"estilo": estilo.model_copy(update={"escenarios": ["picos de tráfico"]})})
-    assert "otro sector" in escenario_para(sin_libres)
+    assert escenario_para(sin_libres) in ESCENARIOS_DE_RESPALDO
     assert escenario_para(tarea.model_copy(update={"estilo": estilo_para(PERFIL, ctx.carrera)})) != ""
 
 
@@ -189,3 +189,40 @@ def test_sin_rubrica_final_no_genera(silabo):
                       estilo=EstiloFacultad(tipos_de_caso=[], software_habitual=[]), plan=[], ya_generado=[])
     with pytest.raises(ValueError):
         GUIA_PRODUCTO_FINAL.generar(tarea, ClienteSimulado({"worker": ["{}"]}))
+
+
+# --- Revisión final P3b -----------------------------------------------------------
+
+def _con_evidencia(ctx, evidencia, otros=()):
+    return ctx.model_copy(update={"entregables_momento": [evidencia, *otros]})
+
+
+def test_copia_de_evidencia_corta_o_con_puntuacion(silabo):
+    ctx = _con_evidencia(contexto_momento(silabo, "M3"), "Informe técnico del análisis exploratorio de datos")
+    guia = _respuestas(ctx)["guia_evidencia"]
+    corta = {**guia, "autochequeo": ["a", "b", "Informe técnico del análisis exploratorio de datos"]}
+    assert "copia" in " ".join(verificar_guia_evidencia(corta, ctx))
+    larga = contexto_momento(silabo, "M3")
+    palabras = larga.entregables_momento[0].split()[:14]
+    con_coma = " ".join(palabras[:6]) + ", " + " ".join(palabras[6:])
+    assert "copia" in " ".join(verificar_guia_evidencia({**guia, "autochequeo": ["a", "b", con_coma]}, larga))
+
+
+def test_copia_de_otro_entregable_del_momento(silabo):
+    ctx = _con_evidencia(contexto_momento(silabo, "M3"), "Evidencia principal del momento tres",
+                         ["Matriz de comparación de soluciones tecnológicas del caso asignado"])
+    guia = _respuestas(ctx)["guia_evidencia"]
+    copia = {**guia, "errores_comunes": ["a", "b", "Matriz de comparación de soluciones tecnológicas del caso asignado"]}
+    assert "copia" in " ".join(verificar_guia_evidencia(copia, ctx))
+
+
+def test_escenario_de_respaldo_no_choca_con_los_entregables(silabo):
+    ctx = _con_evidencia(contexto_momento(silabo, "M3"),
+                         "Informe de la organización ficticia de otro sector con sus entregables")
+    tarea = TareaLote(trabajo_id=uuid4(), asignatura_id=uuid4(), lote=1, ronda=0, contexto=ctx,
+                      estilo=EstiloFacultad(tipos_de_caso=[], software_habitual=[], escenarios=[]),
+                      plan=[], ya_generado=[])
+    escenario = escenario_para(tarea)
+    caso = {"escenario": escenario, "ra": ctx.ra[0].id, "preguntas": _respuestas(ctx)["estudio_caso"]["preguntas"],
+            "caso": f"Caso ficticio sobre {escenario}. " + LARGO}
+    assert verificar_estudio_caso(caso, ctx) == []

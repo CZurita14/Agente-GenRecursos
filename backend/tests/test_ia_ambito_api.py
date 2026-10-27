@@ -96,3 +96,25 @@ def test_edicion_con_campo_extra_422(guia):
     contenido = json.loads(json.dumps(recurso["contenido"]))
     contenido["guia"]["respuesta"] = "la solución de la evidencia"
     assert guardar(d, aid, recurso, contenido).status_code == 422
+
+
+def test_catalogo_oculta_lo_que_el_silabo_no_permite(entorno, silabo):
+    app, _, d, aid, _ = entorno
+    datos = silabo.model_dump()
+    datos["proyecto_formativo"]["version"] = "2.0"
+    datos["momentos"][1]["rubrica"] = []
+    app.state.asignaturas.guardar("dueno@uti.edu.ec", SilaboUTI.model_validate(datos))
+    ids = {h["id"] for h in d.get(f"/asignaturas/{aid}/herramientas?ambito=momento&id=M3").json()["herramientas"]}
+    assert "guia_evidencia" not in ids and "simulacro" in ids
+    assert _momento(d, aid, ["guia_evidencia"]).status_code == 422
+
+
+def test_catalogo_con_id_inexistente_404(entorno):
+    _, _, d, aid, _ = entorno
+    assert d.get(f"/asignaturas/{aid}/herramientas?ambito=momento&id=M99").status_code == 404
+
+
+def test_catalogo_muestra_la_politica(entorno, silabo):
+    _, _, d, aid, _ = entorno
+    r = d.get(f"/asignaturas/{aid}/herramientas?ambito=momento&id=M2").json()
+    assert r["politica_ia"] == silabo.momentos[0].politica_ia

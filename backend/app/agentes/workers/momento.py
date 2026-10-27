@@ -23,14 +23,16 @@ NO_RESOLVER = (
     " Nunca resuelvas ni redactes la evidencia, las tareas, las PAE ni las evaluaciones del "
     "momento: no des respuestas, cálculos, conclusiones ni textos que el estudiante pueda copiar."
 )
-ESCENARIO_DE_RESPALDO = "una organización ficticia de otro sector, distinta de la de los entregables"
+# Respaldos para cuando ningún escenario del perfil queda libre; también se filtran (C9).
+ESCENARIOS_DE_RESPALDO = ("un huerto escolar comunitario", "una panadería de barrio",
+                          "un club deportivo juvenil", "una biblioteca municipal")
 
 
 def escenario_para(tarea: TareaLote) -> str:
     """Escenario del perfil que no se parece a los entregables (C9); fijo por momento."""
-    libres = _casos_libres(list(tarea.estilo.escenarios), tarea.contexto.entregables_momento)
-    if not libres:
-        return ESCENARIO_DE_RESPALDO
+    libres = (_casos_libres(list(tarea.estilo.escenarios), tarea.contexto.entregables_momento)
+              or _casos_libres(list(ESCENARIOS_DE_RESPALDO), tarea.contexto.entregables_momento)
+              or [ESCENARIOS_DE_RESPALDO[0]])
     return libres[int(hashlib.sha256(tarea.contexto.clase_id.encode()).hexdigest(), 16) % len(libres)]
 
 

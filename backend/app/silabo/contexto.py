@@ -113,7 +113,9 @@ def contexto_asignatura(silabo: SilaboUTI) -> ContextoClase:
     return ContextoClase(
         **_base(silabo), clase_id="asignatura", fecha=silabo.periodo.inicio,
         momento_titulo=silabo.proyecto_formativo.nombre,
-        contenidos=_sin_repetir(c for m in silabo.momentos for s in m.sesiones for c in s.contenidos),
+        # Sin los contenidos de cada sesión: la sección del ámbito nunca se recorta y la guía del
+        # producto final (#16) solo necesita los momentos, sus evidencias y la rúbrica final.
+        contenidos=[],
         actividades=_sin_repetir(f"M{m.numero}: {m.titulo}" for m in silabo.momentos),
         ra=[r.model_copy(deep=True) for r in silabo.resultados_aprendizaje],
         rubrica=[f.model_copy(deep=True) for f in silabo.rubrica_producto_final],
