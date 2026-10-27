@@ -12,12 +12,15 @@ import psycopg
 from app.agentes.facultades import cargar_catalogo, cargar_perfiles
 from app.api.asignaturas import router as asignaturas_router
 from app.api.auth import router as auth_router
+from app.api.cuerpo import LimiteJSON
+from app.api.recursos import router as recursos_router
 from app.api.errores import registrar_errores
 from app.auth.correo import transporte_correo
 from app.auth.servicio import ServicioAuth
 from app.config import RAIZ, Ajustes, ajustes
 from app.db.conexion import conectar
 from app.asignaturas.servicio import ServicioAsignaturas
+from app.recursos.servicio import ServicioRecursos
 
 
 def crear_app(config: Ajustes | None = None, *, transporte=None, auth=None, conexion=None, lector_pdf=None) -> FastAPI:
@@ -32,6 +35,7 @@ def crear_app(config: Ajustes | None = None, *, transporte=None, auth=None, cone
         app.state.perfiles = cargar_perfiles(directorio)
         app.state.asignaturas = ServicioAsignaturas(conexion, cargar_catalogo(RAIZ / "kb/catalogo.yaml"),
                                                     app.state.perfiles)
+        app.state.recursos = ServicioRecursos(conexion, app.state.perfiles)
         async with httpx.AsyncClient(timeout=5, transport=transporte,
                                      headers={"Authorization": f"Bearer {config.llm_api_key}"}) as cliente:
             app.state.ia = cliente
@@ -51,6 +55,10 @@ def crear_app(config: Ajustes | None = None, *, transporte=None, auth=None, cone
     registrar_errores(app)
     app.include_router(auth_router)
     app.include_router(asignaturas_router)
+    app.include_router(recursos_router)
+    # La incorporación previa al middleware de acceso lo deja por dentro:
+    # CORS → sesión/Origin → límite de cuerpo → parser JSON/rutas.
+    app.add_middleware(LimiteJSON, max_bytes=config.api_json_max_bytes, timeout_s=config.api_json_timeout_s)
 
     @app.middleware("http")
     async def acceso(request: Request, siguiente):

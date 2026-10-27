@@ -36,6 +36,8 @@ class Ajustes(BaseSettings):
     pdf_timeout_s: float = Field(default=20, gt=0, le=120)
     pdf_memoria_mb: int = Field(default=512, ge=128, le=2048)
     pdf_recepcion_timeout_s: float = Field(default=30, gt=0, le=120)
+    api_json_max_bytes: int = Field(default=1024 * 1024, ge=1, le=4 * 1024 * 1024)
+    api_json_timeout_s: float = Field(default=30, gt=0, le=120)
 
     @model_validator(mode="after")
     def https_en_produccion(self):

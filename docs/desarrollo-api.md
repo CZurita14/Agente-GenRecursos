@@ -63,4 +63,33 @@ Las operaciones retienen un bloqueo sobre la asignatura y **después** consultan
 ../.venv/Scripts/python.exe -m pytest tests/test_asignaturas_api.py tests/test_asignaturas_concurrencia.py tests/test_pdf_recepcion.py tests/test_lector_aislado.py -q
 ```
 
-P4 todavía necesita A4 (generación/recursos) y A5 (límites por IP, consumo y privacidad). No publicar la API como servicio de producción antes de completar esos controles y el despliegue P7.
+## Generación y recursos (A4)
+
+Aplicar también `006_recurso_edicion.sql`. Todas las rutas siguientes exigen sesión y acceso a la asignatura; las escrituras admiten solo dueño/editor.
+
+- `GET /asignaturas/{UUID}/herramientas?ambito=clase`: catálogo de workers disponibles, con recomendadas primero y perfil sugerido. Actualmente cuestionario y ficha; momento/asignatura dan catálogo vacío hasta P3.
+- `POST /asignaturas/{UUID}/generar`: encola un trabajo por herramienta y devuelve 202 con IDs. No llama directamente al modelo ni arranca workers desde la API.
+- `GET /asignaturas/{UUID}/trabajos`: avance, estado del trabajo y vínculo al recurso. Los activos y pendientes aparecen antes que el historial cerrado. No incluye sílabo, instrucciones, mensajes ni identificación interna del worker.
+- `GET /asignaturas/{UUID}/recursos`: listado de metadatos. Ambos listados aceptan `limite` (predeterminado 50, máximo 200) y `desde` (offset).
+- `GET /asignaturas/{UUID}/recursos/{recurso_UUID}`: contenido, evidencia original, revisión y marca de cambio del sílabo; un recurso de otra asignatura bajo un UUID de asignatura propia da 404.
+- `PUT /asignaturas/{UUID}/recursos/{recurso_UUID}`: guarda edición docente con JSON `{"revision":0,"contenido":...}`. Una revisión obsoleta devuelve 409; recargar antes de volver a guardar.
+
+Ejemplo de solicitud de generación:
+
+```json
+{"ambito":{"tipo":"clase","id":"M2-S1"},"herramientas":["cuestionario"],"cantidad":12,"perfil_dificultad":"fundamentacion","instrucciones":""}
+```
+
+Cantidad entera 1–40, instrucciones hasta 4000 caracteres y perfil opcional (`fundamentacion`, `profesional`, `avanzado`). Se valida toda la selección antes de confirmar la transacción. El perfil elegido y el sílabo se conservan en el trabajo aunque el docente suba una nueva versión antes de ejecutarlo. El worker existente consume esa cola mediante `python worker.py` desde `backend`.
+
+Las modificaciones reales se guardan junto al historial y a sus verificaciones deterministas en una misma transacción; el cliente no puede elegir autor, estado, evidencia ni uso para mejora. Quedan `requiere_revision`, con `evidencia_vigente=false`; los veredictos originales se mantienen como trazabilidad de generación, sin atribuirlos al contenido editado. `verificacion_edicion` corresponde al nuevo texto. Guardar contenido idéntico no crea una revisión ni invalida la evidencia. Que la evidencia esté vigente solo significa que corresponde al contenido; no implica aprobación académica, y los cuestionarios conservan la marca de borrador H8.
+
+El trabajo conserva su estado de cierre original; los campos `recurso_estado` y `recurso_revision` del polling reflejan posteriores ediciones del recurso. Las preguntas admiten texto y cambios de nivel, reordenación y eliminación de ítems existentes (sin quedar vacío), pero no nuevos IDs. Se rechazan RA/contenidos de otra clase, campos extra y opciones/clave mal formadas. El editor admite la misma alternativa de título de momento que P1 cuando no hay contenidos explícitos y conserva las advertencias del verificador. Para fichas exige las secciones conceptual/aplicacion. La pertenencia se comprueba contra la instantánea original; si falta, no se permite editar sustituyéndola por el sílabo vigente.
+
+El cuerpo JSON tiene máximo 1 MiB y recepción de 30 s, antes de su decodificación. Las preguntas editadas tienen 25–1000 caracteres para acotar la comparación de duplicados; la validación no compara textos gigantes. La subida binaria PDF conserva su límite de 10 MB. El historial operativo tiene `uso_mejora=false`: no alimenta automáticamente reglas ni entrenamiento.
+
+```powershell
+../.venv/Scripts/python.exe -m pytest tests/test_generacion_api.py tests/test_edicion_validacion.py tests/test_cuerpo_json.py -q
+```
+
+P4 todavía necesita A5 (límites por IP, consumo y privacidad). No publicar la API como servicio de producción antes de completar esos controles y el despliegue P7.

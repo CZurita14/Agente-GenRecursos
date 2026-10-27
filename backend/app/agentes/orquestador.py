@@ -8,7 +8,7 @@ from psycopg.types.json import Jsonb
 from app.agentes.coordinador import Coordinador, LeasePerdido
 from app.agentes.facultades import enrutar
 from app.agentes.mensajes import Encargo
-from app.agentes.planificador import perfil_por_nivel
+from app.agentes.planificador import PERFILES, perfil_por_nivel
 from app.agentes.workers import WORKERS
 from app.cola.trabajos import Ambito, encolar, poner_en_espera, renovar_lease, terminar, tomar_siguiente
 from app.llm.cliente import JsonInvalido, ServidorNoDisponible
@@ -39,9 +39,12 @@ class SolicitudGeneracion:
     herramientas: list[str]
     cantidad: int = 12
     instrucciones: str = ""
+    perfil_dificultad: str | None = None
 
 
 def crear_trabajos(conn, solicitud: SolicitudGeneracion) -> list[UUID]:
+    if solicitud.perfil_dificultad is not None and solicitud.perfil_dificultad not in PERFILES:
+        raise ValueError("perfil de dificultad desconocido")
     if solicitud.ambito.tipo != "clase":
         raise ValueError("solo se admite el ámbito clase en el P1")
     if not solicitud.herramientas or any(h not in WORKERS for h in solicitud.herramientas):
@@ -59,6 +62,8 @@ def crear_trabajos(conn, solicitud: SolicitudGeneracion) -> list[UUID]:
         # El trabajo conserva una instantánea: subir otro sílabo no cambia un trabajo en curso.
         parametros = dict(cantidad=solicitud.cantidad, instrucciones=solicitud.instrucciones,
                           silabo=asignatura["silabo"], version_silabo=asignatura["version_silabo"])
+        if solicitud.perfil_dificultad is not None:
+            parametros["perfil_dificultad"] = solicitud.perfil_dificultad
         return [encolar(conn, asignatura_id=solicitud.asignatura_id, agente=asignatura["agente"],
                         ambito=solicitud.ambito, herramienta=h, parametros=parametros)
                 for h in solicitud.herramientas]
@@ -79,7 +84,7 @@ def procesar_uno(conn, cliente, perfiles, worker_id: str, lease_s: int) -> bool:
             trabajo_id=trabajo.id, asignatura_id=trabajo.asignatura_id,
             codigo_pf=ctx.codigo_pf, version_silabo=ctx.version_silabo,
             carrera=ctx.carrera, nivel=ctx.nivel, ambito=trabajo.ambito,
-            herramienta=trabajo.herramienta, perfil_dificultad=perfil_por_nivel(ctx.nivel),
+            herramienta=trabajo.herramienta, perfil_dificultad=trabajo.parametros.get("perfil_dificultad", perfil_por_nivel(ctx.nivel)),
             instrucciones=trabajo.parametros.get("instrucciones", ""),
         )
         Coordinador(perfiles[trabajo.agente], WORKERS, cliente).ejecutar(

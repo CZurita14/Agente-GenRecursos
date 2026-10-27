@@ -48,9 +48,18 @@ Decisión de transporte: `POST /silabos` usa cuerpo PDF binario, no multipart, p
 
 ## A4 · Generación y recursos
 
-- [ ] Conectar `crear_trabajos` y catálogo de workers disponibles. Lectores consultan, dueños y editores generan.
-- [ ] Listar trabajos/recursos filtrados por asignatura, actualizar recursos con historial de ediciones y control de concurrencia.
-- [ ] Probar que UUID de recurso o trabajo de otra asignatura nunca eluda A9.
+- [x] Conectar `crear_trabajos` y catálogo de workers disponibles. Lectores consultan, dueños y editores generan.
+- [x] Listar trabajos/recursos filtrados por asignatura, actualizar recursos con historial de ediciones y control de concurrencia.
+- [x] Probar que UUID de recurso o trabajo de otra asignatura nunca eluda A9.
+- [x] Respetar perfil de dificultad elegido, snapshot del trabajo y paginación acotada. No devolver parámetros privados ni errores internos del worker.
+- [x] PUT con contenido idéntico es una operación sin cambios: conserva estado, evidencia y revisión. Una modificación real incrementa revisión, conserva evidencia original con `evidencia_vigente=false` y queda `requiere_revision`.
+- [x] Historial operativo transaccional con autor, antes/después y `uso_mejora=false`. No se activa memoria ni entrenamiento de Fase 2.
+- [x] Validación estricta recursiva contra snapshot: rechazar IDs/RA/contenidos ajenos y campos extra. Preguntas de edición con máximo 1000 caracteres antes de la comparación por pares. Mantener advertencias deterministas sin inventar aprobación IA.
+- [x] JSON limitado a 1 MiB/30 s antes del parser, tras comprobar sesión/origen. La subida PDF mantiene sus límites independientes.
+
+Archivos: `app/api/recursos.py`, `cuerpo.py`, `app/recursos/servicio.py`, `validacion.py`, migración `006_recurso_edicion.sql`; extensión aditiva del perfil en `SolicitudGeneracion` y en el despacho del worker. Pruebas principales: `test_generacion_api.py`, `test_edicion_validacion.py`, `test_cuerpo_json.py`.
+
+El catálogo ofrece solo los dos workers disponibles (P1); ámbitos momento/asignatura devuelven catálogo vacío hasta P3. Las ediciones manuales no llaman al modelo, no aprueban exportación y no reescriben los veredictos originales. El chat de regeneración con nueva revisión IA sigue en P5.
 
 ## A5 · Límites y consumo
 
