@@ -27,7 +27,7 @@ P1 y P2 publicados en `origin/p1/nucleo` y `origin/p2/lector`. Las capturas del 
 
 | Documento | Contenido |
 |---|---|
-| [docs/especificacion-generador-recursos-uti-v1.2.md](docs/especificacion-generador-recursos-uti-v1.2.md) | Spec vigente |
+| [docs/especificacion-generador-recursos-uti-v1.3.md](docs/especificacion-generador-recursos-uti-v1.3.md) | Spec vigente (v1.3, 2026-10-27): tabla C1–C16 con H1–H8 y contratos de P1/P2/P4; la v1.2 queda como historia |
 | [docs/superpowers/plans/2026-10-26-analisis-y-hoja-de-ruta-fase1.md](docs/superpowers/plans/2026-10-26-analisis-y-hoja-de-ruta-fase1.md) | Análisis de pendientes, hallazgos H1–H8, hoja de ruta P1–P7 y agentes por bloque |
 | [docs/superpowers/plans/2026-10-26-p1-nucleo-multiagente.md](docs/superpowers/plans/2026-10-26-p1-nucleo-multiagente.md) | Plan detallado del P1: 15 tareas, olas, agentes y puertas |
 | [docs/superpowers/plans/2026-10-26-revision-planes-y-especializacion.md](docs/superpowers/plans/2026-10-26-revision-planes-y-especializacion.md) | Revisión de la lógica (R1–R9), especialización por facultad y carrera (niveles 0–3) y protocolo de alta de facultades |
@@ -147,7 +147,7 @@ P1 y P2 publicados en `origin/p1/nucleo` y `origin/p2/lector`. Las capturas del 
 | D2 | Consultar a TI sobre `--enable-lora` y GPU | Consulta pendiente; no incorpora LoRA al alcance inicial |
 | D3 | Usar ediciones docentes para mejorar el sistema | Mantener aviso, exclusión y autorización institucional antes de recolectarlas para ese fin |
 | D4 | Un coordinador por carrera valida el perfil de FING, empezando por Software y TI | Personas responsables por designar |
-| D5 | Emitir el spec v1.3 antes del P3 | Pendiente de elaboración |
+| D5 | Emitir el spec v1.3 antes del P3 | ✅ Emitido el 2026-10-27 |
 
 ---
 
@@ -243,7 +243,7 @@ P1 y P2 publicados en `origin/p1/nucleo` y `origin/p2/lector`. Las capturas del 
 
 ## Siguiente paso
 
-1. Emitir el spec v1.3 antes de P3 (D5 aprobada), consolidando decisiones H1–H8 y contratos realmente implementados en P1/P2/P4.
+1. ~~Emitir el spec v1.3~~ ✅ hecho (2026-10-27). Revisar con el usuario la tabla de cambios C1–C16.
 2. Detallar y ejecutar P3 empezando por herramientas deterministas y cálculo que no dependen de la plantilla. Mantener pendientes H3 (validación académica), H7 (calidad/pilotos) y H8 (plantilla).
 3. Resolver puertas institucionales B4/B9/B10 antes de activar P4; preparar despliegue P7 con HTTPS, proxy y mantenimiento supervisado. La calidad final y los formatos académicos siguen condicionados a la plantilla.
 4. Mantener los PR apilados: integrar #1 antes de #2 cuando se decida fusionarlos. Los PR ya están creados según las capturas; no repetir creación.
