@@ -3,7 +3,7 @@
 > **Para qué sirve:** es la memoria del proyecto. Al retomar, **se lee primero este archivo** y solo después, si hace falta, el documento puntual que enlaza.
 > No hace falta recorrer el repositorio completo.
 >
-> **Última actualización:** 2026-10-27 · **Fase:** 1 · **Bloque activo:** P1 en desarrollo y validación
+> **Última actualización:** 2026-10-27 · **Fase:** 1 · **Bloque activo:** P2 cerrado en la rama `p2/lector` (sin push); siguiente: P3 o P4
 
 ## Cómo se actualiza
 
@@ -21,7 +21,7 @@ Estados: `⬜ pendiente` · `🔄 en curso` · `🔁 devuelta (ronda n)` · `✅
 
 ## Estado en una línea
 
-P1 en ejecución: T1–T14 cerradas en commits (`c01f9c0`, `e384002`, `05af50f`); suite: 185 pruebas pasan y 1 prueba real omitida por defecto. T15 pasó con Qwen real (16 min, 24 llamadas, ninguna sobre 8 192 tokens). El cuestionario quedó `requiere_revision`: hay que analizar por qué el revisor devuelve los ítems. Revisión final del P1 hecha; push pendiente de autorización. Se retomaron revisores independientes en Codex. El P2 puede avanzar desde el contrato del sílabo. La última solicitud del usuario prioriza la propuesta institucional «Desarrollo de materiales para el aprendizaje».
+P1 cerrado y en GitHub (`p1/nucleo`). Con Qwen real, el cuestionario queda `listo` con 4/4 ítems tras corregir integridad y escenarios. P2 cerrado en `p2/lector` (local, sin push): el lector lee los 2 sílabos reales sin IA ni datos personales y el menú sale por semana; suite: 256 pruebas pasan y 1 real omitida. Falta unir el `main` de GitHub (solo README) con el local para abrir los PR.
 
 ## Documentos de referencia
 
@@ -67,7 +67,7 @@ P1 en ejecución: T1–T14 cerradas en commits (`c01f9c0`, `e384002`, `05af50f`)
 
 | Bloque | Estado | Plan detallado | Nota |
 |---|---|---|---|
-| P2 Lector y menú | ⬜ | Por escribir | Arranca al cerrar T3 |
+| P2 Lector y menú | ✅ | [plan](docs/superpowers/plans/2026-10-27-p2-lector-y-menu.md) | Rama `p2/lector`, `4f04747`…`7c26525`; sin push. Ruta de respaldo con IA (L7) pendiente de B7 |
 | P3 Herramientas | ⬜ | Por escribir | H8 bloqueada por la plantilla académica |
 | P4 API y acceso | ⬜ | Por escribir | Envío real de códigos bloqueado por SMTP |
 | P5 Chat de ajustes | ⬜ | Por escribir | |
@@ -78,11 +78,11 @@ P1 en ejecución: T1–T14 cerradas en commits (`c01f9c0`, `e384002`, `05af50f`)
 
 | # | Criterio (resumen) | Bloque | Estado |
 |---|---|---|---|
-| 1 | Los 2 sílabos se leen sin IA | P2 | ⬜ |
-| 2 | Menú por semana (6 y 4 semanas) | P2 | ⬜ |
+| 1 | Los 2 sílabos se leen sin IA | P2 | ✅ `test_criterio_1_datos`, `test_criterio_1_tic` (PDF locales) |
+| 2 | Menú por semana (6 y 4 semanas) | P2 | ✅ `test_criterio_2_reales` |
 | 3 | Enrutamiento por facultad | P1 | ✅ `test_enruta_al_crear` |
 | 4 | Ninguna llamada > 8 192 tokens | P1 | ✅ Simulado y real (T15: máx. ≈6 360) |
-| 5 | Sin datos personales en prompts | P1, P2 | 🔄 Parte P1: `test_sin_datos_personales`; falta el lector (P2) |
+| 5 | Sin datos personales en prompts | P1, P2 | ✅ `test_sin_datos_personales` + `test_criterio_5_sin_datos_personales` |
 | 6 | Cuestionario de 12 con tabla de especificaciones | P1, P3 | 🔄 Simulado: `test_camino_feliz`; calidad real con H8 (P3) |
 | 7 | Ítem ambiguo → "requiere revisión" | P1 | ✅ `test_item_ambiguo_requiere_revision` |
 | 8 | Herramienta que resuelve una tarea → devuelta | P1 | ✅ `test_devuelto_resuelve_entregable` |
@@ -140,6 +140,13 @@ P1 en ejecución: T1–T14 cerradas en commits (`c01f9c0`, `e384002`, `05af50f`)
 ## Bitácora (lo ya hecho)
 
 ### 2026-10-27
+- **P2 · Lector y menú** (rama `p2/lector`, ejecución en línea con revisión final por un subagente opus):
+  - Segmentación por posición en la página: se descartan las secciones I y VII, el índice y el pie «Generado por <usuario>», que también es un dato personal.
+  - Las sesiones que empiezan al pie de página no tienen borde inferior: se reconstruye esa fila abierta. Sin esto se perdían 2 de 11 sesiones en Datos y 3 de 6 en TIC.
+  - Con los PDF reales: Datos da 4 momentos y 11 sesiones, TIC 4 y 6. La cabecera, los momentos 2 y 3 y la rúbrica final de Datos son idénticos a la fixture transcrita a mano en el P1. El menú da 6 y 4 semanas.
+  - Revisión final: 0 críticos, 3 importantes (más 3 menores reclasificados como importantes por privacidad o pérdida silenciosa de datos), todos corregidos con TDD. Quedan 5 menores diferidos en el registro `.superpowers/sdd/2026-10-27-p2-lector-y-menu/`.
+  - Privacidad: dos sondeos de exploración imprimieron en la terminal del coordinador un nombre parcial y teléfonos de los docentes. Nada quedó en archivos ni commits. Las pruebas de no-fuga solo cuentan coincidencias.
+  - Revisión de seguridad automática: tope de 60 páginas, conteo con salida temprana y cierre del PDF en todo camino de error. Aislar el análisis en un subproceso queda para P4/P7.
 - Suite con PostgreSQL real: 183 → 185 pruebas pasan (1 omitida).
 - Revisión de T13 por el coordinador: se corrigieron dos costos de tiempo. Las rondas de revisión revisaban de nuevo los 12 ítems (≈33 s cada uno); ahora solo los devueltos. Al reanudar se repetía una revisión ya guardada; ahora se reutiliza el último `Veredicto`. 2 pruebas nuevas.
 - T14 revisada sin hallazgos que bloqueen (solo imports de `worker.py`).
@@ -208,5 +215,6 @@ P1 en ejecución: T1–T14 cerradas en commits (`c01f9c0`, `e384002`, `05af50f`)
 
 1. Entregar y revisar con el usuario la propuesta institucional en `docs/propuestas/`.
 2. Fase de calidad (en pausa hasta la plantilla): variar los tipos de enunciado (3 de 4 eran «¿Qué tipo de prueba…?») y que el código calcule los valores críticos.
-3. Push de `p1/nucleo` cuando el usuario lo autorice; arrancar el plan del P2.
+3. Unir el `main` de GitHub (solo README) con el local, hacer push de `p2/lector` y abrir los PR de P1 y P2, con autorización del usuario.
+5. Siguiente bloque: P3 (herramientas, H8 bloqueada por la plantilla) o P4 (API y acceso, que usa el lector: `POST /silabos` → `leer_silabo`, `SilaboIlegible` → 422, borrar el PDF tras leerlo).
 4. Preparar el spec v1.3 antes de P3 y adaptar formatos finales cuando llegue la plantilla académica.
