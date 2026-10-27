@@ -42,7 +42,7 @@
   - `autoevaluacion_final`: la misma forma, a partir de `rubrica_producto_final`, con `evidencia = problema.producto_final`.
   - `lista_evidencia`: `momento`, `titulo`, `evidencia`, `entregables` (los de las sesiones del momento), `items` (`indicador` y `referencia_resolutivo`) y `politica_ia`.
 
-- [ ] Pruebas, con la fixture (M2 y M3 de Datos):
+- [x] Pruebas, con la fixture (M2 y M3 de Datos):
   - `test_hoja_ruta_con_la_fixture`: semanas `[2, 3, 4]` y momentos `[2, 3]`.
   - `test_autoevaluacion_rubrica_m2`: los indicadores son los de la rúbrica de M2; `para_subir["receptivo"]` es el descriptor `resolutivo` y `para_subir["cocreativo"]` es `None`.
   - `test_autoevaluacion_final`: los indicadores son los de la rúbrica final.
@@ -50,7 +50,7 @@
   - `test_textos_salen_del_silabo`: todo descriptor e indicador del contenido aparece literal en el sílabo.
   - `test_sin_rubrica_final_da_error`.
   - `test_ambito_inexistente`: `M9` y `asignatura` en una herramienta de momento dan `ValueError`.
-- [ ] RED, implementación y GREEN; commit `feat(herramientas): generadores sin IA del sílabo (P3a)`.
+- [x] RED, implementación y GREEN; commit `feat(herramientas): generadores sin IA del sílabo (P3a)`.
 
 ### Task 2: Integración en la API
 
@@ -64,7 +64,7 @@
 - `obtener`: para herramientas sin IA, `silabo_actualizado` resulta de comparar `generar_sin_ia` con la instantánea y con el sílabo actual.
 - `editar`: las herramientas sin IA responden `422`.
 
-- [ ] Pruebas HTTP:
+- [x] Pruebas HTTP:
   - `test_genera_hoja_ruta_al_instante`: `202`, trabajo `listo` en `/trabajos` y recurso legible.
   - `test_catalogo_por_ambito`.
   - `test_ambito_incorrecto_no_crea_nada`.
@@ -73,7 +73,7 @@
   - `test_silabo_actualizado_en_recurso_sin_ia`.
   - `test_lector_no_genera_sin_ia`.
   - `test_aislamiento`: el recurso de otra asignatura da `404`.
-- [ ] RED, implementación y GREEN con la suite completa; commit `feat(recursos): herramientas sin IA generadas al instante`.
+- [x] RED, implementación y GREEN con la suite completa; commit `feat(recursos): herramientas sin IA generadas al instante`.
 
 ### Cierre
 

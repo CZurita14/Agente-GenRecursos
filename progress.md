@@ -68,7 +68,7 @@ P1 y P2 publicados en `origin/p1/nucleo` y `origin/p2/lector`. Las capturas del 
 | Bloque | Estado | Plan detallado | Nota |
 |---|---|---|---|
 | P2 Lector y menú | ✅ | [plan](docs/superpowers/plans/2026-10-27-p2-lector-y-menu.md) | Rama `p2/lector`, publicada; PR #2 sobre P1 según capturas. Ruta de respaldo con IA (L7) pendiente de B7 |
-| P3 Herramientas | ⬜ | Por escribir | H8 bloqueada por la plantilla académica |
+| P3 Herramientas | 🔄 | [P3a](docs/superpowers/plans/2026-10-27-p3a-herramientas-sin-ia.md) | **P3a ✅** (rama `p3/sin-ia`, `a90ab9b`, `0f9d82b`): hoja de ruta, autoevaluación con la rúbrica (momento y final) y lista de verificación de la evidencia, sin IA. P3b (herramientas con IA de momento/asignatura, H7) por planificar; formato final bloqueado por B3 |
 | P4 API y acceso | ✅ | [plan](docs/superpowers/plans/2026-10-27-p4-api-y-acceso.md) | A1–A5 implementadas; activación institucional pendiente B4/B9/B10 y P7 |
 | P5 Chat de ajustes | ⬜ | Por escribir | |
 | P6 Entrega y frontend | ⬜ | Por escribir | |
@@ -154,6 +154,7 @@ P1 y P2 publicados en `origin/p1/nucleo` y `origin/p2/lector`. Las capturas del 
 ## Bitácora (lo ya hecho)
 
 ### 2026-10-27
+- **P3a · Herramientas sin IA** (rama `p3/sin-ia` desde `codex/p4-api-acceso`): generadores puros en `app/herramientas/sin_ia.py` (texto del sílabo + instrucciones fijas) e integración en `ServicioRecursos`: `POST /generar` con ámbito `momento` (`M<n>`) o `asignatura` crea al instante un trabajo `listo` con la instantánea y su recurso, sin cola ni modelo. Catálogo por ámbito; `422` si la herramienta no corresponde al ámbito o falta la rúbrica; no se editan (`422`); `silabo_actualizado` regenera con la instantánea y con el sílabo actual. Con los PDF reales: Datos 6 semanas/4 indicadores finales, TIC 4/5. Suite: 543 pasan/1 omitida. Decisión provisional hasta B3: la lista de verificación usa el descriptor «resolutivo» como referencia del mínimo esperado.
 - **Continuación en Codex tras Claude:** contrastadas capturas con ramas; P1/P2 ya tienen upstream y `main` local incluye el merge `9eba803`. Las notas anteriores de «sin push» y «crear PR» quedaron obsoletas. PR #1/#2 abiertos según capturas; estado remoto en vivo no consultado.
 - **P4 A1:** rama `codex/p4-api-acceso` desde P2. Fábrica FastAPI con lifespan, `/salud` contra `/v1/models`, modelo y ventana 8192, CORS/Origin exacto, rutas privadas cerradas hasta A2 y errores sin datos recibidos. 19 pruebas HTTP nuevas pasan; no se repitió humo GPU.
 - **Validación A1:** suite completa 275 pasan y 1 omitida (58 s); `/salud` real HTTP 200 con agentes `general` e `ingenierias`. Revisión estática independiente sin hallazgos accionables. Autenticación y rutas de negocio aún no implementadas.
@@ -244,7 +245,7 @@ P1 y P2 publicados en `origin/p1/nucleo` y `origin/p2/lector`. Las capturas del 
 ## Siguiente paso
 
 1. ~~Emitir el spec v1.3~~ ✅ hecho (2026-10-27). Revisar con el usuario la tabla de cambios C1–C16.
-2. Detallar y ejecutar P3 empezando por herramientas deterministas y cálculo que no dependen de la plantilla. Mantener pendientes H3 (validación académica), H7 (calidad/pilotos) y H8 (plantilla).
+2. P3a ✅ (sin IA). Siguiente: P3b con herramientas con IA de momento/asignatura y «el código calcula» para valores numéricos; validar con el área académica si «resolutivo» es la referencia correcta del mínimo en la lista de verificación. Mantener pendientes H7 (techo del RA) y H8 (plantilla).
 3. Resolver puertas institucionales B4/B9/B10 antes de activar P4; preparar despliegue P7 con HTTPS, proxy y mantenimiento supervisado. La calidad final y los formatos académicos siguen condicionados a la plantilla.
 4. Mantener los PR apilados: integrar #1 antes de #2 cuando se decida fusionarlos. Los PR ya están creados según las capturas; no repetir creación.
 5. La propuesta institucional en `docs/propuestas/` permanece disponible para revisión del usuario; no se ha versionado ni modificado en esta continuación.
