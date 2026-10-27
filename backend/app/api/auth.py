@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Request, Response
 from pydantic import BaseModel, Field
 
-from app.auth.servicio import AuthError
+from app.auth.servicio import AuthError, normalizar_correo
 
 router = APIRouter(prefix="/auth")
 
@@ -23,13 +23,20 @@ def servicio(request):
 
 @router.post("/codigo")
 def pedir(datos: PedidoCodigo, request: Request):
+    correo = normalizar_correo(datos.correo)
+    if request.app.state.control is not None:
+        request.app.state.control.correo_publico(correo, "codigo")
     servicio(request).pedir(datos.correo)
     return {"mensaje": "Se ha solicitado un código de acceso"}
 
 
 @router.post("/verificar")
 def verificar(datos: VerificarCodigo, request: Request, response: Response):
+    correo = normalizar_correo(datos.correo)
+    if request.app.state.control is not None:
+        request.app.state.control.correo_publico(correo, "verificar")
     token = servicio(request).verificar(datos.correo, datos.codigo)
+    request.state.usuario = correo
     response.set_cookie("sesion", token, max_age=7 * 24 * 3600,
                         httponly=True, secure=True, samesite="lax", path="/")
     return {"mensaje": "Sesión iniciada"}
@@ -37,7 +44,8 @@ def verificar(datos: VerificarCodigo, request: Request, response: Response):
 
 @router.get("/yo")
 def yo(request: Request):
-    return {"correo": request.state.usuario, "rol": "docente"}
+    rol = "administrador" if request.state.usuario in request.app.state.config.administradores else "docente"
+    return {"correo": request.state.usuario, "rol": rol}
 
 
 @router.post("/salir")

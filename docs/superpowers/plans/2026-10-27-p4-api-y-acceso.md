@@ -17,7 +17,7 @@ Archivos: `backend/app/api/aplicacion.py`, `errores.py`, `backend/tests/test_api
 - [x] Pruebas con transporte simulado, sin gastar GPU.
 
 Comando desde `backend`: `../.venv/Scripts/python.exe -m pytest tests/test_api.py -q`.
-Arranque desde `backend`: `../.venv/Scripts/python.exe -m uvicorn app.api.aplicacion:crear_app --factory --host 127.0.0.1 --port 8001`.
+Arranque desde `backend`: `../.venv/Scripts/python.exe -m app.servidor`. La entrada desactiva cabeceras proxy de Uvicorn y su access log crudo; la aplicación controla identidad y registro.
 
 ## A2 · Autenticación persistente
 
@@ -63,9 +63,15 @@ El catálogo ofrece solo los dos workers disponibles (P1); ámbitos momento/asig
 
 ## A5 · Límites y consumo
 
-- [ ] Límites persistentes por correo/IP, sin confiar en cabeceras proxy salvo proxy configurado.
-- [ ] Registro de accesos sin textos de sílabos, prompts ni cuerpos. Consumo agregado solo para administradores configurados.
-- [ ] Preparar aviso de privacidad para revisión institucional; no activar recolección para entrenamiento por defecto.
+- [x] Límites persistentes por correo/IP, sin confiar en cabeceras proxy salvo proxy configurado.
+- [x] Registro de accesos sin textos de sílabos, prompts ni cuerpos. Consumo agregado solo para administradores configurados.
+- [x] Preparar aviso de privacidad para revisión institucional; no activar recolección para entrenamiento por defecto.
+- [x] Cuotas atómicas saturadas por ventanas UTC con reloj PostgreSQL, HMAC y Retry-After. Comprobar concurrencia real y persistencia entre instancias.
+- [x] Uvicorn sin reinterpretación previa de XFF ni access log crudo; validar proxies explícitos. Rechazar cadenas inválidas con bucket separado, sin agotar la cuota del proxy legítimo.
+- [x] Auditoría con operación abstracta, estado, duración e identidades seudonimizadas. Sin URL/query/cuerpos; muestrear 429 a uno por IP/minuto. Fallo de registro no revierte una operación confirmada.
+- [x] Mantenimiento explícito de cuotas, accesos y autenticación vencidos; conserva material académico. Programación/supervisión en despliegue P7.
+
+Archivos: migración `007_control_acceso.sql`, `app/control/`, `app/api/admin.py`, `privacidad.py`, `app/servidor.py`, `docs/privacidad-borrador.md`. Listas de administradores vacías por defecto y aviso marcado como borrador, con aprobación institucional pendiente.
 
 ## Puertas y cierre
 

@@ -5,11 +5,16 @@ from fastapi.responses import JSONResponse
 import psycopg
 
 from app.auth.servicio import AuthError
+from app.control.limites import LimiteExcedido
 from app.llm.cliente import ServidorNoDisponible
 from app.silabo.lector.errores import SilaboIlegible
 
 
 def registrar_errores(app: FastAPI) -> None:
+    @app.exception_handler(LimiteExcedido)
+    async def cuota(request: Request, exc: LimiteExcedido):
+        return JSONResponse({"detail": "Demasiadas solicitudes"}, status_code=429,
+                            headers={"Retry-After": str(exc.reintentar)})
     @app.exception_handler(AuthError)
     async def auth(request: Request, exc: AuthError):
         headers = {"Retry-After": str(exc.reintentar)} if exc.reintentar else {}

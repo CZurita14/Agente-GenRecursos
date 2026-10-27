@@ -26,7 +26,7 @@ def entorno(nueva_conexion, silabo, conn, monkeypatch):
     enviados, clientes = {}, {}
     auth = ServicioAuth(nueva_conexion, "s" * 48, lambda c, k: enviados.update({c: k}))
     config = Ajustes(_env_file=None, database_url="no-usar", llm_base_url="http://no-usar/v1",
-                     llm_model="m", api_origen=ORIGEN)
+                     llm_model="m", api_origen=ORIGEN, auth_secreto="s" * 48)
     app = crear_app(config, auth=auth, conexion=nueva_conexion, lector_pdf=lambda *_, **__: silabo)
     monkeypatch.setitem(WORKERS, "cuestionario", WorkerPrueba())
     monkeypatch.setitem(WORKERS, "ficha_clase", WorkerPrueba("ficha_clase"))

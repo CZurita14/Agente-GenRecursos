@@ -135,9 +135,9 @@ def test_http_no_revela_rechazo_smtp(monkeypatch, nueva_conexion):
 
     monkeypatch.setattr("app.auth.correo.smtplib.SMTP", Servidor)
     c = config(smtp_modo="smtp", smtp_host="smtp.example",
-               smtp_remitente="materiales@uti.edu.ec", api_origen="https://materiales.example")
+               smtp_remitente="materiales@uti.edu.ec", api_origen="https://materiales.example", auth_secreto="s" * 48)
     servicio = ServicioAuth(nueva_conexion, "s" * 48, transporte_correo(c))
-    with TestClient(crear_app(c, auth=servicio)) as web:
+    with TestClient(crear_app(c, auth=servicio, conexion=nueva_conexion)) as web:
         respuestas = [web.post("/auth/codigo", json={"correo": correo},
                               headers={"Origin": c.api_origen})
                       for correo in ["existente@uti.edu.ec", "inexistente@uti.edu.ec"]]

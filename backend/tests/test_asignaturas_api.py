@@ -26,7 +26,7 @@ def entorno(nueva_conexion, silabo):
         return silabo
 
     config = Ajustes(_env_file=None, database_url="no-usar", llm_base_url="http://no-usar/v1",
-                     llm_model="m", api_origen=ORIGEN, pdf_max_bytes=128)
+                     llm_model="m", api_origen=ORIGEN, pdf_max_bytes=128, auth_secreto="s" * 48)
     app = crear_app(config, auth=auth, conexion=nueva_conexion, lector_pdf=lector)
 
     def cliente(correo):

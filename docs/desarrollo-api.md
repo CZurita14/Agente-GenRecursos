@@ -4,7 +4,7 @@ Desde `backend`, con el PostgreSQL configurado en `.env`:
 
 ```powershell
 ../.venv/Scripts/python.exe -c "from app.db.conexion import conectar; from app.db.migrar import aplicar_migraciones; c=conectar(); c.autocommit=True; print(aplicar_migraciones(c)); c.close()"
-../.venv/Scripts/python.exe -m uvicorn app.api.aplicacion:crear_app --factory --host 127.0.0.1 --port 8001
+../.venv/Scripts/python.exe -m app.servidor
 ```
 
 La API no aplica migraciones al iniciar. `004_auth.sql` crea retos y sesiones; el aplicador es idempotente. Las pruebas usan un esquema temporal por prueba, sin modificar las tablas de la aplicación.
@@ -21,7 +21,7 @@ Para SMTP definir `SMTP_HOST`, `SMTP_PORT`, `SMTP_REMITENTE`, `SMTP_USUARIO` y `
 
 - `POST /auth/codigo`, JSON `{"correo":"docente@uti.edu.ec"}`: respuesta uniforme para buzones aceptados o rechazados por SMTP. Solo admite exactamente `uti.edu.ec` e `indoamerica.edu.ec`. Intervalo mínimo de reenvío: 60 segundos.
 - `POST /auth/verificar`, JSON con `correo` y `codigo`: código de seis dígitos, 10 minutos, un solo uso. Quinto fallo: 429 y bloqueo de 15 minutos; pedir otro código no borra los intentos ni el bloqueo. Un código expirado no abre sesión.
-- `GET /auth/yo`: correo del usuario autenticado y rol `docente`. Los permisos sobre asignaturas y el rol administrativo se incorporan en A3/A5.
+- `GET /auth/yo`: correo del usuario autenticado y rol `docente` o `administrador`, según la lista explícita de configuración; no es un rol que pueda elegir el cliente.
 - `POST /auth/salir`: elimina la sesión en PostgreSQL y la cookie en el cliente.
 
 Las escrituras exigen `Origin` exactamente igual a `API_ORIGEN`, incluso antes de abrir sesión. Las cookies siempre son `Secure`, `HttpOnly`, `SameSite=Lax`, sin atributo Domain. Para probar el flujo en navegador se necesita servir API y frontend por HTTPS; habilitar HTTP para el origen en desarrollo no desactiva Secure. TestClient usa una URL HTTPS y no necesita certificados.
@@ -92,4 +92,50 @@ El cuerpo JSON tiene máximo 1 MiB y recepción de 30 s, antes de su decodificac
 ../.venv/Scripts/python.exe -m pytest tests/test_generacion_api.py tests/test_edicion_validacion.py tests/test_cuerpo_json.py -q
 ```
 
-P4 todavía necesita A5 (límites por IP, consumo y privacidad). No publicar la API como servicio de producción antes de completar esos controles y el despliegue P7.
+## Cuotas, acceso administrativo y privacidad (A5)
+
+Aplicar también `007_control_acceso.sql`. `AUTH_SECRETO` habilita tanto autenticación como control; no se admite inyectar una autoridad de autenticación sin configurar la clave del control. Sin esa clave solo quedan operativas las rutas públicas y el ingreso responde 503.
+
+Las cuotas persisten en PostgreSQL y se suman entre instancias y sesiones. Usan ventanas fijas UTC y reloj de PostgreSQL, no del host API. Al exceder una se devuelve 429 con Retry-After; se cuentan intentos, no únicamente operaciones exitosas. Reiniciar con la misma clave no reinicia los contadores. Rotar la clave cambia los seudónimos y requiere una decisión operativa, no un reinicio rutinario.
+
+| Configuración | Predeterminado | Unidad |
+|---|---:|---|
+| `LIMITE_IP_MINUTO` | 600 | solicitudes por IP/minuto |
+| `LIMITE_USUARIO_MINUTO` | 120 | solicitudes por correo autenticado/minuto |
+| `LIMITE_CODIGO_IP_HORA` | 120 | solicitudes de código por IP/hora |
+| `LIMITE_CODIGO_CORREO_HORA` | 6 | solicitudes de código por correo/hora |
+| `LIMITE_VERIFICAR_IP_MINUTO` | 60 | verificaciones por IP/minuto |
+| `LIMITE_VERIFICAR_CORREO_MINUTO` | 20 | verificaciones por correo/minuto |
+| `LIMITE_GENERAR_CORREO_HORA` | 30 | peticiones de generación por correo/hora, antes de encolar |
+| `LIMITE_PDF_CORREO_HORA` | 10 | subidas por correo/hora, antes de leer el PDF |
+| `LIMITE_EDITAR_CORREO_MINUTO` | 30 | guardados de recurso por correo/minuto |
+
+Son valores técnicos iniciales para ajustar al piloto, la IP compartida institucional y la capacidad que confirme TI. No sustituyen los cinco intentos/15 minutos de A2 ni los límites de recepción de A3/A4.
+
+Cerrar sesión no consume la cuota general del usuario: agotarla no debe impedir que el titular revoque una sesión utilizada por terceros. Sigue exigiendo sesión y origen válidos, y conserva el límite general de IP.
+
+`ADMINISTRADORES` y `PROXIES_CONFIABLES` usan listas JSON en el entorno. Ambas están vacías por defecto. Por ejemplo, el formato de administradores es `["correo-institucional-designado@uti.edu.ec"]`; sustituirlo por los correos que autorice la institución. La membresía se comprueba en el servidor a partir de la sesión verificada. No confiar en cabeceras de rol. Un administrador no obtiene por ese rol permisos sobre asignaturas ajenas.
+
+`GET /admin/consumo?desde=2026-10-01&hasta=2026-10-07` exige administrador; devuelve llamadas, tokens, segundos y fallos por rol y total. Rango inclusivo UTC de máximo 31 días, predeterminado siete; no devuelve prompts, correos ni IDs de asignatura/recurso.
+
+El arranque recomendado `python -m app.servidor` desactiva `proxy_headers` y `access_log` de Uvicorn. Si TI usa su CLI directamente, debe conservar `--no-proxy-headers --no-access-log`. La aplicación también deshabilita `uvicorn.access` al iniciar. Configurar por separado los registros del proxy para no guardar URLs con destinatarios o parámetros privados.
+
+La IP procede del transporte. X-Forwarded-For solo se procesa si el salto directo pertenece a `PROXIES_CONFIABLES`, definido con IP/CIDR concretos de los proxies; no se permite confiar en todo Internet. Se recorre desde la derecha hasta el primer cliente no confiable y no se usa su prefijo aportado por terceros. Una cadena inválida se rechaza con 400 y un bucket separado, sin consumir la cuota de la IP del proxy; repeticiones pueden recibir 429. El proxy de entrada debe sanear o reconstruir esa cabecera.
+
+`acceso_api` guarda solo operación abstracta, método, estado, milisegundos e identificadores HMAC de IP/actor. No guarda cuerpo, query, ruta dinámica, cookie, IP ni correo en claro. Los rechazos 429 se muestrean como máximo uno por IP y ventana de minuto; no es un contador completo de todos los rechazos. Un fallo de bitácora emite solo el tipo de excepción y no convierte una operación ya confirmada en un error reintentable. Si falla el control previo de cuotas/BD, la operación responde 503.
+
+La retención técnica de accesos es de 30 días (`AUDITORIA_RETENCION_DIAS`), propuesta configurable pendiente de revisión institucional. Este comando elimina accesos antiguos, cuotas vencidas, sesiones inválidas y retos caducados; no elimina asignaturas, recursos ni historial de ediciones:
+
+```powershell
+../.venv/Scripts/python.exe -m app.control.mantenimiento
+```
+
+No se ejecuta automáticamente al iniciar. TI debe programarlo y supervisarlo en P7; sin ejecutarlo no se garantiza el borrado físico al vencer la retención. La caducidad de códigos y sesiones sigue aplicándose al acceso aunque todavía no se hayan purgado sus filas.
+
+`GET /privacidad`, con sesión, devuelve únicamente una vista del [borrador técnico](privacidad-borrador.md), con `estado=borrador`. La institución debe completar responsable, base aplicable, canales y conservación del material académico antes de aprobarlo. P6 deberá presentar el texto institucional aprobado antes del ingreso; esta ruta no representa aceptación ni amplía las rutas API públicas.
+
+```powershell
+../.venv/Scripts/python.exe -m pytest tests/test_control_api.py tests/test_control_identidad.py tests/test_limites.py tests/test_mantenimiento_control.py -q
+```
+
+P4 queda implementado; siguen pendientes SMTP real, administradores institucionales, aprobación del aviso, y despliegue P7 con HTTPS, proxy y mantenimiento. Las migraciones de desarrollo se prueban en esquemas temporales: aplicar explícitamente a la BD de aplicación al preparar el entorno.

@@ -264,8 +264,8 @@ def contencion_real(servicio, conn, nueva_conexion, accion, cantidad):
 def web(auth):
     servicio, _, _ = auth
     config = Ajustes(_env_file=None, database_url="no-usar", llm_base_url="http://no-usar/v1",
-                     llm_model="m", api_origen="https://materiales.example")
-    with TestClient(crear_app(config, auth=servicio), base_url="https://materiales.example") as c:
+                     llm_model="m", api_origen="https://materiales.example", auth_secreto="s" * 48)
+    with TestClient(crear_app(config, auth=servicio, conexion=servicio.conexion), base_url="https://materiales.example") as c:
         yield c
 
 
