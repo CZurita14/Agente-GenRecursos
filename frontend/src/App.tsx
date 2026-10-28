@@ -70,8 +70,12 @@ export default function App() {
       onVolver={() => aMenu(ruta.curso)}
       onAbrir={rid => setRuta({ vista: 'recurso', curso: ruta.curso, rid, volver: ruta })} />}
     {ruta.vista === 'recursos' && <Recursos aidInicial={ruta.aid} onSesionVencida={expirar}
+      onTrabajos={(aid, ids, rol) => setRuta({ vista: 'progreso', curso: { aid, rol, nombre: 'Asignatura' },
+        creados: ids.map(id => ({ id, herramienta: 'recurso', estado: 'en_cola' })) })}
       onAbrir={(aid, rid, rol) => setRuta({ vista: 'recurso', curso: { aid, rol }, rid, volver: { vista: 'recursos', aid } })} />}
-    {ruta.vista === 'recurso' && <Recurso aid={ruta.curso.aid} rid={ruta.rid} puedeValidar={ruta.curso.rol !== 'lector'}
+    {ruta.vista === 'recurso' && <Recurso key={`${ruta.curso.aid}:${ruta.rid}`} aid={ruta.curso.aid} rid={ruta.rid} puedeValidar={ruta.curso.rol !== 'lector'}
+      onTrabajos={ids => setRuta({ vista: 'progreso', curso: { ...ruta.curso, nombre: ruta.curso.nombre ?? 'Asignatura' },
+        creados: ids.map(id => ({ id, herramienta: 'recurso', estado: 'en_cola' })) })}
       onSesionVencida={expirar} onVolver={() => setRuta(ruta.volver)} />}
   </AppLayout>;
 }

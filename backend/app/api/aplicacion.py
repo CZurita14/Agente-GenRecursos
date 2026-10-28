@@ -17,6 +17,7 @@ from app.api.admin import router as admin_router
 from app.api.auth import router as auth_router
 from app.api.cuerpo import LimiteJSON
 from app.api.recursos import router as recursos_router
+from app.api.chat import router as chat_router
 from app.api.privacidad import router as privacidad_router
 from app.api.errores import registrar_errores
 from app.auth.correo import transporte_correo
@@ -74,6 +75,7 @@ def crear_app(config: Ajustes | None = None, *, transporte=None, auth=None, cone
     app.include_router(auth_router)
     app.include_router(asignaturas_router)
     app.include_router(recursos_router)
+    app.include_router(chat_router)
     app.include_router(admin_router)
     app.include_router(privacidad_router)
     # La incorporación previa al middleware de acceso lo deja por dentro:

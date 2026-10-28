@@ -71,6 +71,7 @@ async function abrir({ sesion = true, viewport, rutas = {} } = {}) {
     estado.llamadas.push({ ruta, metodo: route.request().method(), tipo: route.request().headers()['content-type'] });
     if (rutas[ruta]) return rutas[ruta](route, estado);
     const json = (status, body) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+    if (ruta === '/asignaturas/a1/chat') return json(200, { pedidos: [], siguiente: null });
     if (ruta === '/auth/yo') return estado.sesion ? json(200, USUARIO) : json(401, { detail: 'Sesión requerida' });
     if (ruta === '/auth/codigo') return json(200, { mensaje: 'ok' });
     if (ruta === '/auth/verificar') { estado.sesion = true; return json(200, { mensaje: 'Sesión iniciada' }); }
@@ -350,5 +351,59 @@ test('las herramientas sin IA no se editan', async () => {
   await revisar(page, 'Hoja de ruta de la asignatura');
   await page.getByRole('heading', { name: 'Producto final' }).waitFor();
   assert.equal(await page.getByRole('button', { name: 'Editar' }).count(), 0);
+  await context.close();
+});
+
+test('chat genera trabajos y permite seguir su avance y abrir el recurso', async () => {
+  const { context, page } = await abrir({ rutas: {
+    '/asignaturas/a1/chat': route => route.fulfill({ json: route.request().method() === 'POST'
+      ? { id: 'p1', orden: 1, mensaje: 'Genera un cuestionario', estado: 'completado', respuesta: 'Se creó el trabajo.', recurso_id: null, revision_resultado: null, trabajos: ['t1'], creado: '2026-10-28T12:00:00Z' }
+      : { pedidos: [], siguiente: null } }),
+  } });
+  await page.getByRole('navigation', { name: 'Navegación principal' }).getByRole('button', { name: 'Mis recursos', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Mensaje de ajuste' }).fill('Genera un cuestionario');
+  await page.getByRole('button', { name: 'Enviar ajuste', exact: true }).click();
+  await page.getByRole('button', { name: 'Ver avance de generación', exact: true }).click();
+  await page.getByRole('heading', { name: 'Generando herramientas' }).waitFor();
+  await page.getByRole('button', { name: 'Revisar', exact: true }).click();
+  await page.getByText('¿Qué prueba corresponde?').waitFor();
+  await context.close();
+});
+
+test('recarga de chat tardía no cambia la revisión base del borrador manual', async () => {
+  let soltar;
+  const espera = new Promise(resolve => { soltar = resolve; });
+  let avisoRecarga;
+  const recarga = new Promise(resolve => { avisoRecarga = resolve; });
+  let ajustado = false;
+  let guardado;
+  const { context, page } = await abrir({ rutas: {
+    '/asignaturas/a1/recursos/r1': async route => {
+      if (route.request().method() === 'PUT') {
+        guardado = route.request().postDataJSON();
+        return route.fulfill({ status: 409, json: { detail: 'El recurso cambió' } });
+      }
+      if (ajustado) { avisoRecarga(); await espera; }
+      return route.fulfill({ json: { ...RECURSO(false), revision: ajustado ? 1 : 0 } });
+    },
+    '/asignaturas/a1/chat': route => {
+      if (route.request().method() === 'POST') ajustado = true;
+      return route.fulfill({ json: route.request().method() === 'POST'
+        ? { id: 'p1', orden: 1, mensaje: 'Ajusta', estado: 'completado', respuesta: 'Aplicado', recurso_id: 'r1', revision_resultado: 1, trabajos: [], creado: '2026-10-28T12:00:00Z' }
+        : { pedidos: [], siguiente: null } });
+    },
+  } });
+  await revisar(page, 'Cuestionario');
+  await page.getByRole('textbox', { name: 'Mensaje de ajuste' }).fill('Ajusta la pregunta');
+  await page.getByRole('button', { name: 'Enviar ajuste', exact: true }).click();
+  await recarga;
+  await page.getByRole('button', { name: 'Editar', exact: true }).click();
+  soltar();
+  const campo = page.getByRole('textbox', { name: 'Pregunta 1: enunciado' });
+  await campo.fill('¿Qué procedimiento corresponde a la situación descrita?');
+  await page.getByRole('button', { name: 'Guardar cambios', exact: true }).click();
+  await page.getByText(/Tu borrador se conserva/).waitFor();
+  assert.equal(guardado.revision, 0);
+  assert.equal(await campo.inputValue(), '¿Qué procedimiento corresponde a la situación descrita?');
   await context.close();
 });

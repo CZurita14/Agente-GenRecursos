@@ -37,7 +37,7 @@ class ControlAcceso:
             # El límite general por IP y la comprobación de sesión siguen activos.
             return
         self.limites.consumir("usuario_minuto", correo)
-        if metodo == "POST" and operacion == "generar":
+        if metodo == "POST" and operacion in {"generar", "chat", "regenerar"}:
             self.limites.consumir("generar_correo_hora", correo)
         if metodo == "POST" and operacion == "silabos":
             self.limites.consumir("pdf_correo_hora", correo)

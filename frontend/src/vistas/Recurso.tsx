@@ -1,10 +1,11 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { CheckCircle2, Download, Pencil, ShieldCheck, Trash2 } from 'lucide-react';
 import { Alert, Badge, Button, Card, Modal } from '../components';
 import { ErrorApi, editar, recurso as cargarRecurso, urlExportar, validar } from '../api/cliente';
 import { leer, poner } from '../api/edicion';
 import type { Bloque, Recurso as TipoRecurso, Ruta } from '../api/tipos';
 import { SIN_IA, nombreAmbito, nombreHerramienta } from '../api/herramientas';
+import { ChatAjustes } from '../components/ChatAjustes';
 
 interface RecursoProps {
   aid: string;
@@ -12,6 +13,7 @@ interface RecursoProps {
   puedeValidar: boolean;
   onVolver: () => void;
   onSesionVencida: () => void;
+  onTrabajos?: (ids: string[]) => void;
 }
 
 interface Item { item_id: string; pregunta: string; contexto?: string; correcta: number; opciones: { texto: string; justificacion?: string }[] }
@@ -113,7 +115,7 @@ function EditorItem({ item, n, ed }: { item: Item; n: number; ed: Editor }) {
 }
 
 /** Pasos 4 y 5: revisar con las alertas, corregir, validar y descargar el HTML para Canvas. */
-export function Recurso({ aid, rid, puedeValidar, onVolver, onSesionVencida }: RecursoProps) {
+export function Recurso({ aid, rid, puedeValidar, onVolver, onSesionVencida, onTrabajos }: RecursoProps) {
   const [r, setR] = useState<TipoRecurso | null>(null);
   const [error, setError] = useState('');
   const [aviso, setAviso] = useState('');
@@ -121,13 +123,22 @@ export function Recurso({ aid, rid, puedeValidar, onVolver, onSesionVencida }: R
   const [validando, setValidando] = useState(false);
   const [borrador, setBorrador] = useState<unknown>(null);  // null: no se está editando.
   const [guardando, setGuardando] = useState(false);
+  const [revisionEdicion, setRevisionEdicion] = useState<number | null>(null);
+  const edicionActiva = useRef(false);
+  const carga = useRef(0);
+  const vigente = useRef(true);
 
   const manejar = (e: unknown) => {
     if (e instanceof ErrorApi && e.estado === 401) return onSesionVencida();
     setError(e instanceof ErrorApi ? e.message : 'No hay conexión con el servidor.');
   };
-  const recargar = () => cargarRecurso(aid, rid).then(setR).catch(manejar);
-  useEffect(() => { recargar(); }, [aid, rid]);
+  const recargar = () => {
+    const turno = ++carga.current;
+    return cargarRecurso(aid, rid).then(nuevo => {
+      if (vigente.current && turno === carga.current && !edicionActiva.current) setR(nuevo);
+    }).catch(e => { if (vigente.current && turno === carga.current) manejar(e); });
+  };
+  useEffect(() => { vigente.current = true; void recargar(); return () => { vigente.current = false; carga.current++; }; }, [aid, rid]);
 
   if (!r) return error ? <Alert tone="danger" role="alert">{error}</Alert> : <p className="text-muted" role="status">Cargando el recurso…</p>;
 
@@ -156,13 +167,15 @@ export function Recurso({ aid, rid, puedeValidar, onVolver, onSesionVencida }: R
     setGuardando(true);
     setError('');
     try {
-      const nuevo = await editar(aid, r.id, r.revision, borrador);
+      const nuevo = await editar(aid, r.id, revisionEdicion ?? r.revision, borrador);
       const cambio = nuevo.revision !== r.revision;
       setR(nuevo);
       setBorrador(null);
+      edicionActiva.current = false;
+      setRevisionEdicion(null);
       setAviso(cambio ? 'Cambios guardados. El recurso volvió a «Sin validar»: revísalo y valídalo de nuevo.' : 'No había cambios que guardar.');
     } catch (e) {
-      if (e instanceof ErrorApi && e.estado === 409) { setError(e.message); setBorrador(null); await recargar(); }
+      if (e instanceof ErrorApi && e.estado === 409) setError(`${e.message}. Tu borrador se conserva; cópialo antes de cancelar y cargar la versión actual.`);
       else if (e instanceof ErrorApi && e.estado === 422) setError(`${e.message}. Revisa que ningún campo quede vacío o demasiado corto.`);
       else manejar(e);
     } finally {
@@ -188,14 +201,16 @@ export function Recurso({ aid, rid, puedeValidar, onVolver, onSesionVencida }: R
     {error && <Alert tone="danger" role="alert">{error}</Alert>}
     {aviso && !error && <Alert tone="success" role="status">{aviso}</Alert>}
     {r.silabo_actualizado && <Alert tone="info">El sílabo cambió desde que se generó este recurso.</Alert>}
-    {!r.evidencia_vigente && <Alert tone="info">Las alertas son las comprobaciones de tu última edición; el revisor de IA no vuelve a revisar los cambios.</Alert>}
+    {!r.evidencia_vigente && <Alert tone="info">{r.revision_ia
+      ? 'El ajuste con IA volvió a verificar el contenido y revisó el alcance indicado en el pedido. Revisa las alertas antes de validar.'
+      : 'Las alertas son las comprobaciones de tu última edición; el revisor de IA no vuelve a revisar los cambios.'}</Alert>}
 
     <Card title="Paso 4 · Revisa el contenido">
       {editable && <div className="flex flex-wrap gap-2 mb-4">{editando ? <>
         <Button onClick={guardar} loading={guardando}>Guardar cambios</Button>
-        <Button variant="secondary" onClick={() => { setBorrador(null); setError(''); }} disabled={guardando}>Cancelar</Button>
+        <Button variant="secondary" onClick={() => { edicionActiva.current = false; setRevisionEdicion(null); setBorrador(null); setError(''); void recargar(); }} disabled={guardando}>Cancelar</Button>
       </> : <Button variant="secondary" icon={<Pencil aria-hidden="true" className="w-4 h-4" />}
-        onClick={() => { setBorrador(structuredClone(r.contenido)); setAviso(''); setError(''); }}>Editar</Button>}</div>}
+        onClick={() => { edicionActiva.current = true; setRevisionEdicion(r.revision); setBorrador(structuredClone(r.contenido)); setAviso(''); setError(''); }}>Editar</Button>}</div>}
       {items ? <ol className="space-y-4">{items.map((item, n) => <li key={item.item_id}
         className={`rounded-lg border p-4 ${avisos[item.item_id] ? 'border-warning bg-warning-soft' : 'border-line'}`}>
         <div className="flex items-center justify-between gap-2">
@@ -210,6 +225,9 @@ export function Recurso({ aid, rid, puedeValidar, onVolver, onSesionVencida }: R
         <div className="space-y-4">{r.presentacion.map((b, i) => <VistaBloque key={i} b={b} ed={editando ? ed : undefined} />)}</div>
       </>}
     </Card>
+
+    {editable && <ChatAjustes aid={aid} rid={r.id} revision={r.revision} deshabilitado={editando || guardando}
+      onActualizado={() => { void recargar(); }} onSesionVencida={onSesionVencida} onTrabajos={onTrabajos} />}
 
     <Card title="Paso 5 · Valida y descarga para Canvas" icon={<ShieldCheck aria-hidden="true" />}>
       {editando ? <p className="text-sm text-muted">Guarda o cancela la edición antes de validar.</p> : r.validado ? <div className="space-y-3">

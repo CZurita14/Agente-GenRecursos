@@ -1,6 +1,6 @@
 # P5 · Chat de ajustes — diseño para aprobación
 
-**Estado:** propuesta; no hay código P5 implementado.
+**Estado:** diseño aprobado por el usuario; implementación y cierre técnico completos en `codex/p5-chat`, publicación en curso. La aceptación con docentes piloto es independiente del cierre técnico.
 
 **Objetivo:** satisfacer el criterio 10: «Haz más difícil la pregunta 3» modifica solo esa pregunta, la verifica y revisa, conserva las demás y exige nueva validación docente.
 
@@ -90,6 +90,23 @@ Ejecutar pruebas nuevas, regresión backend sin IA real y `npm run check`/navega
 
 Actualizar `progress.md`, guardar commits y abrir PR dependiente de P6d. No fusionar ramas ni activar producción como parte de este bloque.
 
-## Decisión para aprobar
+## Registro de implementación
 
-Aprobar el diseño de chat privado asíncrono, regeneración selectiva con revisión optimista y panel en la revisión del recurso. El cierre académico con docentes piloto, la política institucional y H7 no se sustituyen por decisiones del modelo.
+- C1: `app/chat/acciones.py` e `interprete.py`: cuatro variantes estrictas, presupuesto medido, sanitización e historial acotado. El servidor real no admite `uniqueItems`: duplicados se rechazan en código. El esquema limita IDs/rutas a la selección; números explícitos se resuelven contra esa revisión. Referencias contextuales, rangos o exclusiones ambiguas piden aclaración.
+- C2: `app/chat/ajustes.py` y `ejecutor.py`: regeneración selectiva, verificador y revisor, presupuesto y cerco de lease alrededor de cada llamada. La publicación comprueba otra vez permiso/revisión y guarda trazabilidad `revision_ia`; no altera RA, foco, contenido ni nivel académico del ítem. H7 se conserva: subir complejidad dentro del nivel no cambia la taxonomía.
+- C3: migración `007_chat.sql`, `ServicioChat` y rutas HTTP: cola con `tipo='chat'`, historial por usuario/asignatura, UUID idempotente, máximo tres pendientes y 30 pedidos/hora (además de las cuotas existentes). Las llamadas al modelo se hacen sin transacción abierta. El listado compartido de trabajos excluye chat; consulta por IDs para seguimiento de generaciones antiguas.
+- C4: panel en revisión y Mis recursos, paginación, reintento seguro y consulta de estado. Rechazos definitivos permiten corregir el mensaje; respuestas inciertas conservan UUID/cuerpo. El borrador manual conserva su revisión de partida y no se pierde ante conflicto ni recarga tardía. Generaciones enlazan a la vista existente de progreso.
+- Privacidad: mensajes/modelo y esquemas se comprueban antes del transporte; las copias de prompts se sanitizan sin alterar el contenido almacenado. Si los enums académicos contienen correos, se rechaza el ajuste en vez de alterar silenciosamente identificadores. El borrador de privacidad describe el historial privado; no se inventa un plazo de retención.
+- Revisión independiente: corregidos filtrado de correos en worker/revisor/esquemas, generación sin IA en momentos restringidos, selección de referencias numéricas, carreras de interfaz y seguimiento de trabajos antiguos.
+
+### Verificación
+
+Humo del intérprete con **Qwen real: 1 prueba pasa**, con dos pedidos sintéticos (solo pregunta 3 y cambio de calificaciones fuera de alcance). Fue necesario acotar el esquema después de observar confusión entre textos e IDs y selección ampliada por el modelo. No se presenta este humo como aceptación académica de todos los ajustes.
+
+Pruebas de navegador: 28 pasan; unitarias frontend: 25 pasan; typecheck/build pasan. Suite backend completa final: **783 pasan, 4 deseleccionadas** (`pytest -q -m "not servidor"`). Pruebas simuladas incluyen worker y revisor reales del código, conflictos durante IA, permiso revocado, recuperación de lease sin duplicación, no mutación de ítems ajenos, privacidad y cuota.
+
+### Puertas humanas y operación
+
+La matriz de [piloto](../../pruebas/p5-piloto.md) contiene 15 pedidos para validación por docentes. No se ha ejecutado ni se declara aprobada. Siguen pendientes H7, plantilla académica y puertas institucionales previas a producción.
+
+Antes de activar esta versión deben detenerse workers anteriores, aplicarse `007_chat.sql` y reiniciarse API/workers/frontend con el mismo código. El worker aplica migraciones al arrancar; no permitir que un worker antiguo consuma el nuevo tipo de trabajo. Esta continuación no migra ni despliega la base operativa ni fusiona PR.

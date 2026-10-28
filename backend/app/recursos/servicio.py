@@ -20,7 +20,8 @@ from app.silabo.modelo import SilaboUTI
 
 
 def _recurso(conn, aid, rid, *, editar=False):
-    fila = conn.execute("select r.*,t.parametros snapshot from recurso r join trabajo t "
+    fila = conn.execute("select r.*,t.parametros snapshot,(select e.revision_ia from recurso_edicion e where "
+                        "e.recurso_id=r.id and e.revision=r.revision) revision_ia from recurso r join trabajo t "
                         "on t.id=r.trabajo_id and t.asignatura_id=r.asignatura_id "
                         "where r.id=%s and r.asignatura_id=%s" + (" for update of r" if editar else ""),
                         (rid, aid)).fetchone()
@@ -72,6 +73,7 @@ def _detalle(recurso, asignatura):
               "actualizado", "verificacion_edicion", "validado_por", "validado_en")
     resultado = {k: recurso[k] for k in campos}
     resultado["validado"] = recurso["validado_por"] is not None
+    resultado['revision_ia'] = recurso.get('revision_ia')
     resultado["presentacion"] = presentar(recurso["herramienta"], recurso["contenido"])
     resultado["evidencia_vigente"] = recurso["revision"] == 0
     if recurso["herramienta"] in HERRAMIENTAS_SIN_IA:
@@ -196,7 +198,7 @@ class ServicioRecursos:
                          "where id=%s and asignatura_id=%s", (correo, rid, aid))
             return _detalle(_recurso(conn, aid, rid), a)
 
-    def trabajos(self, aid, correo, limite, desde):
+    def trabajos(self, aid, correo, limite, desde, ids=None):
         with self._acceso(aid, correo) as (conn, _):
             return conn.execute(
                 "select t.id,t.herramienta,t.ambito_tipo,t.ambito_id,t.estado,t.lotes_total,t.lotes_hechos,"
@@ -204,10 +206,10 @@ class ServicioRecursos:
                 "r.estado recurso_estado,r.revision recurso_revision,"
                 "case when t.estado='error' then 'No se pudo completar el trabajo' else null end error "
                 "from trabajo t left join recurso r on r.trabajo_id=t.id and r.asignatura_id=t.asignatura_id "
-                "where t.asignatura_id=%s order by case "
+                "where t.asignatura_id=%s and t.tipo='generacion' and (%s::uuid[] is null or t.id=any(%s)) order by case "
                 "when t.estado in ('generando','verificando','revisando') then 0 "
                 "when t.estado in ('en_cola','en_espera') then 1 else 2 end,t.creado desc,t.id limit %s offset %s",
-                (aid, limite, desde)).fetchall()
+                (aid, ids, ids, limite, desde)).fetchall()
 
     def listar(self, aid, correo, limite, desde):
         with self._acceso(aid, correo) as (conn, _):

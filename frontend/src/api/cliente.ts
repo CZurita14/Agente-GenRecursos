@@ -84,7 +84,7 @@ export const generar = (aid: string, ambito: Ambito, herramientas: string[]) =>
   pedir<{ trabajos: TrabajoCreado[] }>(`/asignaturas/${enc(aid)}/generar`,
     { method: 'POST', body: json({ ambito, herramientas }) });
 
-export const trabajos = (aid: string) => pedir<Trabajo[]>(`/asignaturas/${enc(aid)}/trabajos?limite=200`);
+export const trabajos = (aid: string, ids?: string[]) => pedir<Trabajo[]>(`/asignaturas/${enc(aid)}/trabajos?limite=200${ids ? ids.map(id => `&ids=${enc(id)}`).join('') : ''}`);
 
 export const recursos = (aid: string) => pedir<RecursoResumen[]>(`/asignaturas/${enc(aid)}/recursos?limite=200`);
 

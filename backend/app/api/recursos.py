@@ -53,8 +53,8 @@ def generar(asig: UUID, datos: Generacion, request: Request):
 
 @router.get("/trabajos")
 def trabajos(asig: UUID, request: Request, limite: int = Query(50, ge=1, le=200),
-             desde: int = Query(0, ge=0, le=100000)):
-    return request.app.state.recursos.trabajos(asig, request.state.usuario, limite, desde)
+             desde: int = Query(0, ge=0, le=100000), ids: list[UUID] | None = Query(None, max_length=40)):
+    return request.app.state.recursos.trabajos(asig, request.state.usuario, limite, desde, ids)
 
 
 @router.get("/recursos")

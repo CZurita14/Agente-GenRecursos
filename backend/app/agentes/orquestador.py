@@ -83,6 +83,10 @@ def procesar_uno(conn, cliente, perfiles, worker_id: str, lease_s: int) -> bool:
         if trabajo.intentos >= MAX_INTENTOS_RECUPERACION:
             terminar(conn, trabajo.id, "error", "límite de recuperaciones agotado", **cerco)
             return True
+        if trabajo.tipo == 'chat':
+            from app.chat.ejecutor import procesar_chat
+            procesar_chat(conn, trabajo, cliente, perfiles, worker_id, lease_s)
+            return True
         silabo = SilaboUTI.model_validate(trabajo.parametros["silabo"])
         ctx = contexto_ambito(silabo, trabajo.ambito)
         encargo = Encargo(

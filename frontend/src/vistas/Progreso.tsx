@@ -29,14 +29,20 @@ export const INTERVALO_MS = 4000;
 export function Progreso({ aid, creados, onAbrir, onVolver, onSesionVencida }: ProgresoProps) {
   const [estado, setEstado] = useState<Record<string, Trabajo>>({});
   const [error, setError] = useState('');
+  const [ausentes, setAusentes] = useState<string[]>([]);
   const ids = creados.map(t => t.id);
-  const terminado = ids.every(id => FINALES.has(estado[id]?.estado ?? creados.find(t => t.id === id)!.estado));
+  const terminado = ids.every(id => ausentes.includes(id) || FINALES.has(estado[id]?.estado ?? creados.find(t => t.id === id)!.estado));
 
   useEffect(() => {
     if (terminado) return;
     let vigente = true;
-    const consultar = () => cargarTrabajos(aid).then(lista => {
-      if (vigente) setEstado(Object.fromEntries(lista.filter(t => ids.includes(t.id)).map(t => [t.id, t])));
+    const consultar = () => cargarTrabajos(aid, ids).then(lista => {
+      if (vigente) {
+        setEstado(Object.fromEntries(lista.filter(t => ids.includes(t.id)).map(t => [t.id, t])));
+        const faltantes = ids.filter(id => !lista.some(t => t.id === id));
+        setAusentes(faltantes);
+        if (faltantes.length) setError('Algún trabajo ya no está disponible en esta asignatura.');
+      }
     }).catch(e => {
       if (!vigente) return;
       if (e instanceof ErrorApi && e.estado === 401) return onSesionVencida();
@@ -57,9 +63,9 @@ export function Progreso({ aid, creados, onAbrir, onVolver, onSesionVencida }: P
     <div className="grid gap-3">
       {creados.map(c => {
         const t = estado[c.id];
-        const etapa = ETAPAS[t?.estado ?? c.estado];
+        const etapa = ausentes.includes(c.id) ? { ...ETAPAS.error, texto: 'Trabajo no disponible' } : ETAPAS[t?.estado ?? c.estado];
         const rid = t?.recurso_id ?? c.recurso_id;
-        return <Card key={c.id} title={nombreHerramienta(c.herramienta)}>
+        return <Card key={c.id} title={nombreHerramienta(t?.herramienta ?? c.herramienta)}>
           <div className="flex flex-wrap items-center gap-3">
             <Badge tone={etapa.tono}>{etapa.texto}</Badge>
             {t && t.lotes_total > 0 && !FINALES.has(t.estado) && <span className="text-xs text-muted">lote {t.lotes_hechos} de {t.lotes_total}</span>}

@@ -119,6 +119,7 @@ export interface Recurso extends RecursoResumen {
   validado_en: string | null;
   silabo_actualizado: boolean;
   evidencia_vigente: boolean;
+  revision_ia?: Record<string, unknown> | null;
   /** Comprobaciones deterministas de la última edición (null si no se ha editado). */
   verificacion_edicion: Record<string, string[]> | null;
 }

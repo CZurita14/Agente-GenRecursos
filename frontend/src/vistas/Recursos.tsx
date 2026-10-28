@@ -1,13 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, Badge, DataTable, type Column } from '../components';
 import { ErrorApi, asignaturas as cargarAsignaturas, recursos as cargarRecursos } from '../api/cliente';
 import type { AsignaturaResumen, RecursoResumen } from '../api/tipos';
 import { nombreAmbito, nombreHerramienta } from '../api/herramientas';
+import { ChatAjustes } from '../components/ChatAjustes';
 
 interface RecursosProps {
   aidInicial?: string;
   onAbrir: (aid: string, rid: string, rol: AsignaturaResumen['rol']) => void;
   onSesionVencida: () => void;
+  onTrabajos?: (aid: string, ids: string[], rol: AsignaturaResumen['rol']) => void;
 }
 
 const COLUMNAS: Column<RecursoResumen>[] = [
@@ -19,11 +21,15 @@ const COLUMNAS: Column<RecursoResumen>[] = [
 ];
 
 /** «Mis recursos»: los recursos de una asignatura, con su estado; cada uno se abre para revisar. */
-export function Recursos({ aidInicial, onAbrir, onSesionVencida }: RecursosProps) {
+export function Recursos({ aidInicial, onAbrir, onSesionVencida, onTrabajos }: RecursosProps) {
   const [lista, setLista] = useState<AsignaturaResumen[] | null>(null);
   const [aid, setAid] = useState(aidInicial ?? '');
   const [filas, setFilas] = useState<RecursoResumen[] | null>(null);
   const [error, setError] = useState('');
+  const contexto = useRef(aid);
+  contexto.current = aid;
+  const consulta = useRef(0);
+  const montado = useRef(true);
 
   const manejar = (e: unknown) => {
     if (e instanceof ErrorApi && e.estado === 401) return onSesionVencida();
@@ -31,13 +37,22 @@ export function Recursos({ aidInicial, onAbrir, onSesionVencida }: RecursosProps
   };
 
   useEffect(() => {
-    cargarAsignaturas().then(a => { setLista(a); if (!aid && a[0]) setAid(a[0].id); }).catch(manejar);
+    montado.current = true;
+    cargarAsignaturas().then(a => { if (montado.current) { setLista(a); if (!contexto.current && a[0]) setAid(a[0].id); } }).catch(manejar);
+    return () => { montado.current = false; consulta.current++; };
   }, []);
+
+  const refrescar = (destino: string) => {
+    const turno = ++consulta.current;
+    return cargarRecursos(destino).then(f => {
+      if (montado.current && contexto.current === destino && turno === consulta.current) setFilas(f);
+    }).catch(e => { if (montado.current && contexto.current === destino && turno === consulta.current) manejar(e); });
+  };
 
   useEffect(() => {
     if (!aid) return;
     setFilas(null);
-    cargarRecursos(aid).then(setFilas).catch(manejar);
+    void refrescar(aid);
   }, [aid]);
 
   const rol = lista?.find(a => a.id === aid)?.rol ?? 'lector';
@@ -56,5 +71,7 @@ export function Recursos({ aidInicial, onAbrir, onSesionVencida }: RecursosProps
     {aid && <DataTable caption="Recursos de la asignatura" columns={COLUMNAS} rows={filas ?? []} rowKey={r => r.id}
       loading={filas === null} emptyMessage="Aún no hay recursos. Elige una clase en «Mis asignaturas» para generarlos."
       onRowClick={r => onAbrir(aid, r.id, rol)} rowActionLabel={r => `Revisar ${nombreHerramienta(r.herramienta)}`} />}
+    {aid && rol !== 'lector' && <ChatAjustes aid={aid} onSesionVencida={onSesionVencida}
+      onActualizado={() => { void refrescar(aid); }} onTrabajos={ids => onTrabajos?.(aid, ids, rol)} />}
   </>;
 }

@@ -64,6 +64,7 @@ class Trabajo:
     creado: datetime
     actualizado: datetime
     lease_version: int
+    tipo: str = 'generacion'
 
 
 def _trabajo(f: dict) -> Trabajo:
@@ -73,12 +74,12 @@ def _trabajo(f: dict) -> Trabajo:
 
 
 def encolar(conn: psycopg.Connection, *, asignatura_id: UUID, agente: str, ambito: Ambito,
-            herramienta: str, parametros: dict) -> UUID:
+            herramienta: str, parametros: dict, tipo: str = 'generacion') -> UUID:
     with conn.transaction():
         f = conn.execute(
             "insert into trabajo (asignatura_id, agente, ambito_tipo, ambito_id, herramienta,"
-            " parametros) values (%s, %s, %s, %s, %s, %s) returning id",
-            (asignatura_id, agente, ambito.tipo, ambito.id, herramienta, Jsonb(parametros)),
+            " parametros,tipo) values (%s, %s, %s, %s, %s, %s,%s) returning id",
+            (asignatura_id, agente, ambito.tipo, ambito.id, herramienta, Jsonb(parametros), tipo),
         ).fetchone()
     return f["id"]
 

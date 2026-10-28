@@ -3,7 +3,7 @@
 > **Para qué sirve:** es la memoria del proyecto. Al retomar, **se lee primero este archivo** y solo después, si hace falta, el documento puntual que enlaza.
 > No hace falta recorrer el repositorio completo.
 >
-> **Última actualización:** 2026-10-28 · **Fase:** 1 · **Bloque activo:** P6d PDF/Word publicado en PR #10 sobre `p6/edicion`; siguiente: definir P5.
+> **Última actualización:** 2026-10-28 · **Fase:** 1 · **Bloque activo:** P5 implementado en `codex/p5-chat`, cierre técnico y publicación; aceptación con docentes piloto pendiente.
 
 ## Cómo se actualiza
 
@@ -21,7 +21,7 @@ Estados: `⬜ pendiente` · `🔄 en curso` · `🔁 devuelta (ronda n)` · `✅
 
 ## Estado en una línea
 
-P1, P2, P3a/P3b y P4 implementados; spec v1.3 emitido. P6 incluye menú, generación, revisión, validación, descarga HTML/PDF/DOCX, vistas por herramienta y edición docente. P6c está en PR #9 sobre `p6/vistas`; P6d se apila sobre `p6/edicion`, sin fusionar. PDF/Word revisados visualmente con cuestionario, ficha y tablas largas. Quedan P5 (chat de ajustes) y P7; la activación institucional sigue condicionada a SMTP (B4), aviso aprobado (B9) y administradores designados (B10). Las cifras de pruebas históricas se conservan en la bitácora.
+P1–P6 implementados técnicamente, incluido chat privado de ajustes y exportación HTML/PDF/DOCX. P5 se apila sobre P6d (PR #10), sin fusionar. Pruebas finales P5: 783 backend pasan/4 de servidor excluidas; humo optativo del intérprete con Qwen real pasa; 25 unitarias frontend y 28 de navegador, typecheck/build pasan. Falta aceptación con docentes piloto y P7; activación institucional condicionada a SMTP (B4), aviso aprobado (B9) y administradores designados (B10). H7 y plantilla académica siguen pendientes.
 
 ## Documentos de referencia
 
@@ -70,8 +70,8 @@ P1, P2, P3a/P3b y P4 implementados; spec v1.3 emitido. P6 incluye menú, generac
 | P2 Lector y menú | ✅ | [plan](docs/superpowers/plans/2026-10-27-p2-lector-y-menu.md) | Rama `p2/lector`, publicada; PR #2 sobre P1 según capturas. Ruta de respaldo con IA (L7) pendiente de B7 |
 | P3 Herramientas | 🔄 | [P3a](docs/superpowers/plans/2026-10-27-p3a-herramientas-sin-ia.md) · [P3b](docs/superpowers/plans/2026-10-27-p3b-herramientas-con-ia.md) | **P3b ✅** (rama `p3/con-ia`, `0270b53`…`c7e10dd`): simulacro, repaso integrador, guía de la evidencia, estudio de caso y guía del producto final con IA; §9.4.2 aplicada. **P3a ✅** (rama `p3/sin-ia`, `a90ab9b`, `0f9d82b`): hoja de ruta, autoevaluación con la rúbrica (momento y final) y lista de verificación de la evidencia, sin IA. P3b (herramientas con IA de momento/asignatura, H7) por planificar; formato final bloqueado por B3 |
 | P4 API y acceso | ✅ | [plan](docs/superpowers/plans/2026-10-27-p4-api-y-acceso.md) | A1–A5 implementadas; activación institucional pendiente B4/B9/B10 y P7 |
-| P5 Chat de ajustes | ⬜ | Por escribir | |
-| P6 Entrega y frontend | 🔄 | [P6a menú](docs/superpowers/plans/2026-10-28-p6a-frontend-menu.md) · [P6b recursos](docs/superpowers/plans/2026-10-28-p6b-mis-recursos.md) | **P6a ✅** (rama `p6/menu`): ingreso, menú opción B, subir sílabo, Mis asignaturas. **P6b ✅** (rama `p6/recursos`): clase → actividad → generar → avance → revisar → validar → descargar HTML para Canvas; probado con Qwen real. Vistas por herramienta ✅ (rama `p6/vistas`). **P6c ✅** edición por el docente (rama `p6/edicion`). Siguiente: PDF/Word |
+| P5 Chat de ajustes | 🔄 | [plan](docs/superpowers/plans/2026-10-28-p5-chat-ajustes.md) | Implementación y cierre técnico en `codex/p5-chat`; humo del intérprete con Qwen real pasa. [15 casos para docentes piloto](docs/pruebas/p5-piloto.md) pendientes: no equivalen a pruebas automáticas. |
+| P6 Entrega y frontend | 🔄 | [P6a](docs/superpowers/plans/2026-10-28-p6a-frontend-menu.md) · [P6b](docs/superpowers/plans/2026-10-28-p6b-mis-recursos.md) · [P6d](docs/superpowers/plans/2026-10-28-p6d-exportacion-pdf-word.md) | Implementados menú, generación, avance, revisión, edición y descargas HTML/PDF/DOCX. P6d publicado en PR #10; QA visual completado. Plantilla institucional y aceptación académica pendientes. |
 | P7 Despliegue | ⬜ | Por escribir | D4 bloqueada por TI |
 
 ### P4 · Registro por tarea
@@ -154,6 +154,7 @@ P1, P2, P3a/P3b y P4 implementados; spec v1.3 emitido. P6 incluye menú, generac
 ## Bitácora (lo ya hecho)
 
 ### 2026-10-28
+- **P5 implementado:** cuatro acciones estrictas, chat privado, cola con fencing, generación desde chat y regeneración selectiva; revisión optimista, nueva validación y evidencia con alcance exacto. Corregidos hallazgos de privacidad, selección numérica, concurrencia de borradores y seguimiento de trabajos antiguos. **783 backend pasan/4 deseleccionadas**, **25 unitarias frontend y 28 navegador**, typecheck/build pasan; **humo Qwen real: 1 pasa** (dos pedidos sintéticos). Pendiente piloto humano; preparada matriz de 15 casos. No se migró ni desplegó la base operativa: activar `007_chat.sql` requiere reiniciar API/workers de forma coordinada.
 - **Preparación P5:** revisados §3.4/§9.2/A5, cola, orquestador e historial de edición. [Diseño propuesto](docs/superpowers/plans/2026-10-28-p5-chat-ajustes.md): chat privado asíncrono, cuatro acciones estrictas y regeneración selectiva con revisión optimista. Pendiente de aprobación antes de implementar; prueba con docentes piloto y H7 siguen como puertas explícitas.
 - **Publicación P6d:** commit `e6dffb8` publicado en `origin/codex/p6d-exportacion`; PR [#10](https://github.com/CZurita14/Agente-GenRecursos/pull/10) abierto sobre `p6/edicion` (#9), sin fusionar. Revisión visual, pruebas de permisos y regresión final completadas.
 - **Cierre P6d:** revisadas seis muestras PDF/DOCX (16 páginas; Word local para renderizar DOCX). Corregidos opciones huérfanas, listas numeradas y estilos; fórmulas ajustadas al ancho de celda. Nuevas pruebas de lector, sesión, pertenencia, límites matemáticos y paginación. Resultado final: **663 backend pasan/3 deseleccionadas**, **21 unitarias frontend y 16 navegador**, typecheck/build pasan. Muestras ignoradas en `.superpowers/p6d-qa`; generador reproducible en `backend/tests/revisar_exportacion.py`.
@@ -258,7 +259,7 @@ P1, P2, P3a/P3b y P4 implementados; spec v1.3 emitido. P6 incluye menú, generac
 ## Siguiente paso
 
 1. ~~Emitir el spec v1.3~~ ✅ hecho (2026-10-27). Revisar con el usuario la tabla de cambios C1–C16.
-2. P3a/P3b y P6c implementados; P6d PDF/Word implementado y revisado visualmente. Siguiente bloque funcional: definir P5 (chat de ajustes) según el spec antes de implementarlo. Validar con el área académica si «resolutivo» es la referencia correcta del mínimo en la lista de verificación; mantener pendientes H7 (techo del RA) y H8 (plantilla).
+2. Validar P5 con docentes piloto usando la matriz de 15 casos y preparar el diseño de P7; la implementación técnica de P5 ya está terminada. Validar con el área académica si «resolutivo» es la referencia correcta del mínimo en la lista de verificación; mantener pendientes H7 (techo del RA) y H8 (plantilla).
 3. Resolver puertas institucionales B4/B9/B10 antes de activar P4; preparar despliegue P7 con HTTPS, proxy y mantenimiento supervisado. La calidad final y los formatos académicos siguen condicionados a la plantilla.
 4. Mantener los PR apilados: PR #9 (`p6/edicion`) sobre `p6/vistas` (#8); no repetir su creación. Integrar las bases antes de sus ramas dependientes cuando se decida fusionarlas.
 5. La propuesta institucional en `docs/propuestas/` permanece disponible para revisión del usuario; no se ha versionado ni modificado en esta continuación.
