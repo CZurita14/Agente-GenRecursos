@@ -16,3 +16,7 @@ rea/
 .pytest_cache/
 *.egg-info/
 .superpowers/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
