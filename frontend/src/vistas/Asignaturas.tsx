@@ -6,6 +6,7 @@ import type { AsignaturaResumen } from '../api/tipos';
 interface AsignaturasProps {
   onSesionVencida: () => void;
   onSubir: () => void;
+  onAbrir: (asignatura: AsignaturaResumen) => void;
 }
 
 const ROLES: Record<AsignaturaResumen['rol'], string> = { dueno: 'Dueño', editor: 'Editor', lector: 'Lector' };
@@ -18,7 +19,7 @@ const COLUMNAS: Column<AsignaturaResumen>[] = [
 ];
 
 /** Asignaturas propias y compartidas (GET /asignaturas). */
-export function Asignaturas({ onSesionVencida, onSubir }: AsignaturasProps) {
+export function Asignaturas({ onSesionVencida, onSubir, onAbrir }: AsignaturasProps) {
   const [filas, setFilas] = useState<AsignaturaResumen[] | null>(null);
   const [error, setError] = useState('');
 
@@ -40,6 +41,7 @@ export function Asignaturas({ onSesionVencida, onSubir }: AsignaturasProps) {
     </div>
     {error && <Alert tone="danger" role="alert">{error}</Alert>}
     <DataTable caption="Mis asignaturas" columns={COLUMNAS} rows={filas ?? []} rowKey={a => a.id}
-      loading={filas === null} emptyMessage="Todavía no tienes asignaturas. Sube tu sílabo para empezar." />
+      loading={filas === null} emptyMessage="Todavía no tienes asignaturas. Sube tu sílabo para empezar."
+      onRowClick={onAbrir} rowActionLabel={a => `Abrir ${a.nombre}`} />
   </>;
 }

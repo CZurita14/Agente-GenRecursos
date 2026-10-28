@@ -2,7 +2,10 @@
  * Cliente mínimo de la API del P4. Todo pasa por /api (proxy de Vite en desarrollo, servidor
  * web en producción) con la cookie de sesión HttpOnly: el frontend nunca ve ni guarda el token.
  */
-import type { AsignaturaResumen, SilaboSubido, Usuario } from './tipos';
+import type {
+  Ambito, AsignaturaResumen, Catalogo, MenuAsignatura, Recurso, RecursoResumen, SilaboSubido, Trabajo, TrabajoCreado,
+  TipoAmbito, Usuario,
+} from './tipos';
 
 const BASE = '/api';
 
@@ -69,3 +72,27 @@ export const subirSilabo = (archivo: File) =>
   pedir<SilaboSubido>('/silabos', { method: 'POST', body: archivo, headers: { 'Content-Type': 'application/pdf' } });
 
 export const asignaturas = () => pedir<AsignaturaResumen[]>('/asignaturas');
+
+const enc = encodeURIComponent;
+
+export const menu = (aid: string) => pedir<MenuAsignatura>(`/asignaturas/${enc(aid)}/menu`);
+
+export const catalogo = (aid: string, tipo: TipoAmbito, id: string) =>
+  pedir<Catalogo>(`/asignaturas/${enc(aid)}/herramientas?ambito=${tipo}&id=${enc(id)}`);
+
+export const generar = (aid: string, ambito: Ambito, herramientas: string[]) =>
+  pedir<{ trabajos: TrabajoCreado[] }>(`/asignaturas/${enc(aid)}/generar`,
+    { method: 'POST', body: json({ ambito, herramientas }) });
+
+export const trabajos = (aid: string) => pedir<Trabajo[]>(`/asignaturas/${enc(aid)}/trabajos?limite=200`);
+
+export const recursos = (aid: string) => pedir<RecursoResumen[]>(`/asignaturas/${enc(aid)}/recursos?limite=200`);
+
+export const recurso = (aid: string, rid: string) => pedir<Recurso>(`/asignaturas/${enc(aid)}/recursos/${enc(rid)}`);
+
+export const validar = (aid: string, rid: string, revision: number) =>
+  pedir<Recurso>(`/asignaturas/${enc(aid)}/recursos/${enc(rid)}/validar`, { method: 'POST', body: json({ revision }) });
+
+/** Descarga directa (enlace): la cookie viaja sola y la API exige la validación (409 si no). */
+export const urlExportar = (aid: string, rid: string) =>
+  `${BASE}/asignaturas/${enc(aid)}/recursos/${enc(rid)}/exportar?formato=html`;

@@ -31,6 +31,19 @@ const SUBIDO = {
     clases: [{ clase_id: 'M2-S1' }, { clase_id: 'M2-S2' }] }],
 };
 
+const MENU_ASIG = [{ numero: 2, inicio: '2026-10-12', fin: '2026-10-18', cierra_momentos: [2], clases: [
+  { clase_id: 'M2-S1', numero_clase: 1, dia: 'mie', fecha: '2026-10-14', momento: 2, momento_titulo: 'Planeación',
+    contenidos: ['DISTRIBUCIONES'], ra: ['RA2'], entregables: [] }] },
+{ numero: 3, inicio: '2026-10-19', fin: '2026-10-25', cierra_momentos: [3], clases: [
+  { clase_id: 'M3-S1', numero_clase: 2, dia: 'mie', fecha: '2026-10-21', momento: 3, momento_titulo: 'Resolución',
+    contenidos: ['ESTIMACIÓN'], ra: ['RA3'], entregables: [] }] }];
+const RECURSO = validado => ({ id: 'r1', trabajo_id: 't1', ambito_id: 'M2-S1', herramienta: 'cuestionario', version_silabo: '1.0',
+  estado: 'requiere_revision', revision: 0, creado: '2026-10-28T10:00:00Z', silabo_actualizado: false, evidencia_vigente: true,
+  validado: !!validado, validado_por: validado ? USUARIO.correo : null, validado_en: validado ? '2026-10-28T11:00:00Z' : null,
+  evidencia: { borrador: true, verificaciones: { i1: [] }, veredictos: { i1: 'el revisor considera correctas las opciones 1 y 3' } },
+  contenido: [{ item_id: 'i1', pregunta: '¿Qué prueba corresponde?', contexto: 'Una empresa ficticia.', correcta: 0,
+    opciones: [{ texto: 'Prueba t' }, { texto: 'ANOVA' }, { texto: 'Chi cuadrado' }, { texto: 'Regresión' }] }] });
+
 /** API simulada: `sesion` dice si /auth/yo responde 200 o 401. */
 async function abrir({ sesion = true, viewport, rutas = {} } = {}) {
   const context = await browser.newContext(viewport ? { viewport } : {});
@@ -49,6 +62,26 @@ async function abrir({ sesion = true, viewport, rutas = {} } = {}) {
     if (ruta === '/auth/salir') { estado.sesion = false; return json(200, { mensaje: 'Sesión cerrada' }); }
     if (ruta === '/asignaturas') return json(200, [{ id: 'a1', nombre: 'ANALISIS DE DATOS', codigo_pf: 'B26-SOFT-3', version_silabo: '1.0', agente: 'ingenierias', rol: 'dueno', dueno: USUARIO.correo }]);
     if (ruta === '/silabos') return json(201, SUBIDO);
+    // --- P6b: menú, catálogo, generación, avance, recurso, validación ---
+    if (ruta === '/asignaturas/a1/menu') return json(200, { id: 'a1', rol: 'dueno', version_silabo: '1.0', menu: MENU_ASIG });
+    if (ruta === '/asignaturas/a1/herramientas') {
+      const restringido = url.searchParams.get('id') === 'M3';
+      return json(200, { ambito: url.searchParams.get('ambito'), restringido, perfil_sugerido: 'fundamentacion',
+        motivo: restringido ? 'La política de IA de este momento excluye la IA en una evaluación.' : null,
+        politica_ia: 'Se permite IA como asistente.',
+        herramientas: restringido ? [{ id: 'autoevaluacion_rubrica', recomendada: true }]
+          : [{ id: 'cuestionario', recomendada: true }, { id: 'ficha_clase', recomendada: false }] });
+    }
+    if (ruta === '/asignaturas/a1/generar') return json(202, { trabajos: [{ id: 't1', herramienta: 'cuestionario', estado: 'en_cola' }] });
+    if (ruta === '/asignaturas/a1/trabajos') {
+      estado.consultas = (estado.consultas ?? 0) + 1;
+      return json(200, [{ id: 't1', herramienta: 'cuestionario', ambito_tipo: 'clase', ambito_id: 'M2-S1', lotes_total: 1,
+        lotes_hechos: 1, error: null, estado: 'requiere_revision', recurso_id: 'r1' }]);
+    }
+    if (ruta === '/asignaturas/a1/recursos') return json(200, [{ id: 'r1', trabajo_id: 't1', ambito_id: 'M2-S1',
+      herramienta: 'cuestionario', version_silabo: '1.0', estado: 'requiere_revision', revision: 0, creado: '2026-10-28T10:00:00Z' }]);
+    if (ruta === '/asignaturas/a1/recursos/r1') return json(200, RECURSO(estado.validado));
+    if (ruta === '/asignaturas/a1/recursos/r1/validar') { estado.validado = true; return json(200, RECURSO(true)); }
     return json(404, { detail: 'no simulada' });
   });
   await page.goto(origin);
@@ -127,5 +160,58 @@ test('móvil: sin desbordamiento, menú colapsado y tarjetas apiladas', async ()
   await page.getByRole('button', { name: 'Abrir navegación' }).click();
   await page.getByRole('navigation', { name: 'Navegación móvil' }).getByRole('button', { name: 'Mis recursos', exact: true }).click();
   await page.getByRole('heading', { name: 'Mis recursos' }).waitFor();
+  await context.close();
+});
+
+// --- P6b: Mis recursos ----------------------------------------------------------------
+
+async function abrirAsignatura(page) {
+  await page.getByRole('navigation', { name: 'Navegación principal' }).getByRole('button', { name: 'Mis asignaturas', exact: true }).click();
+  await page.getByRole('button', { name: 'Abrir ANALISIS DE DATOS' }).click();
+  await page.getByRole('heading', { name: 'ANALISIS DE DATOS' }).waitFor();
+}
+
+test('recorrido: clase → actividad → generar → avance → recurso', async () => {
+  const { context, page, estado } = await abrir();
+  await abrirAsignatura(page);
+  await page.getByText('Semana 2 · 12/10 – 18/10').waitFor();
+  await page.getByRole('button', { name: /mié 14\/10 · Clase 1/ }).click();
+  await page.getByRole('heading', { name: 'Clase 1 · M2-S1' }).waitFor();
+  await page.getByText('Se permite IA como asistente.').waitFor();
+  await page.getByLabel('Cuestionario').check();
+  await page.getByRole('button', { name: 'Generar' }).click();
+  await page.getByRole('heading', { name: 'Generando herramientas' }).waitFor();
+  await page.getByText('Lista · requiere tu revisión').waitFor();
+  const consultas = estado.consultas;
+  await page.getByRole('button', { name: 'Revisar' }).click();
+  await page.getByRole('heading', { name: 'Cuestionario' }).waitFor();
+  await page.waitForTimeout(4500);
+  assert.equal(estado.consultas, consultas, 'la consulta de avance debe detenerse al terminar o salir');
+  await context.close();
+});
+
+test('momento restringido muestra el aviso y solo lo permitido', async () => {
+  const { context, page } = await abrir();
+  await abrirAsignatura(page);
+  await page.getByText('Cierra el Momento 3').waitFor();
+  await page.getByRole('button', { name: 'Herramientas del momento' }).nth(1).click();
+  await page.getByRole('alert').getByText('excluye la IA').waitFor();
+  assert.equal(await page.getByRole('checkbox').count(), 1);
+  assert.equal(await page.getByText('sin IA', { exact: true }).count(), 1);
+  await context.close();
+});
+
+test('validar con alertas pide confirmación y habilita la descarga', async () => {
+  const { context, page } = await abrir();
+  await page.getByRole('navigation', { name: 'Navegación principal' }).getByRole('button', { name: 'Mis recursos', exact: true }).click();
+  await page.getByRole('button', { name: 'Revisar Cuestionario' }).click();
+  await page.getByText('el revisor considera correctas las opciones 1 y 3').waitFor();
+  assert.equal(await page.getByRole('link', { name: 'Descargar HTML para Canvas' }).count(), 0);
+  await page.getByRole('button', { name: 'Validar recurso' }).click();
+  await page.getByRole('dialog').getByText('¿Validar con alertas pendientes?').waitFor();
+  await page.getByRole('button', { name: 'Validar de todos modos' }).click();
+  const enlace = page.getByRole('link', { name: 'Descargar HTML para Canvas' });
+  await enlace.waitFor();
+  assert.match(await enlace.getAttribute('href'), /\/api\/asignaturas\/a1\/recursos\/r1\/exportar\?formato=html$/);
   await context.close();
 });

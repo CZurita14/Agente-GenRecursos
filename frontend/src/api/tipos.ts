@@ -43,3 +43,69 @@ export interface SilaboSubido {
   menu: SemanaMenu[];
   clases_cambiadas: string[];
 }
+
+export type TipoAmbito = 'clase' | 'momento' | 'asignatura';
+
+export interface Ambito {
+  tipo: TipoAmbito;
+  id: string;
+}
+
+export interface MenuAsignatura {
+  id: string;
+  rol: Rol;
+  version_silabo: string;
+  menu: SemanaMenu[];
+}
+
+export interface Catalogo {
+  ambito: TipoAmbito;
+  restringido: boolean;
+  motivo: string | null;
+  politica_ia: string | null;
+  perfil_sugerido: string;
+  herramientas: { id: string; recomendada: boolean }[];
+}
+
+export type EstadoTrabajo = 'en_cola' | 'en_espera' | 'generando' | 'verificando' | 'revisando'
+  | 'listo' | 'requiere_revision' | 'error';
+
+export interface TrabajoCreado {
+  id: string;
+  herramienta: string;
+  estado: EstadoTrabajo;
+  recurso_id?: string;
+}
+
+export interface Trabajo {
+  id: string;
+  herramienta: string;
+  ambito_tipo: TipoAmbito;
+  ambito_id: string;
+  estado: EstadoTrabajo;
+  lotes_total: number;
+  lotes_hechos: number;
+  recurso_id: string | null;
+  error: string | null;
+}
+
+export interface RecursoResumen {
+  id: string;
+  trabajo_id: string;
+  ambito_id: string;
+  herramienta: string;
+  version_silabo: string;
+  estado: 'listo' | 'requiere_revision';
+  revision: number;
+  creado: string;
+}
+
+export interface Recurso extends RecursoResumen {
+  contenido: unknown;
+  evidencia: Record<string, unknown>;
+  validado: boolean;
+  validado_por: string | null;
+  validado_en: string | null;
+  silabo_actualizado: boolean;
+  evidencia_vigente: boolean;
+}
