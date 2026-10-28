@@ -3,6 +3,7 @@ from typing import Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Query, Request
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, ConfigDict, Field, StrictInt
 
 from app.cola.trabajos import Ambito
@@ -75,3 +76,10 @@ def editar(asig: UUID, rid: UUID, datos: Edicion, request: Request):
 @router.post("/recursos/{rid}/validar")
 def validar(asig: UUID, rid: UUID, datos: Validacion, request: Request):
     return request.app.state.recursos.validar(asig, rid, request.state.usuario, datos.revision)
+
+
+@router.get("/recursos/{rid}/exportar")
+def exportar(asig: UUID, rid: UUID, request: Request, formato: Literal["html"] = "html"):
+    nombre, contenido = request.app.state.recursos.exportar(asig, rid, request.state.usuario)
+    return HTMLResponse(contenido, headers={"Content-Disposition": f'attachment; filename="{nombre}"',
+                                            "X-Content-Type-Options": "nosniff"})
