@@ -72,6 +72,8 @@ Crear herramienta y manual de operación (`infra/operar.py`, `docs/operacion.md`
 
 ### D4 · Entrega a TI, sin despliegue automático
 
+**Borrador listo:** [docs/entrega-ti.md](../../entrega-ti.md). Pendiente de revisión del usuario antes de compartirlo.
+
 Preparar ficha con requisitos, variables, redes, puertos, dominio/certificados, SMTP, administradores, capacidad de IA, respaldo y mantenimiento. Entregar comandos revisables. No enviar mensajes a TI ni desplegar en su servidor sin instrucción expresa y datos de acceso autorizados.
 
 ### Verificación y cierre técnico
