@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { BookOpen, FolderOpen, Home, LogOut } from 'lucide-react';
 import { AppLayout } from './components';
 import { useSesion } from './sesion/useSesion';
+import { Asignaturas } from './vistas/Asignaturas';
+import { Generar } from './vistas/Generar';
 import { Ingreso } from './vistas/Ingreso';
 import { Inicio } from './vistas/Inicio';
 import { Proximamente } from './vistas/Proximamente';
@@ -16,7 +18,7 @@ const MENU = [
 
 /** Sin sesión: ingreso. Con sesión: menú principal (opción B) y sus vistas. */
 export default function App() {
-  const { usuario, cargando, ingresar, salir } = useSesion();
+  const { usuario, cargando, ingresar, salir, expirar } = useSesion();
   const [vista, setVista] = useState<Vista>('inicio');
 
   if (cargando) {
@@ -37,8 +39,8 @@ export default function App() {
   return <AppLayout items={MENU} activeId={vista === 'generar' ? 'inicio' : vista}
     onChange={id => setVista(id as Vista)} actions={acciones}>
     {vista === 'inicio' && <Inicio onGenerar={() => setVista('generar')} />}
-    {vista === 'generar' && <Proximamente titulo="Generar herramientas" descripcion="La subida del sílabo llega en la siguiente tarea." />}
-    {vista === 'asignaturas' && <Proximamente titulo="Mis asignaturas" descripcion="La lista de asignaturas llega en la siguiente tarea." />}
+    {vista === 'generar' && <Generar onSesionVencida={expirar} onVerAsignaturas={() => setVista('asignaturas')} />}
+    {vista === 'asignaturas' && <Asignaturas onSesionVencida={expirar} onSubir={() => setVista('generar')} />}
     {vista === 'recursos' && <Proximamente titulo="Mis recursos"
       descripcion="Aquí verás, revisarás y exportarás las herramientas generadas. Llega en la siguiente entrega del frontend." />}
   </AppLayout>;
