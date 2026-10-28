@@ -73,3 +73,18 @@ def test_proxy_no_confia_cabeceras_de_cliente_y_no_registra_uri():
     assert 'location ^~ /api/salud/ { return 404; }' in nginx
     assert 'client_max_body_size 10m;' in nginx
     assert 'proxy_hide_header Cache-Control;' in nginx
+
+
+def test_limites_configurables_en_compose_con_los_valores_de_la_api():
+    """Cada cuota de Ajustes llega al contenedor y su valor por defecto coincide con app/config.py."""
+    import re
+    from app.config import Ajustes
+    entorno = yaml.safe_load((RAIZ/'infra/compose.yaml').read_text(encoding='utf-8'))['x-backend']['environment']
+    campos = [c for c in Ajustes.model_fields if c.startswith('limite_')] + ['auditoria_retencion_dias']
+    assert len(campos) == 10
+    for campo in campos:
+        valor = entorno[campo.upper()]
+        defecto = re.fullmatch(r'\$\{' + campo.upper() + r':-(\d+)\}', valor)
+        assert defecto and int(defecto[1]) == Ajustes.model_fields[campo].default, campo
+    ejemplo = (RAIZ/'infra/.env.example').read_text(encoding='utf-8')
+    assert all(f'{c.upper()}=' in ejemplo for c in campos)

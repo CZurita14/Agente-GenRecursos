@@ -15,6 +15,13 @@ from urllib.parse import urlsplit
 
 REPO = Path(__file__).resolve().parents[1]
 PROTEGIDOS = {"genrecursos", "rootdev", "genrecursos-db"}
+LIMITES = {  # Variable opcional → máximo admitido por app/config.py (mínimo 1).
+    **{clave: 100000 for clave in (
+        "LIMITE_IP_MINUTO", "LIMITE_USUARIO_MINUTO", "LIMITE_CODIGO_IP_HORA", "LIMITE_CODIGO_CORREO_HORA",
+        "LIMITE_VERIFICAR_IP_MINUTO", "LIMITE_VERIFICAR_CORREO_MINUTO", "LIMITE_GENERAR_CORREO_HORA",
+        "LIMITE_PDF_CORREO_HORA", "LIMITE_EDITAR_CORREO_MINUTO")},
+    "AUDITORIA_RETENCION_DIAS": 365,
+}
 IDENTIFICADOR = re.compile(r"[a-z_][a-z0-9_]{0,62}\Z")
 HOST = re.compile(r"(?=.{1,253}\Z)[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\Z")
 
@@ -137,6 +144,10 @@ def validar(datos, archivo):
                and rango.num_addresses >= 4, "RANGO_DINAMICO")
     except (ValueError, TypeError):
         raise ErrorOperacion("Configuración inválida: RANGO_DINAMICO.") from None
+    # Mismos rangos que app/config.py: un valor fuera de rango dejaría la API sin arrancar.
+    for clave, maximo in LIMITES.items():
+        if clave in datos:
+            exigir(re.fullmatch(r"[1-9][0-9]{0,5}", v(clave)) is not None and int(v(clave)) <= maximo, clave)
     exigir(bool(HOST.fullmatch(v("DOMINIO"))), "DOMINIO")
     exigir(bool(v("TLS_DIR")), "TLS_DIR")
     tls = Path(v("TLS_DIR"))

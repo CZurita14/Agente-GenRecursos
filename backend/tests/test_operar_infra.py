@@ -76,6 +76,8 @@ def test_validar_no_invoca_docker_ni_revela_secretos(operar, entorno, monkeypatc
     {"IP_PROXY": "172.29.8.255"}, {"IP_PROXY": "172.29.8.10/32"},
     {"RANGO_DINAMICO": "172.29.8.0/25"}, {"RANGO_DINAMICO": "172.29.9.0/25"},
     {"RANGO_DINAMICO": "172.29.8.128/31"}, {"RANGO_DINAMICO": "172.29.8.129/25"},
+    {"LIMITE_IP_MINUTO": "0"}, {"LIMITE_IP_MINUTO": "abc"}, {"LIMITE_IP_MINUTO": "100001"},
+    {"LIMITE_IP_MINUTO": "-5"}, {"AUDITORIA_RETENCION_DIAS": "366"}, {"LIMITE_PDF_CORREO_HORA": "1.5"},
     {"TLS_DIR": "inexistente"}, {"DOMINIO": "https://host/ruta"},
     {"POSTGRES_PASSWORD": "a" * 31}, {"POSTGRES_PASSWORD": "valid-" * 8 + "@"},
     {"POSTGRES_USER": "user@db"}, {"POSTGRES_DB": "db/name"},
@@ -84,6 +86,11 @@ def test_validacion_falla_sin_valores_sensibles(operar, entorno, capsys, change)
     assert operar.main(["--entorno", str(entorno(**change)), "validar"]) == 1
     out = capsys.readouterr()
     assert "secreto-malformado" not in out.out + out.err
+
+
+def test_limites_admitidos(operar, entorno):
+    """Con NAT institucional se sube la cuota por IP; los límites son opcionales."""
+    assert operar.main(["--entorno", str(entorno(LIMITE_IP_MINUTO="5000", AUDITORIA_RETENCION_DIAS="90")), "validar"]) == 0
 
 
 def test_desarrollo_sin_smtp(operar, entorno):

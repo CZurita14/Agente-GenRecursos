@@ -36,6 +36,7 @@ Partir de `infra/.env.example`, guardar la copia fuera del repositorio y restrin
 - Producción exige `SMTP_MODO=smtp`, `SMTP_HOST` y `SMTP_REMITENTE` no vacíos. Desarrollo admite `SMTP_MODO=deshabilitado`; no enviar ni imprimir códigos como sustituto de la prueba institucional de SMTP.
 - `ADMINISTRADORES`: lista JSON de direcciones de `uti.edu.ec` o `indoamerica.edu.ec`, no vacía en producción. En desarrollo puede estar vacía u omitirse. Se valida la sintaxis, no la autorización institucional de las personas.
 - `RED_PROXY`: subred IPv4 canónica distinta de `/0`; `IP_PROXY`: dirección IPv4 exacta dentro de ella, distinta de red y broadcast. `RANGO_DINAMICO`: parte de `RED_PROXY` de la que Docker asigna direcciones a `api` y `web`; debe excluir `IP_PROXY` (por defecto la mitad alta del /28). Sin él, el servicio que se conecta primero puede tomar la IP del proxy y este no arranca. No ampliar proxies confiables a toda la institución. Revisar conflictos de red antes de arrancar.
+- `LIMITE_*` y `AUDITORIA_RETENCION_DIAS` (opcionales): enteros entre 1 y 100000 (retención: 1 a 365), los mismos rangos que la API. Si faltan, se usan los valores por defecto de `app/config.py`. Con NAT institucional subir `LIMITE_IP_MINUTO`.
 - `DOMINIO`: hostname sin esquema, puerto ni ruta. `TLS_DIR`: directorio con `fullchain.pem` y `privkey.pem`.
 
 La validación local no certifica fortaleza criptográfica, vigencia de certificados, conectividad de IA/SMTP, DNS ni recepción de correos. Revisarlos durante la entrega a TI.

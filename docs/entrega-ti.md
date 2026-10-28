@@ -90,6 +90,9 @@ Se parte de [`infra/.env.example`](../infra/.env.example). El archivo real se gu
 | `SMTP_MODO` | `smtp` | Fijo |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_REMITENTE` / `SMTP_USUARIO` / `SMTP_CLAVE` | Datos del punto 6 | TI |
 | `ADMINISTRADORES` | Lista JSON, p. ej. `["persona@uti.edu.ec"]`; no vacía en producción | Institución |
+| `LIMITE_IP_MINUTO` | Peticiones por minuto por IP (600). **Subir si los docentes salen por una sola IP (NAT)**: todos comparten esta cuota. | TI |
+| Otros `LIMITE_*` | Cuotas por usuario y por correo (pedir código, verificar, generar, subir PDF, editar). Valores por defecto en `infra/.env.example`; normalmente no se tocan. | Opcional |
+| `AUDITORIA_RETENCION_DIAS` | Días que se guardan los registros de acceso (30, máximo 365) | Institución |
 
 Fijadas en el Compose (no se cambian por variable): subida de PDF hasta 10 MiB y 20 s de análisis; JSON hasta 1 MiB; timeouts de IA 120 s (generación) y 240 s (revisión).
 
@@ -158,10 +161,10 @@ No ejecutar `docker compose config` sin filtrar: imprime los secretos.
 
 ## 8. Decisiones abiertas para TI
 
-1. **Cuota por IP.** La API limita a 600 peticiones por minuto por IP. Si los docentes salen por una misma IP (NAT), comparten ese límite. El Compose aún no expone esta variable (`LIMITE_IP_MINUTO`); si TI prevé NAT, ajustarla antes de abrir el acceso.
+1. **Cuota por IP.** La API limita a 600 peticiones por minuto por IP. Si los docentes salen por una misma IP (NAT), comparten ese límite: TI debe indicarlo y subir `LIMITE_IP_MINUTO` antes de abrir el acceso. La cuota por usuario (120/min) sigue protegiendo frente a abusos individuales.
 2. **Réplicas del worker** según la concurrencia que admita el vLLM (§5).
 3. **Balanceador delante del proxy.** Si existe, revisar la cadena de IPs reenviadas antes de habilitarlo.
-4. **Retención** de respaldos y de registros de acceso (hoy 30 días).
+4. **Retención** de respaldos y de registros de acceso (`AUDITORIA_RETENCION_DIAS`, hoy 30 días).
 
 ## 9. Lo que no se ha probado
 
