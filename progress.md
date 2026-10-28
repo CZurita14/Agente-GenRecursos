@@ -71,7 +71,7 @@ P1 y P2 publicados en `origin/p1/nucleo` y `origin/p2/lector`. Las capturas del 
 | P3 Herramientas | 🔄 | [P3a](docs/superpowers/plans/2026-10-27-p3a-herramientas-sin-ia.md) · [P3b](docs/superpowers/plans/2026-10-27-p3b-herramientas-con-ia.md) | **P3b ✅** (rama `p3/con-ia`, `0270b53`…`c7e10dd`): simulacro, repaso integrador, guía de la evidencia, estudio de caso y guía del producto final con IA; §9.4.2 aplicada. **P3a ✅** (rama `p3/sin-ia`, `a90ab9b`, `0f9d82b`): hoja de ruta, autoevaluación con la rúbrica (momento y final) y lista de verificación de la evidencia, sin IA. P3b (herramientas con IA de momento/asignatura, H7) por planificar; formato final bloqueado por B3 |
 | P4 API y acceso | ✅ | [plan](docs/superpowers/plans/2026-10-27-p4-api-y-acceso.md) | A1–A5 implementadas; activación institucional pendiente B4/B9/B10 y P7 |
 | P5 Chat de ajustes | ⬜ | Por escribir | |
-| P6 Entrega y frontend | ⬜ | Por escribir | |
+| P6 Entrega y frontend | 🔄 | [P6a menú](docs/superpowers/plans/2026-10-28-p6a-frontend-menu.md) | **P6a ✅** (rama `p6/menu`): `frontend/` sobre la plantilla UTI; ingreso con código, menú opción B (Generar herramientas · Perfil docente en espera), subir sílabo y Mis asignaturas, probado con la API real. Siguiente: Mis recursos (revisar, generar por clase/momento, exportar) |
 | P7 Despliegue | ⬜ | Por escribir | D4 bloqueada por TI |
 
 ### P4 · Registro por tarea
@@ -152,6 +152,9 @@ P1 y P2 publicados en `origin/p1/nucleo` y `origin/p2/lector`. Las capturas del 
 ---
 
 ## Bitácora (lo ya hecho)
+
+### 2026-10-28
+- **P6a · Frontend, menú** (rama `p6/menu`): diseño elegido por el usuario en maquetas (opción B: barra superior y dos caminos; «Perfil docente» visible pero en espera hasta la documentación). `frontend/` copiado de la plantilla institucional `andresinose/plantilla-UTI`; cliente de la API con cookie HttpOnly y proxy `/api` de Vite; ingreso con código, inicio, subir sílabo y Mis asignaturas. 17 pruebas unitarias y 7 de navegador (API simulada). Prueba real: ingreso con cuenta de prueba (código en consola), sílabo de Datos subido (201, ingenierias, 6 semanas/11 clases) y visible en Mis asignaturas.
 
 ### 2026-10-27
 - **P3b · Herramientas con IA de momento y asignatura** (rama `p3/con-ia`): contexto de momento/asignatura sobre `ContextoClase` y tabla `DEFINICIONES` (el coordinador ya no tiene la ficha escrita en el código); simulacro, repaso integrador, guía de la evidencia, estudio de caso y guía del producto final; §9.4.2 (TIC M4) bloquea la IA en el momento y en sus clases; requisitos del sílabo antes de encolar. Defecto del P2 corregido: la política de IA de TIC M3 salía vacía (fila partida al pie). Humo real: 3/4 listas, simulacro 3/4 ítems ok, 17 llamadas, 503 s, máx. 5 614 tokens. Revisión final independiente: 0 críticos, 6 importantes (1–5 corregidos con TDD; 6 documentado: los sílabos guardados antes de `0270b53` deben volver a subirse). Suite: 610 pasan/3 omitidas.
