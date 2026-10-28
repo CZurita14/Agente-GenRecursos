@@ -44,13 +44,13 @@
   - si la revisión no coincide, responde `409`;
   - el detalle del recurso expone `validado` (bool), `validado_por` y `validado_en`.
 - Un `PUT` que cambia el contenido pone `validado_por` y `validado_en` en `null`.
-- [ ] Pruebas:
+- [x] Pruebas:
   - `test_validar_y_detalle`;
   - `test_lector_no_valida`;
   - `test_editar_anula_validacion`;
   - `test_validar_revision_vieja_409`;
   - `test_otra_asignatura_404`.
-- [ ] Commit `feat(recursos): validación del docente`.
+- [x] Commit `feat(recursos): validación del docente`.
 
 ### Task 2: Exportación HTML (backend)
 
@@ -66,7 +66,7 @@
   - **cuestionario y simulacro:** ítems con sus opciones y una autocorrección en JavaScript en línea que, al elegir, muestra la justificación de esa opción;
   - **secciones** (ficha, repaso, guía, caso, guía final, sin IA): un recorrido genérico de diccionarios y listas, con títulos legibles y en orden;
   - el pie de §13.
-- [ ] Pruebas:
+- [x] Pruebas:
   - `test_html_cuestionario_autocorregible`: tiene `<script>`, sin `src=`, y las opciones;
   - `test_html_escapa_contenido`: un ítem con `<script>alert(1)</script>` sale como `&lt;script&gt;`;
   - `test_html_pie_y_politica`;
@@ -74,7 +74,7 @@
   - `test_exportar_sin_validar_409`;
   - `test_exportar_validado_200_attachment`;
   - `test_formato_no_soportado_422`.
-- [ ] Commit `feat(exportar): HTML autónomo para Canvas`.
+- [x] Commit `feat(exportar): HTML autónomo para Canvas`.
 
 ### Task 3: Cliente y vista Asignatura (frontend)
 
@@ -98,7 +98,7 @@
   - un botón «Hoja de ruta y guía final» para el ámbito asignatura;
   - un clic en una clase o en un momento abre la vista Actividad.
 - `Asignaturas`: un clic en una fila abre `Asignatura`.
-- [ ] Commit `feat(frontend): vista de la asignatura por semana`.
+- [x] Commit `feat(frontend): vista de la asignatura por semana`.
 
 ### Task 4: Actividad, generación y progreso (frontend)
 
@@ -113,7 +113,7 @@
   - barra por estado (en cola, generando, verificando, revisando, listo, requiere revisión, error);
   - al quedar listos, un enlace a cada recurso;
   - limpia el intervalo al salir.
-- [ ] Commit `feat(frontend): elegir actividad, generar y seguir el avance`.
+- [x] Commit `feat(frontend): elegir actividad, generar y seguir el avance`.
 
 ### Task 5: Revisar, validar y descargar (frontend) y Mis recursos
 
@@ -124,18 +124,18 @@
   - «Validar recurso»: si hay alertas, un `Modal` pide confirmar; con 409, recarga;
   - una vez validado, «Descargar HTML para Canvas» (un enlace con `download`).
 - `Recursos` («Mis recursos»): elegir la asignatura y ver la tabla de recursos (herramienta, ámbito, estado, validado y fecha), con apertura de cada uno.
-- [ ] Pruebas de navegador (API simulada):
+- [x] Pruebas de navegador (API simulada):
   - elegir clase → actividad → generar → progreso → recurso;
   - el momento restringido muestra el aviso;
   - validar con alertas pide confirmación;
   - la descarga aparece solo validado;
   - Mis recursos abre un recurso.
-- [ ] `npm run check` y `npm run test:browser` → verde. Commit `feat(frontend): revisar, validar y descargar para Canvas`.
+- [x] `npm run check` y `npm run test:browser` → verde. Commit `feat(frontend): revisar, validar y descargar para Canvas`.
 
 ### Task 6: Prueba real
 
-- [ ] Con la API y el `worker` (servidor de IA), sobre la asignatura de prueba:
+- [x] Con la API y el `worker` (servidor de IA), sobre la asignatura de prueba:
   - generar una herramienta sin IA (hoja de ruta) y una con IA (ficha de clase);
   - revisar, validar y descargar;
   - abrir el HTML descargado.
-- [ ] `progress.md` y commit `docs: P6b mis recursos`.
+- [x] `progress.md` y commit `docs: P6b mis recursos`.
