@@ -1,9 +1,18 @@
-import { AppLayout, Card } from './components';
+import { AppLayout, Button, Card } from './components';
+import { useSesion } from './sesion/useSesion';
+import { Ingreso } from './vistas/Ingreso';
 
-/** Punto de entrada de las vistas; el menú se construye en las siguientes tareas. */
+/** Sin sesión: ingreso. Con sesión: la aplicación (el menú llega en la T4). */
 export default function App() {
-  return <AppLayout>
-    <h1 className="text-2xl font-bold">Recursos de estudio</h1>
-    <Card title="En construcción">El menú principal se agrega en las siguientes tareas.</Card>
+  const { usuario, cargando, ingresar, salir } = useSesion();
+
+  if (cargando) {
+    return <AppLayout><p className="text-muted" role="status">Cargando…</p></AppLayout>;
+  }
+  if (!usuario) {
+    return <AppLayout><Ingreso onIngresar={ingresar} /></AppLayout>;
+  }
+  return <AppLayout actions={<Button variant="ghost" size="sm" onClick={salir}>Salir</Button>}>
+    <Card title="Sesión iniciada">{usuario.correo}</Card>
   </AppLayout>;
 }
