@@ -1,6 +1,6 @@
 # P5 · Chat de ajustes — diseño para aprobación
 
-**Estado:** diseño aprobado por el usuario; implementación y cierre técnico completos en `codex/p5-chat`, publicación en curso. La aceptación con docentes piloto es independiente del cierre técnico.
+**Estado:** implementación y cierre técnico completos, commit `7f39d2d` publicado en [PR #11](https://github.com/CZurita14/Agente-GenRecursos/pull/11) sobre P6d (#10). La aceptación con docentes piloto es independiente del cierre técnico.
 
 **Objetivo:** satisfacer el criterio 10: «Haz más difícil la pregunta 3» modifica solo esa pregunta, la verifica y revisa, conserva las demás y exige nueva validación docente.
 

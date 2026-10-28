@@ -3,7 +3,7 @@
 > **Para qué sirve:** es la memoria del proyecto. Al retomar, **se lee primero este archivo** y solo después, si hace falta, el documento puntual que enlaza.
 > No hace falta recorrer el repositorio completo.
 >
-> **Última actualización:** 2026-10-28 · **Fase:** 1 · **Bloque activo:** P5 implementado en `codex/p5-chat`, cierre técnico y publicación; aceptación con docentes piloto pendiente.
+> **Última actualización:** 2026-10-28 · **Fase:** 1 · **Bloque activo:** P5 publicado en PR #11 sobre P6d (#10); aceptación con docentes piloto pendiente. Siguiente: preparar P7.
 
 ## Cómo se actualiza
 
@@ -154,6 +154,7 @@ P1–P6 implementados técnicamente, incluido chat privado de ajustes y exportac
 ## Bitácora (lo ya hecho)
 
 ### 2026-10-28
+- **Publicación P5:** commit `7f39d2d` en `origin/codex/p5-chat`; PR [#11](https://github.com/CZurita14/Agente-GenRecursos/pull/11) abierto sobre `codex/p6d-exportacion` (#10). Cierre técnico verificado; no se fusionó ni desplegó. La aceptación académica con docentes piloto sigue pendiente.
 - **P5 implementado:** cuatro acciones estrictas, chat privado, cola con fencing, generación desde chat y regeneración selectiva; revisión optimista, nueva validación y evidencia con alcance exacto. Corregidos hallazgos de privacidad, selección numérica, concurrencia de borradores y seguimiento de trabajos antiguos. **783 backend pasan/4 deseleccionadas**, **25 unitarias frontend y 28 navegador**, typecheck/build pasan; **humo Qwen real: 1 pasa** (dos pedidos sintéticos). Pendiente piloto humano; preparada matriz de 15 casos. No se migró ni desplegó la base operativa: activar `007_chat.sql` requiere reiniciar API/workers de forma coordinada.
 - **Preparación P5:** revisados §3.4/§9.2/A5, cola, orquestador e historial de edición. [Diseño propuesto](docs/superpowers/plans/2026-10-28-p5-chat-ajustes.md): chat privado asíncrono, cuatro acciones estrictas y regeneración selectiva con revisión optimista. Pendiente de aprobación antes de implementar; prueba con docentes piloto y H7 siguen como puertas explícitas.
 - **Publicación P6d:** commit `e6dffb8` publicado en `origin/codex/p6d-exportacion`; PR [#10](https://github.com/CZurita14/Agente-GenRecursos/pull/10) abierto sobre `p6/edicion` (#9), sin fusionar. Revisión visual, pruebas de permisos y regresión final completadas.
