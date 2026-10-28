@@ -30,6 +30,7 @@ from app.recursos.servicio import ServicioRecursos
 from app.control.identidad import ProxyInvalido, ip_cliente, operacion_segura
 from app.control.limites import LimiteExcedido
 from app.control.servicio import ControlAcceso
+from app.operacion import preparado
 
 
 def crear_app(config: Ajustes | None = None, *, transporte=None, auth=None, conexion=None, lector_pdf=None) -> FastAPI:
@@ -91,7 +92,7 @@ def crear_app(config: Ajustes | None = None, *, transporte=None, auth=None, cone
         if request.method not in {"GET", "HEAD", "OPTIONS"}:
             if request.headers.get("origin") != config.api_origen:
                 return JSONResponse({"detail": "Origen no permitido"}, status_code=403)
-        publica = ((request.url.path == "/salud")
+        publica = ((request.method in {"GET", "HEAD"} and request.url.path == "/salud")
                    or (request.method == "POST" and request.url.path in {"/auth/codigo", "/auth/verificar"}))
         if not publica:
             usuario = None
@@ -106,6 +107,10 @@ def crear_app(config: Ajustes | None = None, *, transporte=None, auth=None, cone
 
     @app.middleware("http")
     async def acceso(request: Request, siguiente):
+        # Sondas internas exactas y de solo lectura. No dependen de sesión,
+        # cuotas ni auditoría: estas también requieren la BD que comprobamos.
+        if request.method in {"GET", "HEAD"} and request.url.path in {"/salud/vivo", "/salud/listo"}:
+            return await siguiente(request)
         inicio = time.monotonic()
         request.state.usuario = None
         try:
@@ -152,5 +157,17 @@ def crear_app(config: Ajustes | None = None, *, transporte=None, auth=None, cone
         return JSONResponse({"estado": "ok" if disponible else "degradado",
                              "ia": disponible, "agentes": sorted(app.state.perfiles)},
                             status_code=200 if disponible else 503)
+
+    @app.api_route("/salud/vivo", methods=["GET", "HEAD"])
+    async def vivo():
+        return JSONResponse({"estado": "ok"}, headers={"Cache-Control": "no-store"})
+
+    @app.api_route("/salud/listo", methods=["GET", "HEAD"])
+    async def listo():
+        ok = await run_in_threadpool(preparado, config, conexion=conexion,
+                                    perfiles=getattr(app.state, "perfiles", {}))
+        return JSONResponse({"estado": "ok" if ok else "no-listo"},
+                            status_code=200 if ok else 503,
+                            headers={"Cache-Control": "no-store"})
 
     return app

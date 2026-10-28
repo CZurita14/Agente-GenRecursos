@@ -9,6 +9,15 @@ from app.llm.cliente import ServidorNoDisponible
 from app.silabo.lector.errores import SilaboIlegible
 
 
+def ruta_publica(c, funcion):
+    """Ruta de prueba en un camino público por POST (/salud solo admite GET/HEAD).
+
+    Se coloca primero para que sustituya al manejador real de /auth/codigo.
+    """
+    c.app.add_api_route("/auth/codigo", funcion, methods=["POST"])
+    c.app.router.routes.insert(0, c.app.router.routes.pop())
+
+
 def cliente(respuesta=None, error=False):
     def modelos(request):
         assert request.url.path == "/v1/models"
@@ -90,9 +99,9 @@ def test_error_no_incluye_contenido_interno(error, codigo):
     def fallar():
         raise error("contenido privado")
 
-    c.app.add_api_route("/salud", fallar, methods=["POST"])
+    ruta_publica(c, fallar)
     with c:
-        r = c.post("/salud", headers={"Origin": "https://materiales.example"})
+        r = c.post("/auth/codigo", headers={"Origin": "https://materiales.example"})
     assert r.status_code == codigo
     assert "contenido privado" not in r.text
 
@@ -103,9 +112,9 @@ def test_validacion_no_devuelve_valores_recibidos():
     def validar(numero: int):
         return numero
 
-    c.app.add_api_route("/salud", validar, methods=["POST"])
+    ruta_publica(c, validar)
     with c:
-        r = c.post("/salud?numero=contenido-privado",
+        r = c.post("/auth/codigo?numero=contenido-privado",
                    headers={"Origin": "https://materiales.example"})
     assert r.status_code == 422
     assert "contenido-privado" not in r.text

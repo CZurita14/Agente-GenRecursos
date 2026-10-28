@@ -49,7 +49,9 @@ def ip_cliente(request, proxies):
 _RUTAS = [
     (r"/asignaturas/[^/]+/chat(?:/[^/]+)?", "chat"),
     (r"/asignaturas/[^/]+/recursos/[^/]+/items/[^/]+/regenerar", "regenerar"),
-    (r"/salud", "salud"), (r"/auth/codigo", "auth.codigo"),
+    (r"/salud", "salud"),
+    (r"/salud/vivo", "salud.vivo"), (r"/salud/listo", "salud.listo"),
+    (r"/auth/codigo", "auth.codigo"),
     (r"/auth/verificar", "auth.verificar"), (r"/auth/yo", "auth.yo"),
     (r"/auth/salir", "auth.salir"), (r"/silabos", "silabos"),
     (r"/privacidad", "privacidad"), (r"/admin/consumo", "admin.consumo"),

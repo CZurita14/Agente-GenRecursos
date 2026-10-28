@@ -78,6 +78,24 @@ Preparar ficha con requisitos, variables, redes, puertos, dominio/certificados, 
 
 Pruebas de configuración y operación; regresión backend/frontend cuando se modifique código; integración real de Compose/proxy/BD con datos sintéticos. Comprobar que Qwen caído deja API de consulta utilizable y trabajos en espera, sin exponer el servidor de IA. Actualizar `progress.md`, guardar commits y abrir PR sobre P5 sin fusionar.
 
+## Resultado de la instalación aislada (2026-10-28)
+
+Proyecto `genrecursos-p7-prueba` con volumen, red y puertos propios (18080/18443), certificado autofirmado desechable, datos sintéticos (fixture del sílabo y una sesión de prueba) y Qwen apuntando a una dirección inalcanzable (TEST-NET) a propósito. `genrecursos-db` de desarrollo no se tocó; el proyecto de prueba se eliminó al terminar.
+
+Defectos encontrados al arrancar de verdad y corregidos, cada uno con prueba de regresión en `test_infra_config.py` / `test_operar_infra.py`:
+
+1. `.dockerignore` excluía `frontend/public`: la imagen web quedaba sin favicon ni logo UTI.
+2. `tmpfs: [/tmp:size=…,mode=1777]` en estilo de flujo YAML: la coma partía la entrada y Docker rechazaba `web` y `proxy`.
+3. nginx con raíz de solo lectura intentaba crear `fastcgi/uwsgi/scgi_temp` en `/var/cache/nginx`: `web` no arrancaba. Todos los temporales van a `/tmp`.
+4. `api` o `web` podían tomar la IP fija del proxy al unirse antes a `borde` («Address already in use»). Nuevo `RANGO_DINAMICO` (`ip_range`) que excluye `IP_PROXY`, validado por `operar.py`.
+5. El proxy solo estaba en redes internas y Docker **no publicaba sus puertos**: el sitio era inalcanzable. Nueva red `publica`, exclusiva del proxy.
+
+Además, tres pruebas de `test_api.py` usaban un POST sobre `/salud`, que ahora solo es público por GET/HEAD; pasan a una ruta pública por POST.
+
+Verificado (24/24 por el proxy HTTPS, validando el certificado de prueba): redirección 308 con destino fijo; cabeceras HSTS/CSP/X-Frame-Options/nosniff; favicon y logo; `/api/salud` y `/api/salud/listo` no se publican; 401 sin caché; subida de 11 MiB rechazada en el borde (413); sesión, asignaturas y menú; hoja de ruta generada, validada y descargada en HTML, PDF y DOCX desde la imagen Linux; ficha con IA aceptada (202) y en espera mientras consultas y descargas siguen respondiendo. `X-Forwarded-For` falsificado ignorado (14 accesos, un solo seudónimo de IP). Migración repetida sin cambios. Worker sano con la IA caída. Respaldo con manifiesto SHA-256; restauración en base nueva con conteos y hash de contenido idénticos; rechaza restaurar sobre una base existente o la operativa. Reinicio completo conserva datos e IP del proxy. Suite backend: 852 pasan / 4 deseleccionadas (servidor real).
+
+No probado aquí: certificado institucional, SMTP real, Qwen real dentro de Compose, servidor de TI (B4/B5/B6).
+
 ## Puertas que este trabajo no puede sustituir
 
 - B3/H8: plantilla académica; H7 y criterio de dificultad acordados con el área académica.
