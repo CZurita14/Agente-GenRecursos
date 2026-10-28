@@ -47,9 +47,11 @@ def test_html_secciones(silabo):
              "aplicacion": {"ejemplo": {"enunciado": "Enun", "pasos": ["P1"], "resultado": "R"}, "autocomprobacion": ["Q1"]}}
     html = exportar_html(_recurso("ficha_clase", ficha), contexto_clase(silabo, "M2-S1"))
     assert "Ideas clave" in html and "<li>Idea A</li>" in html and "Autocomprobación" in html
+    assert html.index("Ideas clave") < html.index("Ejemplo resuelto") < html.index("Autocomprobación")
+    assert "<ol><li>P1</li></ol>" in html
     hoja = generar_sin_ia("hoja_ruta", silabo, "asignatura")
     html = exportar_html(_recurso("hoja_ruta", hoja, "asignatura"), contexto_por_id(silabo, "asignatura"))
-    assert "Semanas" in html and silabo.problema.producto_final[:30] in html
+    assert "Calendario de clases" in html and "<table>" in html and "numero_clase" not in html.lower() and silabo.problema.producto_final[:30] in html
 
 
 def _producir_validado(entorno):

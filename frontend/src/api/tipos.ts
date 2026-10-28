@@ -100,8 +100,16 @@ export interface RecursoResumen {
   creado: string;
 }
 
+/** Presentación ordenada de una herramienta (backend: app/exportar/presentacion.py). */
+export type Bloque =
+  | { tipo: 'texto'; titulo: string; texto: string }
+  | { tipo: 'lista'; titulo: string; items: string[]; numerada: boolean }
+  | { tipo: 'tabla'; titulo: string; columnas: string[]; filas: string[][] }
+  | { tipo: 'grupo'; titulo: string; bloques: Bloque[] };
+
 export interface Recurso extends RecursoResumen {
   contenido: unknown;
+  presentacion: Bloque[];
   evidencia: Record<string, unknown>;
   validado: boolean;
   validado_por: string | null;

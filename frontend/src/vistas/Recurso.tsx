@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { CheckCircle2, Download, ShieldCheck } from 'lucide-react';
 import { Alert, Badge, Button, Card, Modal } from '../components';
 import { ErrorApi, recurso as cargarRecurso, urlExportar, validar } from '../api/cliente';
-import type { Recurso as TipoRecurso } from '../api/tipos';
+import type { Bloque, Recurso as TipoRecurso } from '../api/tipos';
 import { nombreAmbito, nombreHerramienta } from '../api/herramientas';
 
 interface RecursoProps {
@@ -16,9 +16,6 @@ interface RecursoProps {
 interface Item { item_id: string; pregunta: string; contexto?: string; correcta: number; opciones: { texto: string; justificacion?: string }[] }
 
 const esItems = (c: unknown): c is Item[] => Array.isArray(c) && c.every(i => i && typeof i === 'object' && 'opciones' in i);
-const OCULTAS = new Set(['item_id', 'escenario']);
-const titulo = (k: string) => (k.charAt(0).toUpperCase() + k.slice(1)).replace(/_/g, ' ');
-
 /** Alertas del verificador y del revisor por ítem o sección (evidencia del coordinador). */
 function alertas(r: TipoRecurso): Record<string, string[]> {
   const verificaciones = (r.evidencia.verificaciones ?? {}) as Record<string, string[]>;
@@ -29,17 +26,23 @@ function alertas(r: TipoRecurso): Record<string, string[]> {
   return salida;
 }
 
-/** Recorrido genérico de secciones (React escapa el texto). */
-function Valor({ valor }: { valor: unknown }): ReactNode {
-  if (Array.isArray(valor)) {
-    if (valor.every(v => typeof v !== 'object' || v === null)) return <ul className="list-disc pl-6 text-sm space-y-1">{valor.map((v, i) => <li key={i}>{String(v)}</li>)}</ul>;
-    return <div className="space-y-2">{valor.map((v, i) => <div key={i} className="rounded-lg border border-line p-3"><Valor valor={v} /></div>)}</div>;
+/** Bloque de la presentación ordenada; el título baja de nivel dentro de un grupo (React escapa el texto). */
+function VistaBloque({ b, nivel = 2 }: { b: Bloque; nivel?: number }): ReactNode {
+  const Titulo = `h${Math.min(nivel + 1, 6)}` as 'h3';
+  const titulo = <Titulo className={nivel === 2 ? 'font-bold' : 'text-sm font-bold'}>{b.titulo}</Titulo>;
+  if (b.tipo === 'texto') return <section>{titulo}<p className="text-sm mt-1 whitespace-pre-line">{b.texto}</p></section>;
+  if (b.tipo === 'lista') {
+    const Lista = b.numerada ? 'ol' : 'ul';
+    return <section>{titulo}<Lista className={`${b.numerada ? 'list-decimal' : 'list-disc'} pl-6 text-sm space-y-1 mt-1`}>
+      {b.items.map((x, i) => <li key={i}>{x}</li>)}</Lista></section>;
   }
-  if (valor && typeof valor === 'object') {
-    return <dl className="space-y-2">{Object.entries(valor).filter(([k, v]) => !OCULTAS.has(k) && v !== null && v !== '')
-      .map(([k, v]) => <div key={k}><dt className="text-sm font-bold">{titulo(k)}</dt><dd className="text-sm"><Valor valor={v} /></dd></div>)}</dl>;
-  }
-  return <span>{String(valor)}</span>;
+  if (b.tipo === 'tabla') return <section>{titulo}<div className="overflow-x-auto mt-1">
+    <table className="w-full text-sm border-collapse">
+      <thead><tr>{b.columnas.map((c, i) => <th key={i} scope="col" className="border border-line bg-app-soft px-2 py-1 text-left align-top">{c}</th>)}</tr></thead>
+      <tbody>{b.filas.map((f, i) => <tr key={i}>{f.map((c, k) => <td key={k} className="border border-line px-2 py-1 align-top">{c}</td>)}</tr>)}</tbody>
+    </table></div></section>;
+  return <section className="rounded-lg border border-line p-3 space-y-3">{titulo}
+    {b.bloques.map((x, i) => <VistaBloque key={i} b={x} nivel={nivel + 1} />)}</section>;
 }
 
 /** Pasos 4 y 5: revisar con las alertas, validar y descargar el HTML para Canvas. */
@@ -103,7 +106,7 @@ export function Recurso({ aid, rid, puedeValidar, onVolver, onSesionVencida }: R
         {avisos[item.item_id]?.map((a, i) => <Alert key={i} tone="warning" className="mt-2">{a}</Alert>)}
       </li>)}</ol> : <>
         {Object.entries(avisos).map(([id, lista]) => lista.map((a, i) => <Alert key={`${id}${i}`} tone="warning" className="mb-2">{a}</Alert>))}
-        <Valor valor={r.contenido} />
+        <div className="space-y-4">{r.presentacion.map((b, i) => <VistaBloque key={i} b={b} />)}</div>
       </>}
     </Card>
 

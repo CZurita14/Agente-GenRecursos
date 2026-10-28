@@ -13,6 +13,7 @@ from app.asignaturas.servicio import exigir_acceso
 from app.herramientas.sin_ia import HERRAMIENTAS_SIN_IA, generar_sin_ia
 from app.recursos.validacion import EdicionInvalida, validar_contenido
 from app.exportar.html import exportar_html
+from app.exportar.presentacion import presentar
 from app.herramientas.politica import excluye_ia_en_evaluacion
 from app.silabo.contexto import contexto_por_id
 from app.silabo.modelo import SilaboUTI
@@ -71,6 +72,7 @@ def _detalle(recurso, asignatura):
               "actualizado", "verificacion_edicion", "validado_por", "validado_en")
     resultado = {k: recurso[k] for k in campos}
     resultado["validado"] = recurso["validado_por"] is not None
+    resultado["presentacion"] = presentar(recurso["herramienta"], recurso["contenido"])
     resultado["evidencia_vigente"] = recurso["revision"] == 0
     if recurso["herramienta"] in HERRAMIENTAS_SIN_IA:
         resultado["silabo_actualizado"] = _actualizado_sin_ia(recurso, asignatura)

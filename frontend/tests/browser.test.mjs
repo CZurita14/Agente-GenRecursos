@@ -42,7 +42,16 @@ const RECURSO = validado => ({ id: 'r1', trabajo_id: 't1', ambito_id: 'M2-S1', h
   validado: !!validado, validado_por: validado ? USUARIO.correo : null, validado_en: validado ? '2026-10-28T11:00:00Z' : null,
   evidencia: { borrador: true, verificaciones: { i1: [] }, veredictos: { i1: 'el revisor considera correctas las opciones 1 y 3' } },
   contenido: [{ item_id: 'i1', pregunta: '¿Qué prueba corresponde?', contexto: 'Una empresa ficticia.', correcta: 0,
-    opciones: [{ texto: 'Prueba t' }, { texto: 'ANOVA' }, { texto: 'Chi cuadrado' }, { texto: 'Regresión' }] }] });
+    opciones: [{ texto: 'Prueba t' }, { texto: 'ANOVA' }, { texto: 'Chi cuadrado' }, { texto: 'Regresión' }] }], presentacion: [] });
+// Ficha: contenido con claves internas; la vista solo usa la presentación ordenada.
+const FICHA = { ...RECURSO(false), id: 'r2', herramienta: 'ficha_clase', evidencia: {},
+  contenido: { aplicacion: { clase_id: 'M2-S1' }, conceptual: { numero_clase: 1 } },
+  presentacion: [
+    { tipo: 'lista', titulo: 'Ideas clave', items: ['Idea A', 'Idea B'], numerada: false },
+    { tipo: 'grupo', titulo: 'Ejemplo resuelto', bloques: [
+      { tipo: 'texto', titulo: 'Enunciado', texto: 'Una tienda mide ventas.' },
+      { tipo: 'lista', titulo: 'Pasos', items: ['Calcular la media', 'Interpretar'], numerada: true }] },
+    { tipo: 'tabla', titulo: 'Cómo se valora', columnas: ['Indicador', 'Qué observar'], filas: [['Precisión', 'Cálculo correcto']] }] };
 
 /** API simulada: `sesion` dice si /auth/yo responde 200 o 401. */
 async function abrir({ sesion = true, viewport, rutas = {} } = {}) {
@@ -79,7 +88,10 @@ async function abrir({ sesion = true, viewport, rutas = {} } = {}) {
         lotes_hechos: 1, error: null, estado: 'requiere_revision', recurso_id: 'r1' }]);
     }
     if (ruta === '/asignaturas/a1/recursos') return json(200, [{ id: 'r1', trabajo_id: 't1', ambito_id: 'M2-S1',
-      herramienta: 'cuestionario', version_silabo: '1.0', estado: 'requiere_revision', revision: 0, creado: '2026-10-28T10:00:00Z' }]);
+      herramienta: 'cuestionario', version_silabo: '1.0', estado: 'requiere_revision', revision: 0, creado: '2026-10-28T10:00:00Z' },
+      { id: 'r2', trabajo_id: 't2', ambito_id: 'M2-S1', herramienta: 'ficha_clase', version_silabo: '1.0', estado: 'listo',
+        revision: 0, creado: '2026-10-28T10:05:00Z' }]);
+    if (ruta === '/asignaturas/a1/recursos/r2') return json(200, FICHA);
     if (ruta === '/asignaturas/a1/recursos/r1') return json(200, RECURSO(estado.validado));
     if (ruta === '/asignaturas/a1/recursos/r1/validar') { estado.validado = true; return json(200, RECURSO(true)); }
     return json(404, { detail: 'no simulada' });
@@ -213,5 +225,21 @@ test('validar con alertas pide confirmación y habilita la descarga', async () =
   const enlace = page.getByRole('link', { name: 'Descargar HTML para Canvas' });
   await enlace.waitFor();
   assert.match(await enlace.getAttribute('href'), /\/api\/asignaturas\/a1\/recursos\/r1\/exportar\?formato=html$/);
+  await context.close();
+});
+
+test('ficha: secciones en orden, con títulos legibles y sin claves internas', async () => {
+  const { context, page } = await abrir();
+  await page.getByRole('navigation', { name: 'Navegación principal' }).getByRole('button', { name: 'Mis recursos', exact: true }).click();
+  await page.getByRole('button', { name: 'Revisar Ficha de clase' }).click();
+  await page.getByRole('heading', { name: 'Ideas clave' }).waitFor();
+  const titulos = await page.locator('main h3, main h4').allInnerTexts();
+  assert.deepEqual(titulos.filter(t => t !== 'Paso 4 · Revisa el contenido' && !t.startsWith('Paso 5')),
+    ['Ideas clave', 'Ejemplo resuelto', 'Enunciado', 'Pasos', 'Cómo se valora']);
+  assert.equal(await page.locator('main ol li').count(), 2);
+  await page.getByRole('columnheader', { name: 'Qué observar' }).waitFor();
+  await page.getByRole('cell', { name: 'Cálculo correcto' }).waitFor();
+  const texto = await page.locator('main').innerText();
+  assert.ok(!/clase_id|numero_clase|Clase id|Numero clase/i.test(texto), 'no deben verse claves internas');
   await context.close();
 });
