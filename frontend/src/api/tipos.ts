@@ -101,10 +101,13 @@ export interface RecursoResumen {
 }
 
 /** Presentación ordenada de una herramienta (backend: app/exportar/presentacion.py). */
+/** Camino dentro del contenido (claves e índices) de un texto editable (P6c). */
+export type Ruta = (string | number)[];
+
 export type Bloque =
-  | { tipo: 'texto'; titulo: string; texto: string }
-  | { tipo: 'lista'; titulo: string; items: string[]; numerada: boolean }
-  | { tipo: 'tabla'; titulo: string; columnas: string[]; filas: string[][] }
+  | { tipo: 'texto'; titulo: string; texto: string; ruta: Ruta | null }
+  | { tipo: 'lista'; titulo: string; items: string[]; numerada: boolean; ruta: Ruta | null }
+  | { tipo: 'tabla'; titulo: string; columnas: string[]; filas: string[][]; rutas: (Ruta | null)[][] }
   | { tipo: 'grupo'; titulo: string; bloques: Bloque[] };
 
 export interface Recurso extends RecursoResumen {
@@ -116,4 +119,6 @@ export interface Recurso extends RecursoResumen {
   validado_en: string | null;
   silabo_actualizado: boolean;
   evidencia_vigente: boolean;
+  /** Comprobaciones deterministas de la última edición (null si no se ha editado). */
+  verificacion_edicion: Record<string, string[]> | null;
 }

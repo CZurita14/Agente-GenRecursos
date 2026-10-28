@@ -43,15 +43,21 @@ const RECURSO = validado => ({ id: 'r1', trabajo_id: 't1', ambito_id: 'M2-S1', h
   evidencia: { borrador: true, verificaciones: { i1: [] }, veredictos: { i1: 'el revisor considera correctas las opciones 1 y 3' } },
   contenido: [{ item_id: 'i1', pregunta: '¿Qué prueba corresponde?', contexto: 'Una empresa ficticia.', correcta: 0,
     opciones: [{ texto: 'Prueba t' }, { texto: 'ANOVA' }, { texto: 'Chi cuadrado' }, { texto: 'Regresión' }] }], presentacion: [] });
-// Ficha: contenido con claves internas; la vista solo usa la presentación ordenada.
-const FICHA = { ...RECURSO(false), id: 'r2', herramienta: 'ficha_clase', evidencia: {},
-  contenido: { aplicacion: { clase_id: 'M2-S1' }, conceptual: { numero_clase: 1 } },
+// Ficha: contenido con claves internas; la vista solo usa la presentación ordenada (y sus rutas para editar).
+const FICHA = { ...RECURSO(false), id: 'r2', herramienta: 'ficha_clase', evidencia: {}, verificacion_edicion: null,
+  contenido: { aplicacion: { clase_id: 'M2-S1', ejemplo: { enunciado: 'Una tienda mide ventas.', pasos: ['Calcular la media', 'Interpretar'] } },
+    conceptual: { numero_clase: 1, ideas_clave: ['Idea A', 'Idea B'] } },
   presentacion: [
-    { tipo: 'lista', titulo: 'Ideas clave', items: ['Idea A', 'Idea B'], numerada: false },
+    { tipo: 'lista', titulo: 'Ideas clave', items: ['Idea A', 'Idea B'], numerada: false, ruta: ['conceptual', 'ideas_clave'] },
     { tipo: 'grupo', titulo: 'Ejemplo resuelto', bloques: [
-      { tipo: 'texto', titulo: 'Enunciado', texto: 'Una tienda mide ventas.' },
-      { tipo: 'lista', titulo: 'Pasos', items: ['Calcular la media', 'Interpretar'], numerada: true }] },
-    { tipo: 'tabla', titulo: 'Cómo se valora', columnas: ['Indicador', 'Qué observar'], filas: [['Precisión', 'Cálculo correcto']] }] };
+      { tipo: 'texto', titulo: 'Enunciado', texto: 'Una tienda mide ventas.', ruta: ['aplicacion', 'ejemplo', 'enunciado'] },
+      { tipo: 'lista', titulo: 'Pasos', items: ['Calcular la media', 'Interpretar'], numerada: true, ruta: ['aplicacion', 'ejemplo', 'pasos'] }] },
+    { tipo: 'tabla', titulo: 'Cómo se valora', columnas: ['Indicador', 'Qué observar'], filas: [['Precisión', 'Cálculo correcto']], rutas: [[null, null]] }] };
+const HOJA = { ...RECURSO(false), id: 'r3', ambito_id: 'asignatura', herramienta: 'hoja_ruta', evidencia: {}, contenido: {},
+  presentacion: [{ tipo: 'texto', titulo: 'Producto final', texto: 'Informe', ruta: null }] };
+/** Respuesta simulada del PUT: el contenido recibido, revisión + 1 y alertas de la edición. */
+const EDITADO = (base, cuerpo) => ({ ...base, contenido: cuerpo.contenido, revision: cuerpo.revision + 1, evidencia_vigente: false,
+  validado: false, validado_por: null, verificacion_edicion: {} });
 
 /** API simulada: `sesion` dice si /auth/yo responde 200 o 401. */
 async function abrir({ sesion = true, viewport, rutas = {} } = {}) {
@@ -90,8 +96,18 @@ async function abrir({ sesion = true, viewport, rutas = {} } = {}) {
     if (ruta === '/asignaturas/a1/recursos') return json(200, [{ id: 'r1', trabajo_id: 't1', ambito_id: 'M2-S1',
       herramienta: 'cuestionario', version_silabo: '1.0', estado: 'requiere_revision', revision: 0, creado: '2026-10-28T10:00:00Z' },
       { id: 'r2', trabajo_id: 't2', ambito_id: 'M2-S1', herramienta: 'ficha_clase', version_silabo: '1.0', estado: 'listo',
-        revision: 0, creado: '2026-10-28T10:05:00Z' }]);
+        revision: 0, creado: '2026-10-28T10:05:00Z' },
+      { id: 'r3', trabajo_id: 't3', ambito_id: 'asignatura', herramienta: 'hoja_ruta', version_silabo: '1.0', estado: 'listo',
+        revision: 0, creado: '2026-10-28T10:06:00Z' }]);
+    // --- P6c: edición (PUT con revisión y contenido completo) ---
+    if (route.request().method() === 'PUT') {
+      const cuerpo = JSON.parse(route.request().postData());
+      (estado.puts ??= []).push({ ruta, cuerpo });
+      if (estado.falla422) return json(422, { detail: 'El contenido editado no es válido' });
+      return json(200, EDITADO(ruta.endsWith('/r2') ? FICHA : RECURSO(false), cuerpo));
+    }
     if (ruta === '/asignaturas/a1/recursos/r2') return json(200, FICHA);
+    if (ruta === '/asignaturas/a1/recursos/r3') return json(200, HOJA);
     if (ruta === '/asignaturas/a1/recursos/r1') return json(200, RECURSO(estado.validado));
     if (ruta === '/asignaturas/a1/recursos/r1/validar') { estado.validado = true; return json(200, RECURSO(true)); }
     return json(404, { detail: 'no simulada' });
@@ -241,5 +257,76 @@ test('ficha: secciones en orden, con títulos legibles y sin claves internas', a
   await page.getByRole('cell', { name: 'Cálculo correcto' }).waitFor();
   const texto = await page.locator('main').innerText();
   assert.ok(!/clase_id|numero_clase|Clase id|Numero clase/i.test(texto), 'no deben verse claves internas');
+  await context.close();
+});
+
+/** Mis recursos → Revisar <nombre>. */
+async function revisar(page, nombre) {
+  await page.getByRole('navigation', { name: 'Navegación principal' }).getByRole('button', { name: 'Mis recursos', exact: true }).click();
+  await page.getByRole('button', { name: `Revisar ${nombre}` }).click();
+}
+
+test('editar la ficha: cambia el texto, guarda y vuelve a «Sin validar»', async () => {
+  const { context, page, estado } = await abrir();
+  await revisar(page, 'Ficha de clase');
+  await page.getByRole('button', { name: 'Editar' }).click();
+  assert.equal(await page.getByText('Guarda o cancela la edición antes de validar.').count(), 1);
+  await page.getByRole('textbox', { name: 'Enunciado' }).fill('Una cafetería mide sus ventas diarias.');
+  await page.getByRole('textbox', { name: 'Pasos 2' }).fill('Interpretar la media');
+  // Lo que viene de listas cerradas (tabla sin rutas) no se edita.
+  assert.equal(await page.getByRole('textbox', { name: 'Qué observar 1' }).count(), 0);
+  await page.getByRole('button', { name: 'Guardar cambios' }).click();
+  await page.getByText('Cambios guardados').waitFor();
+  const [{ ruta, cuerpo }] = estado.puts;
+  assert.equal(ruta, '/asignaturas/a1/recursos/r2');
+  assert.equal(cuerpo.revision, 0);
+  assert.equal(cuerpo.contenido.aplicacion.ejemplo.enunciado, 'Una cafetería mide sus ventas diarias.');
+  assert.deepEqual(cuerpo.contenido.aplicacion.ejemplo.pasos, ['Calcular la media', 'Interpretar la media']);
+  assert.equal(cuerpo.contenido.aplicacion.clase_id, 'M2-S1', 'las claves internas viajan intactas');
+  await page.getByText('Editado por el docente').waitFor();
+  await page.getByRole('button', { name: 'Validar recurso' }).waitFor();
+  await context.close();
+});
+
+test('editar pregunta: enunciado, clave y quitar (mínimo una)', async () => {
+  const { context, page, estado } = await abrir();
+  await revisar(page, 'Cuestionario');
+  await page.getByRole('button', { name: 'Editar' }).click();
+  await page.getByRole('textbox', { name: 'Pregunta 1: enunciado' }).fill('¿Qué prueba compara dos medias independientes?');
+  await page.getByRole('textbox', { name: 'Pregunta 1: justificación B' }).fill('ANOVA compara tres o más grupos.');
+  await page.getByRole('radio', { name: 'Pregunta 1: la clave es la opción C' }).check();
+  assert.ok(await page.getByRole('button', { name: 'Quitar la pregunta 1' }).isDisabled(), 'no se puede quitar la única pregunta');
+  await page.getByRole('button', { name: 'Guardar cambios' }).click();
+  await page.getByText('Cambios guardados').waitFor();
+  const [{ cuerpo }] = estado.puts;
+  assert.equal(cuerpo.contenido[0].pregunta, '¿Qué prueba compara dos medias independientes?');
+  assert.equal(cuerpo.contenido[0].opciones[1].justificacion, 'ANOVA compara tres o más grupos.');
+  assert.equal(cuerpo.contenido[0].correcta, 2);
+  await page.getByText('C) Chi cuadrado ✓ (clave)').waitFor();
+  // Tras editar, las alertas del revisor ya no aplican: se avisa.
+  await page.getByText('el revisor de IA no vuelve a revisar los cambios').waitFor();
+  assert.equal(await page.getByText('el revisor considera correctas las opciones 1 y 3').count(), 0);
+  await context.close();
+});
+
+test('si la API rechaza la edición (422) el borrador se conserva', async () => {
+  const { context, page, estado } = await abrir();
+  estado.falla422 = true;
+  await revisar(page, 'Ficha de clase');
+  await page.getByRole('button', { name: 'Editar' }).click();
+  await page.getByRole('textbox', { name: 'Enunciado' }).fill('x');
+  await page.getByRole('button', { name: 'Guardar cambios' }).click();
+  await page.getByRole('alert').getByText('Revisa que ningún campo quede vacío o demasiado corto').waitFor();
+  assert.equal(await page.getByRole('textbox', { name: 'Enunciado' }).inputValue(), 'x');
+  await page.getByRole('button', { name: 'Cancelar' }).click();
+  await page.getByText('Una tienda mide ventas.').waitFor();
+  await context.close();
+});
+
+test('las herramientas sin IA no se editan', async () => {
+  const { context, page } = await abrir();
+  await revisar(page, 'Hoja de ruta de la asignatura');
+  await page.getByRole('heading', { name: 'Producto final' }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Editar' }).count(), 0);
   await context.close();
 });
