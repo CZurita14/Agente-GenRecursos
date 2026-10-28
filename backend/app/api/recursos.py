@@ -25,6 +25,11 @@ class Generacion(BaseModel):
     perfil_dificultad: Literal["fundamentacion", "profesional", "avanzado"] | None = None
 
 
+class Validacion(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    revision: StrictInt = Field(ge=0)
+
+
 class Edicion(BaseModel):
     model_config = ConfigDict(extra="forbid")
     revision: StrictInt = Field(ge=0)
@@ -65,3 +70,8 @@ def obtener(asig: UUID, rid: UUID, request: Request):
 @router.put("/recursos/{rid}")
 def editar(asig: UUID, rid: UUID, datos: Edicion, request: Request):
     return request.app.state.recursos.editar(asig, rid, request.state.usuario, datos.revision, datos.contenido)
+
+
+@router.post("/recursos/{rid}/validar")
+def validar(asig: UUID, rid: UUID, datos: Validacion, request: Request):
+    return request.app.state.recursos.validar(asig, rid, request.state.usuario, datos.revision)

@@ -67,8 +67,9 @@ def _actualizado_sin_ia(recurso, asignatura) -> bool:
 def _detalle(recurso, asignatura):
     campos = ("id", "trabajo_id", "asignatura_id", "ambito_id", "herramienta", "version_silabo",
               "version_esquema", "contenido", "evidencia", "estado", "revision", "creado",
-              "actualizado", "verificacion_edicion")
+              "actualizado", "verificacion_edicion", "validado_por", "validado_en")
     resultado = {k: recurso[k] for k in campos}
+    resultado["validado"] = recurso["validado_por"] is not None
     resultado["evidencia_vigente"] = recurso["revision"] == 0
     if recurso["herramienta"] in HERRAMIENTAS_SIN_IA:
         resultado["silabo_actualizado"] = _actualizado_sin_ia(recurso, asignatura)
@@ -164,6 +165,16 @@ class ServicioRecursos:
             trabajos.append({"id": str(tid), "herramienta": herramienta, "estado": "listo", "recurso_id": str(rid)})
         return {"trabajos": trabajos}
 
+    def validar(self, aid, rid, correo, revision):
+        """El docente da por revisado el recurso (spec §13); exigido para exportar."""
+        with self._acceso(aid, correo, editar=True) as (conn, a):
+            r = _recurso(conn, aid, rid, editar=True)
+            if r["revision"] != revision:
+                raise HTTPException(409, "El recurso cambió; recárguelo antes de validar")
+            conn.execute("update recurso set validado_por=%s,validado_en=clock_timestamp() "
+                         "where id=%s and asignatura_id=%s", (correo, rid, aid))
+            return _detalle(_recurso(conn, aid, rid), a)
+
     def trabajos(self, aid, correo, limite, desde):
         with self._acceso(aid, correo) as (conn, _):
             return conn.execute(
@@ -209,7 +220,9 @@ class ServicioRecursos:
                          "values (%s,%s,%s,%s,%s,%s,%s,%s)",
                          (rid, aid, correo, nueva_revision, Jsonb(r["contenido"]), Jsonb(canonico),
                           r["estado"], Jsonb(verificaciones)))
+            # Una edición anula la validación: el docente debe volver a validar antes de exportar.
             conn.execute("update recurso set contenido=%s,revision=%s,estado='requiere_revision',"
+                         "validado_por=null,validado_en=null,"
                          "verificacion_edicion=%s,actualizado=clock_timestamp() where id=%s and asignatura_id=%s",
                          (Jsonb(canonico), nueva_revision, Jsonb(verificaciones), rid, aid))
             return _detalle(_recurso(conn, aid, rid), a)
