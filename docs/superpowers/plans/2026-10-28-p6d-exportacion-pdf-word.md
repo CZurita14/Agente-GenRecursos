@@ -1,6 +1,6 @@
 # P6d · Exportación PDF y Word — diseño propuesto y plan
 
-**Estado:** implementación, revisión visual y regresión final completadas en `codex/p6d-exportacion`. Publicación sobre `p6/edicion`.
+**Estado:** implementación, revisión visual y regresión final completadas. Commit `e6dffb8`, publicado en [PR #10](https://github.com/CZurita14/Agente-GenRecursos/pull/10) sobre `p6/edicion`; sin fusionar.
 
 **Objetivo:** descargar recursos validados como PDF para impresión y DOCX editable, además del HTML existente (§13 del spec v1.3).
 

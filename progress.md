@@ -3,7 +3,7 @@
 > **Para qué sirve:** es la memoria del proyecto. Al retomar, **se lee primero este archivo** y solo después, si hace falta, el documento puntual que enlaza.
 > No hace falta recorrer el repositorio completo.
 >
-> **Última actualización:** 2026-10-28 · **Fase:** 1 · **Bloque activo:** P6d PDF/Word implementado y revisado visualmente en `codex/p6d-exportacion`; cierre y publicación sobre `p6/edicion`.
+> **Última actualización:** 2026-10-28 · **Fase:** 1 · **Bloque activo:** P6d PDF/Word publicado en PR #10 sobre `p6/edicion`; siguiente: definir P5.
 
 ## Cómo se actualiza
 
@@ -154,6 +154,7 @@ P1, P2, P3a/P3b y P4 implementados; spec v1.3 emitido. P6 incluye menú, generac
 ## Bitácora (lo ya hecho)
 
 ### 2026-10-28
+- **Publicación P6d:** commit `e6dffb8` publicado en `origin/codex/p6d-exportacion`; PR [#10](https://github.com/CZurita14/Agente-GenRecursos/pull/10) abierto sobre `p6/edicion` (#9), sin fusionar. Revisión visual, pruebas de permisos y regresión final completadas.
 - **Cierre P6d:** revisadas seis muestras PDF/DOCX (16 páginas; Word local para renderizar DOCX). Corregidos opciones huérfanas, listas numeradas y estilos; fórmulas ajustadas al ancho de celda. Nuevas pruebas de lector, sesión, pertenencia, límites matemáticos y paginación. Resultado final: **663 backend pasan/3 deseleccionadas**, **21 unitarias frontend y 16 navegador**, typecheck/build pasan. Muestras ignoradas en `.superpowers/p6d-qa`; generador reproducible en `backend/tests/revisar_exportacion.py`.
 - **P6d implementado** en `codex/p6d-exportacion`: PDF y DOCX en memoria con presentación ordenada, tablas, fórmulas MathText locales y respuestas separadas; API con validación/permisos y descargas frontend. Backend: 654 pasan/3 deseleccionadas (sin IA real); exportación final: 16 pasan. Frontend: 21 unitarias, 15 navegador, typecheck y build pasan. Falta revisión visual de documentos y PR; formato institucional sigue pendiente. Plan actualizado con desviaciones y límites.
 - **P6d · PDF/Word:** [diseño y plan](docs/superpowers/plans/2026-10-28-p6d-exportacion-pdf-word.md) preparados tras revisar servicio, ruta HTTP, presentación y §13. Propone renderizadores nativos, fórmulas locales y respuestas al final en documentos estáticos. Pendiente de aprobación de diseño; implementación y pruebas todavía no ejecutadas.
