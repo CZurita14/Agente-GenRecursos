@@ -4,10 +4,14 @@ El contenido se guarda en jsonb, que no conserva el orden de las claves, y sus c
 son internas («clase_id», «numero_clase»). Aquí cada herramienta declara qué se muestra,
 en qué orden y con qué título, como una lista de bloques:
 
-- texto: {"tipo": "texto", "titulo", "texto"}
-- lista: {"tipo": "lista", "titulo", "items": [str], "numerada": bool}
-- tabla: {"tipo": "tabla", "titulo", "columnas": [str], "filas": [[str]]}
+- texto: {"tipo": "texto", "titulo", "texto", "ruta"}
+- lista: {"tipo": "lista", "titulo", "items": [str], "numerada": bool, "ruta"}
+- tabla: {"tipo": "tabla", "titulo", "columnas": [str], "filas": [[str]], "rutas": [[ruta | None]]}
 - grupo: {"tipo": "grupo", "titulo", "bloques": [...]}
+
+`ruta` es el camino dentro del contenido (claves e índices) del texto que el docente puede
+editar (P6c); None si no se edita: herramientas sin IA, valores de listas cerradas
+(indicador, momento, RA, nivel) y textos compuestos.
 
 Los cuestionarios (ítems con opciones) no pasan por aquí: tienen su propia vista.
 """
@@ -27,17 +31,22 @@ _OCULTAS = {"item_id", "escenario"}  # Datos internos del sistema, no para el es
 SIN_POLITICA = "No indicada en el sílabo"
 
 
-def _texto(titulo: str, texto) -> dict:
-    return {"tipo": "texto", "titulo": titulo, "texto": str(texto)}
+Ruta = list[str | int]
 
 
-def _lista(titulo: str, items, numerada: bool = False) -> dict:
-    return {"tipo": "lista", "titulo": titulo, "items": [str(x) for x in items or []], "numerada": numerada}
+def _texto(titulo: str, texto, ruta: Ruta | None = None) -> dict:
+    return {"tipo": "texto", "titulo": titulo, "texto": str(texto), "ruta": ruta}
 
 
-def _tabla(titulo: str, columnas: list[str], filas) -> dict:
-    return {"tipo": "tabla", "titulo": titulo, "columnas": columnas,
-            "filas": [[str(c) if c is not None else "" for c in f] for f in filas]}
+def _lista(titulo: str, items, numerada: bool = False, ruta: Ruta | None = None) -> dict:
+    return {"tipo": "lista", "titulo": titulo, "items": [str(x) for x in items or []], "numerada": numerada,
+            "ruta": ruta}
+
+
+def _tabla(titulo: str, columnas: list[str], filas, rutas: list[list[Ruta | None]] | None = None) -> dict:
+    filas = [[str(c) if c is not None else "" for c in f] for f in filas]
+    return {"tipo": "tabla", "titulo": titulo, "columnas": columnas, "filas": filas,
+            "rutas": rutas or [[None] * len(f) for f in filas]}
 
 
 def _grupo(titulo: str, bloques: list[dict]) -> dict:
@@ -62,54 +71,63 @@ def _rubrica(indicadores: list[dict], niveles: list[str]) -> dict:
 def _ficha(c: dict) -> list[dict]:
     conceptual, aplicacion = c["conceptual"], c["aplicacion"]
     ejemplo = aplicacion["ejemplo"]
+    e = ["aplicacion", "ejemplo"]
     return [
-        _lista("Ideas clave", conceptual["ideas_clave"]),
-        _texto("Relación con el RA", conceptual["relacion_ra"]),
-        _lista("Errores frecuentes", conceptual["errores_frecuentes"]),
-        _grupo("Ejemplo resuelto", [_texto("Enunciado", ejemplo["enunciado"]),
-                                    _lista("Pasos", ejemplo["pasos"], numerada=True),
-                                    _texto("Resultado", ejemplo["resultado"])]),
-        _lista("Autocomprobación", aplicacion["autocomprobacion"], numerada=True),
+        _lista("Ideas clave", conceptual["ideas_clave"], ruta=["conceptual", "ideas_clave"]),
+        _texto("Relación con el RA", conceptual["relacion_ra"], ["conceptual", "relacion_ra"]),
+        _lista("Errores frecuentes", conceptual["errores_frecuentes"], ruta=["conceptual", "errores_frecuentes"]),
+        _grupo("Ejemplo resuelto", [_texto("Enunciado", ejemplo["enunciado"], [*e, "enunciado"]),
+                                    _lista("Pasos", ejemplo["pasos"], numerada=True, ruta=[*e, "pasos"]),
+                                    _texto("Resultado", ejemplo["resultado"], [*e, "resultado"])]),
+        _lista("Autocomprobación", aplicacion["autocomprobacion"], numerada=True,
+               ruta=["aplicacion", "autocomprobacion"]),
     ]
 
 
 def _repaso(c: dict) -> list[dict]:
     r = c["repaso"]
     return [
-        *(_grupo(f"Clase {s['clase_id']}", [_lista("Ideas clave", s["ideas_clave"])]) for s in r["sesiones"]),
-        _texto("Conexión con el RA", r["conexion_ra"]),
-        _lista("Preguntas de repaso", r["preguntas_repaso"], numerada=True),
+        *(_grupo(f"Clase {s['clase_id']}", [_lista("Ideas clave", s["ideas_clave"],
+                                                   ruta=["repaso", "sesiones", n, "ideas_clave"])])
+          for n, s in enumerate(r["sesiones"])),
+        _texto("Conexión con el RA", r["conexion_ra"], ["repaso", "conexion_ra"]),
+        _lista("Preguntas de repaso", r["preguntas_repaso"], numerada=True, ruta=["repaso", "preguntas_repaso"]),
     ]
 
 
 def _guia(c: dict) -> list[dict]:
     g = c["guia"]
     return [
-        _texto("Qué se pide", g["que_se_pide"]),
+        _texto("Qué se pide", g["que_se_pide"], ["guia", "que_se_pide"]),
         _tabla("Cómo se valora", ["Indicador", "Qué observar"],
-               [[x["indicador"], x["que_observar"]] for x in g["como_se_valora"]]),
-        _lista("Errores comunes", g["errores_comunes"]),
-        _lista("Autochequeo", g["autochequeo"], numerada=True),
+               [[x["indicador"], x["que_observar"]] for x in g["como_se_valora"]],
+               [[None, ["guia", "como_se_valora", n, "que_observar"]] for n in range(len(g["como_se_valora"]))]),
+        _lista("Errores comunes", g["errores_comunes"], ruta=["guia", "errores_comunes"]),
+        _lista("Autochequeo", g["autochequeo"], numerada=True, ruta=["guia", "autochequeo"]),
     ]
 
 
 def _caso(c: dict) -> list[dict]:
     caso = c["caso"]
     return [
-        _texto("Caso", caso["caso"]),
+        _texto("Caso", caso["caso"], ["caso", "caso"]),
         _texto("Resultado de aprendizaje", caso["ra"]),
-        *(_grupo(f"Pregunta {n} · {NIVELES.get(p['nivel'], p['nivel'])}",
-                 [_texto("Pregunta", p["pregunta"]), _texto("Respuesta orientativa", p["respuesta_orientativa"])])
-          for n, p in enumerate(caso["preguntas"], 1)),
+        *(_grupo(f"Pregunta {n + 1} · {NIVELES.get(p['nivel'], p['nivel'])}",
+                 [_texto("Pregunta", p["pregunta"], ["caso", "preguntas", n, "pregunta"]),
+                  _texto("Respuesta orientativa", p["respuesta_orientativa"],
+                         ["caso", "preguntas", n, "respuesta_orientativa"])])
+          for n, p in enumerate(caso["preguntas"])),
     ]
 
 
 def _guia_final(c: dict) -> list[dict]:
     g = c["guia_final"]
     return [
-        _tabla("Ruta por momentos", ["Momento", "Aporte al producto final"], [[x["momento"], x["aporte"]] for x in g["ruta"]]),
-        _tabla("Criterios", ["Indicador", "Cómo prepararse"], [[x["indicador"], x["como_prepararse"]] for x in g["criterios"]]),
-        _lista("Recomendaciones", g["recomendaciones"]),
+        _tabla("Ruta por momentos", ["Momento", "Aporte al producto final"], [[x["momento"], x["aporte"]] for x in g["ruta"]],
+               [[None, ["guia_final", "ruta", n, "aporte"]] for n in range(len(g["ruta"]))]),
+        _tabla("Criterios", ["Indicador", "Cómo prepararse"], [[x["indicador"], x["como_prepararse"]] for x in g["criterios"]],
+               [[None, ["guia_final", "criterios", n, "como_prepararse"]] for n in range(len(g["criterios"]))]),
+        _lista("Recomendaciones", g["recomendaciones"], ruta=["guia_final", "recomendaciones"]),
     ]
 
 

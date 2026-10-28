@@ -75,7 +75,8 @@ def test_ficha_en_orden_de_estudio():
     titulos = [b["titulo"] for b in presentar("ficha_clase", _invertido(FICHA))]
     assert titulos == ["Ideas clave", "Relación con el RA", "Errores frecuentes", "Ejemplo resuelto", "Autocomprobación"]
     pasos = presentar("ficha_clase", FICHA)[3]["bloques"][1]
-    assert pasos == {"tipo": "lista", "titulo": "Pasos", "items": ["P1", "P2"], "numerada": True}
+    assert pasos == {"tipo": "lista", "titulo": "Pasos", "items": ["P1", "P2"], "numerada": True,
+                     "ruta": ["aplicacion", "ejemplo", "pasos"]}
 
 
 def test_rubrica_como_tabla(silabo):
@@ -101,3 +102,42 @@ def test_forma_desconocida_usa_respaldo_sin_perder_texto():
 
 def test_cuestionario_no_tiene_bloques():
     assert presentar("cuestionario", [{"item_id": "i1", "opciones": []}]) == []
+
+
+# --- P6c: rutas editables -----------------------------------------------------------
+
+def _resolver(contenido, ruta):
+    for paso in ruta:
+        contenido = contenido[paso]
+    return contenido
+
+
+def _rutas(bloques):
+    """(ruta, texto mostrado) de cada texto editable."""
+    for b in _recorrer(bloques):
+        if b["tipo"] in ("texto", "lista") and b["ruta"] is not None:
+            yield b["ruta"], b["texto"] if b["tipo"] == "texto" else b["items"]
+        if b["tipo"] == "tabla":
+            assert len(b["rutas"]) == len(b["filas"])
+            for fila, rutas in zip(b["filas"], b["rutas"]):
+                yield from ((r, celda) for celda, r in zip(fila, rutas) if r is not None)
+
+
+@pytest.mark.parametrize("herramienta", list(CON_IA))
+def test_rutas_resuelven_al_texto_mostrado(herramienta):
+    rutas = list(_rutas(presentar(herramienta, CON_IA[herramienta])))
+    assert rutas
+    for ruta, mostrado in rutas:
+        assert _resolver(CON_IA[herramienta], ruta) == mostrado
+
+
+def test_listas_cerradas_no_son_editables():
+    guia = presentar("guia_evidencia", CON_IA["guia_evidencia"])[1]
+    assert guia["rutas"] == [[None, ["guia", "como_se_valora", 0, "que_observar"]]]
+    caso = presentar("estudio_caso", CON_IA["estudio_caso"])
+    assert caso[1]["titulo"] == "Resultado de aprendizaje" and caso[1]["ruta"] is None
+
+
+@pytest.mark.parametrize("herramienta,ambito", SIN_IA)
+def test_sin_ia_no_se_edita(silabo, herramienta, ambito):
+    assert not list(_rutas(presentar(herramienta, generar_sin_ia(herramienta, silabo, ambito))))
