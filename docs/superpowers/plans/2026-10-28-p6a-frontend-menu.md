@@ -31,12 +31,12 @@
 
 **Files:** `frontend/**` (copia), `.gitignore`.
 
-- [ ] Copiar la plantilla sin `.git`, `node_modules` ni `dist`. Nombre `genrecursos-frontend` en `package.json`; `npm install`.
-- [ ] `BRAND_CONFIG`: `appTitle = "Recursos de estudio"`, `appSubtitle = "Generador de recursos · UTI"`.
-- [ ] `vite.config.ts`: proxy `/api` → `http://127.0.0.1:8001` (reescribe el prefijo).
-- [ ] Eliminar `src/examples/` y adaptar las pruebas de navegador de la galería (se reescriben en la T5).
-- [ ] `.gitignore`: `frontend/node_modules/`, `frontend/dist/`.
-- [ ] `npm run check` → verde. Commit `feat(frontend): proyecto desde la plantilla UTI`.
+- [x] Copiar la plantilla sin `.git`, `node_modules` ni `dist`. Nombre `genrecursos-frontend` en `package.json`; `npm install`.
+- [x] `BRAND_CONFIG`: `appTitle = "Recursos de estudio"`, `appSubtitle = "Generador de recursos · UTI"`.
+- [x] `vite.config.ts`: proxy `/api` → `http://127.0.0.1:8001` (reescribe el prefijo).
+- [x] Eliminar `src/examples/` y adaptar las pruebas de navegador de la galería (se reescriben en la T5).
+- [x] `.gitignore`: `frontend/node_modules/`, `frontend/dist/`.
+- [x] `npm run check` → verde. Commit `feat(frontend): proyecto desde la plantilla UTI`.
 
 ### Task 2: Cliente de la API
 
@@ -55,12 +55,12 @@
 - Funciones: `pedirCodigo(correo)`, `verificarCodigo(correo, codigo)`, `yo()`, `salir()`, `subirSilabo(archivo: File)` (cuerpo binario, `Content-Type: application/pdf`) y `asignaturas()`.
 - Tipos: `Usuario { correo; rol }`, `AsignaturaResumen` (lo que devuelve `GET /asignaturas`) y `SilaboSubido { id; agente; menu; clases_cambiadas }`.
 
-- [ ] Pruebas con `fetch` simulado:
+- [x] Pruebas con `fetch` simulado:
   - base, credenciales y método;
   - el cuerpo binario del PDF;
   - un mensaje por estado;
   - `Retry-After`.
-- [ ] Commit `feat(frontend): cliente de la API`.
+- [x] Commit `feat(frontend): cliente de la API`.
 
 ### Task 3: Sesión e ingreso con código
 
@@ -73,7 +73,7 @@
   - errores con `Alert`;
   - «Volver a pedir el código».
 - `App`: muestra `Ingreso` sin sesión y el menú con sesión. Un `ErrorApi` 401 en cualquier vista lleva al ingreso.
-- [ ] Commit `feat(frontend): ingreso con código y sesión`.
+- [x] Commit `feat(frontend): ingreso con código y sesión`.
 
 ### Task 4: Menú e inicio (opción B)
 
@@ -85,7 +85,7 @@
   - **Perfil docente:** `Badge tone="warning"` «En espera», estilo atenuado, `aria-disabled="true"`, sin botón, con el texto de que se activará con la documentación.
   - En el móvil, las tarjetas se apilan.
 - `Proximamente`: para «Mis recursos», con un texto que diga qué llegará.
-- [ ] Commit `feat(frontend): menú principal e inicio`.
+- [x] Commit `feat(frontend): menú principal e inicio`.
 
 ### Task 5: Subir sílabo y mis asignaturas
 
@@ -97,7 +97,7 @@
   - un enlace a «Mis asignaturas»;
   - cada error de la API con su mensaje.
 - `Asignaturas`: una `DataTable` (`caption` «Mis asignaturas») con nombre, código, rol y versión, y un estado vacío que invite a subir el sílabo.
-- [ ] Pruebas de navegador (`tests/browser.test.mjs`, API simulada con `page.route`):
+- [x] Pruebas de navegador (`tests/browser.test.mjs`, API simulada con `page.route`):
   - ingreso en dos pasos;
   - el menú tiene 3 pestañas;
   - el perfil docente está desactivado;
@@ -105,10 +105,10 @@
   - subir un PDF muestra el resumen;
   - un `401` devuelve al ingreso;
   - en el móvil se ve el menú colapsado.
-- [ ] `npm run check` y `npm run test:browser` → verde. Commit `feat(frontend): subir sílabo y mis asignaturas`.
+- [x] `npm run check` y `npm run test:browser` → verde. Commit `feat(frontend): subir sílabo y mis asignaturas`.
 
 ### Task 6: Prueba manual con la API real
 
-- [ ] Levantar la API (`ENTORNO=desarrollo`, `SMTP_MODO=consola`, `API_ORIGEN=http://localhost:5173`) y `npm run dev`.
-- [ ] En el navegador integrado: ingresar con el código que imprime la consola, subir el PDF de Datos y ver la asignatura. Sin datos personales en capturas ni en el registro.
-- [ ] Documentar el arranque en `frontend/README.md` y `progress.md`. Commit `docs: frontend, primera entrega del menú`.
+- [x] Levantar la API (`ENTORNO=desarrollo`, `SMTP_MODO=consola`, `API_ORIGEN=http://localhost:5173`) y `npm run dev`.
+- [x] En el navegador integrado: ingresar con el código que imprime la consola, subir el PDF de Datos y ver la asignatura. Sin datos personales en capturas ni en el registro.
+- [x] Documentar el arranque en `frontend/README.md` y `progress.md`. Commit `docs: frontend, primera entrega del menú`.
