@@ -235,12 +235,34 @@ test('validar con alertas pide confirmación y habilita la descarga', async () =
   await page.getByRole('button', { name: 'Revisar Cuestionario' }).click();
   await page.getByText('el revisor considera correctas las opciones 1 y 3').waitFor();
   assert.equal(await page.getByRole('link', { name: 'Descargar HTML para Canvas' }).count(), 0);
+  assert.equal(await page.getByRole('link', { name: /Descargar PDF|Descargar Word/ }).count(), 0);
   await page.getByRole('button', { name: 'Validar recurso' }).click();
   await page.getByRole('dialog').getByText('¿Validar con alertas pendientes?').waitFor();
   await page.getByRole('button', { name: 'Validar de todos modos' }).click();
   const enlace = page.getByRole('link', { name: 'Descargar HTML para Canvas' });
+  assert.ok((await page.getByRole('link', { name: 'Descargar PDF', exact: true }).getAttribute('href')).endsWith('formato=pdf'));
+  assert.ok((await page.getByRole('link', { name: 'Descargar Word', exact: true }).getAttribute('href')).endsWith('formato=docx'));
   await enlace.waitFor();
   assert.match(await enlace.getAttribute('href'), /\/api\/asignaturas\/a1\/recursos\/r1\/exportar\?formato=html$/);
+  await page.getByRole('button', { name: 'Editar', exact: true }).click();
+  assert.equal(await page.getByRole('link', { name: /Descargar/ }).count(), 0);
+  await page.getByRole('button', { name: 'Cancelar', exact: true }).click();
+  await enlace.waitFor();
+  await context.close();
+});
+
+test('lector descarga los tres formatos sin editar ni validar', async () => {
+  const json = body => route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  const { context, page } = await abrir({ rutas: {
+    '/asignaturas': json([{ id: 'a1', nombre: 'ANALISIS DE DATOS', codigo_pf: 'B26-SOFT-3', version_silabo: '1.0', agente: 'ingenierias', rol: 'lector', dueno: 'otro@uti.edu.ec' }]),
+    '/asignaturas/a1/menu': json({ id: 'a1', rol: 'lector', version_silabo: '1.0', menu: MENU_ASIG }),
+    '/asignaturas/a1/recursos/r1': json(RECURSO(true)),
+  } });
+  await revisar(page, 'Cuestionario');
+  await page.getByRole('link', { name: 'Descargar PDF', exact: true }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Editar', exact: true }).count(), 0);
+  assert.equal(await page.getByRole('button', { name: 'Validar recurso', exact: true }).count(), 0);
+  assert.equal(await page.getByRole('link', { name: /Descargar/ }).count(), 3);
   await context.close();
 });
 

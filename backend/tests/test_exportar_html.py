@@ -79,4 +79,4 @@ def test_exportar_validado_200_attachment(entorno):
 
 def test_formato_no_soportado_422(entorno):
     d, aid, recurso = _producir_validado(entorno)
-    assert d.get(f"/asignaturas/{aid}/recursos/{recurso['id']}/exportar?formato=pdf").status_code == 422
+    assert d.get(f"/asignaturas/{aid}/recursos/{recurso['id']}/exportar?formato=qti").status_code == 422

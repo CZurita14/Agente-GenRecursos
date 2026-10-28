@@ -3,7 +3,7 @@
 > **Para qué sirve:** es la memoria del proyecto. Al retomar, **se lee primero este archivo** y solo después, si hace falta, el documento puntual que enlaza.
 > No hace falta recorrer el repositorio completo.
 >
-> **Última actualización:** 2026-10-27 · **Fase:** 1 · **Bloque activo:** P4 implementación cerrada en `codex/p4-api-acceso`; siguiente spec v1.3 y P3
+> **Última actualización:** 2026-10-28 · **Fase:** 1 · **Bloque activo:** P6d PDF/Word implementado y revisado visualmente en `codex/p6d-exportacion`; cierre y publicación sobre `p6/edicion`.
 
 ## Cómo se actualiza
 
@@ -21,7 +21,7 @@ Estados: `⬜ pendiente` · `🔄 en curso` · `🔁 devuelta (ronda n)` · `✅
 
 ## Estado en una línea
 
-P1 y P2 publicados en `origin/p1/nucleo` y `origin/p2/lector`. Las capturas del usuario muestran los PR #1 (P1 → main) y #2 (P2 → P1), abiertos; no se han fusionado en esta continuación. P4 A1–A5 implementadas en `codex/p4-api-acceso`, hasta `49ac905`: 514 pruebas pasan y 1 real omitida. Para activación faltan SMTP (B4), aviso aprobado (B9), administradores designados (B10) y despliegue P7. Sigue emitir spec v1.3 y avanzar P3. Los commits de P4 siguen locales.
+P1, P2, P3a/P3b y P4 implementados; spec v1.3 emitido. P6 incluye menú, generación, revisión, validación, descarga HTML/PDF/DOCX, vistas por herramienta y edición docente. P6c está en PR #9 sobre `p6/vistas`; P6d se apila sobre `p6/edicion`, sin fusionar. PDF/Word revisados visualmente con cuestionario, ficha y tablas largas. Quedan P5 (chat de ajustes) y P7; la activación institucional sigue condicionada a SMTP (B4), aviso aprobado (B9) y administradores designados (B10). Las cifras de pruebas históricas se conservan en la bitácora.
 
 ## Documentos de referencia
 
@@ -154,6 +154,10 @@ P1 y P2 publicados en `origin/p1/nucleo` y `origin/p2/lector`. Las capturas del 
 ## Bitácora (lo ya hecho)
 
 ### 2026-10-28
+- **Cierre P6d:** revisadas seis muestras PDF/DOCX (16 páginas; Word local para renderizar DOCX). Corregidos opciones huérfanas, listas numeradas y estilos; fórmulas ajustadas al ancho de celda. Nuevas pruebas de lector, sesión, pertenencia, límites matemáticos y paginación. Resultado final: **663 backend pasan/3 deseleccionadas**, **21 unitarias frontend y 16 navegador**, typecheck/build pasan. Muestras ignoradas en `.superpowers/p6d-qa`; generador reproducible en `backend/tests/revisar_exportacion.py`.
+- **P6d implementado** en `codex/p6d-exportacion`: PDF y DOCX en memoria con presentación ordenada, tablas, fórmulas MathText locales y respuestas separadas; API con validación/permisos y descargas frontend. Backend: 654 pasan/3 deseleccionadas (sin IA real); exportación final: 16 pasan. Frontend: 21 unitarias, 15 navegador, typecheck y build pasan. Falta revisión visual de documentos y PR; formato institucional sigue pendiente. Plan actualizado con desviaciones y límites.
+- **P6d · PDF/Word:** [diseño y plan](docs/superpowers/plans/2026-10-28-p6d-exportacion-pdf-word.md) preparados tras revisar servicio, ruta HTTP, presentación y §13. Propone renderizadores nativos, fórmulas locales y respuestas al final en documentos estáticos. Pendiente de aprobación de diseño; implementación y pruebas todavía no ejecutadas.
+- **Continuación y publicación P6c:** comprobado en el remoto `672635b`; creado PR [#9](https://github.com/CZurita14/Agente-GenRecursos/pull/9) sobre `p6/vistas`. No se fusionaron ramas. Encabezado y próximos pasos actualizados para evitar retomar tareas ya terminadas. Esta continuación no repitió las pruebas de implementación.
 - **P6a · Frontend, menú** (rama `p6/menu`): diseño elegido por el usuario en maquetas (opción B: barra superior y dos caminos; «Perfil docente» visible pero en espera hasta la documentación). `frontend/` copiado de la plantilla institucional `andresinose/plantilla-UTI`; cliente de la API con cookie HttpOnly y proxy `/api` de Vite; ingreso con código, inicio, subir sílabo y Mis asignaturas. 17 pruebas unitarias y 7 de navegador (API simulada). Prueba real: ingreso con cuenta de prueba (código en consola), sílabo de Datos subido (201, ingenierias, 6 semanas/11 clases) y visible en Mis asignaturas.
 - **P6b · Mis recursos** (rama `p6/recursos`): migración 008 (`validado_por`, `validado_en`; editar anula la validación), `POST …/recursos/{rid}/validar` con revisión y `GET …/exportar?formato=html` (409 sin validar; HTML autónomo, todo escapado, JS fijo de autocorrección, pie §13). Frontend: vista de la asignatura por semana y cierres de momento, catálogo de actividades (no mezcla IA y sin IA; momento restringido por §9.4.2 avisado), avance con sondeo cada 4 s, revisión con alertas del verificador/revisor, validar (confirmación si hay alertas) y descarga. 622 pruebas backend; 10 de navegador. Prueba real: hoja de ruta (sin IA, inmediata) y ficha de clase M2-S1 con Qwen (~45 s, 2/2 lotes) generadas, validadas y descargadas (200, adjunto, pie presente, sin recursos externos). Defecto visto: el renderizador genérico muestra claves crudas («Clase id», «Numero clase») y jsonb reordena las claves → hacen falta vistas por herramienta (ligado a B3).
 - **P6 · Vistas por herramienta** (rama `p6/vistas`): `app/exportar/presentacion.py` convierte el contenido de cada herramienta (las 9 que no son cuestionario) en bloques ordenados (texto, lista, tabla, grupo) con títulos legibles; el orden no depende de jsonb y se ocultan las claves internas. La API la entrega como `presentacion` en el detalle del recurso, y la misma presentación arma el HTML para Canvas (rúbricas y calendario como tablas, pasos numerados). Si el contenido no coincide con el esquema (p. ej. editado), un respaldo genérico ordenado alfabéticamente lo muestra sin perder texto. 637 pruebas backend, 11 de navegador. Prueba real: ficha M2-S1 y hoja de ruta se ven en orden, sin claves crudas, y el HTML descargado sigue el mismo orden.
@@ -252,7 +256,7 @@ P1 y P2 publicados en `origin/p1/nucleo` y `origin/p2/lector`. Las capturas del 
 ## Siguiente paso
 
 1. ~~Emitir el spec v1.3~~ ✅ hecho (2026-10-27). Revisar con el usuario la tabla de cambios C1–C16.
-2. P3a ✅ (sin IA). Siguiente: P3b con herramientas con IA de momento/asignatura y «el código calcula» para valores numéricos; validar con el área académica si «resolutivo» es la referencia correcta del mínimo en la lista de verificación. Mantener pendientes H7 (techo del RA) y H8 (plantilla).
+2. P3a/P3b y P6c implementados; P6d PDF/Word implementado y revisado visualmente. Siguiente bloque funcional: definir P5 (chat de ajustes) según el spec antes de implementarlo. Validar con el área académica si «resolutivo» es la referencia correcta del mínimo en la lista de verificación; mantener pendientes H7 (techo del RA) y H8 (plantilla).
 3. Resolver puertas institucionales B4/B9/B10 antes de activar P4; preparar despliegue P7 con HTTPS, proxy y mantenimiento supervisado. La calidad final y los formatos académicos siguen condicionados a la plantilla.
-4. Mantener los PR apilados: integrar #1 antes de #2 cuando se decida fusionarlos. Los PR ya están creados según las capturas; no repetir creación.
+4. Mantener los PR apilados: PR #9 (`p6/edicion`) sobre `p6/vistas` (#8); no repetir su creación. Integrar las bases antes de sus ramas dependientes cuando se decida fusionarlas.
 5. La propuesta institucional en `docs/propuestas/` permanece disponible para revisión del usuario; no se ha versionado ni modificado en esta continuación.

@@ -212,14 +212,17 @@ export function Recurso({ aid, rid, puedeValidar, onVolver, onSesionVencida }: R
     </Card>
 
     <Card title="Paso 5 · Valida y descarga para Canvas" icon={<ShieldCheck aria-hidden="true" />}>
-      {r.validado ? <div className="space-y-3">
+      {editando ? <p className="text-sm text-muted">Guarda o cancela la edición antes de validar.</p> : r.validado ? <div className="space-y-3">
         <Alert tone="success">Validado por {r.validado_por}. Ya puedes descargarlo y subirlo a Canvas.</Alert>
         <a href={urlExportar(aid, r.id)} download
           className="inline-flex items-center gap-2 rounded-lg bg-action hover:bg-action-hover text-white px-4 py-2 font-medium">
           <Download aria-hidden="true" className="w-4 h-4" />Descargar HTML para Canvas
         </a>
+        <div className="flex flex-wrap gap-3">
+          <a href={urlExportar(aid, r.id, 'pdf')} download className="text-action underline">Descargar PDF</a>
+          <a href={urlExportar(aid, r.id, 'docx')} download className="text-action underline">Descargar Word</a>
+        </div>
       </div> : !puedeValidar ? <p className="text-sm text-muted">Un editor o el dueño de la asignatura debe validarlo antes de descargarlo.</p>
-        : editando ? <p className="text-sm text-muted">Guarda o cancela la edición antes de validar.</p>
         : <div className="space-y-3">
           <p className="text-sm text-muted">La descarga se habilita cuando validas el recurso: confirma que lo revisaste.</p>
           <Button onClick={() => cantidad > 0 ? setConfirmar(true) : validarRecurso()} loading={validando}>Validar recurso</Button>

@@ -168,15 +168,23 @@ class ServicioRecursos:
             trabajos.append({"id": str(tid), "herramienta": herramienta, "estado": "listo", "recurso_id": str(rid)})
         return {"trabajos": trabajos}
 
-    def exportar(self, aid, rid, correo):
-        """HTML para Canvas; solo de un recurso validado por el docente (spec §13)."""
+    def exportar(self, aid, rid, correo, formato="html"):
+        """Exportación de una instantánea validada por el docente (spec §13)."""
         with self._acceso(aid, correo) as (conn, _):
             r = _recurso(conn, aid, rid)
             if r["validado_por"] is None:
                 raise HTTPException(409, "Valida el recurso antes de descargarlo")
             contexto = _contexto(r, None)
-            nombre = re.sub(r"[^A-Za-z0-9_-]", "_", f"{r['herramienta']}-{r['ambito_id']}") + ".html"
+            if formato not in ("html", "pdf", "docx"):
+                raise HTTPException(422, "Formato no soportado")
+            nombre = re.sub(r"[^A-Za-z0-9_-]", "_", f"{r['herramienta']}-{r['ambito_id']}") + "." + formato
+        if formato == "html":
             return nombre, exportar_html(r, contexto)
+        from app.exportar.documento import exportar_documento, FormulaInvalida
+        try:
+            return nombre, exportar_documento(r, contexto, formato)
+        except FormulaInvalida:
+            raise HTTPException(422, "No se pudo representar una fórmula. Revisa su notación antes de exportar.") from None
 
     def validar(self, aid, rid, correo, revision):
         """El docente da por revisado el recurso (spec §13); exigido para exportar."""

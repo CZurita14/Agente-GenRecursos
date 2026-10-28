@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
-import { ErrorApi, asignaturas, pedirCodigo, salir, subirSilabo, verificarCodigo, yo } from '../src/api/cliente.ts';
+import { ErrorApi, asignaturas, pedirCodigo, salir, subirSilabo, verificarCodigo, yo, urlExportar } from '../src/api/cliente.ts';
+
+test('descargas con formato explícito y HTML por defecto', () => {
+  assert.equal(urlExportar('a/b', 'r?'), '/api/asignaturas/a%2Fb/recursos/r%3F/exportar?formato=html');
+  for (const formato of ['pdf', 'docx'] as const) assert.ok(urlExportar('a', 'r', formato).endsWith(`formato=${formato}`));
+});
 
 interface Llamada { url: string; init: RequestInit }
 const original = globalThis.fetch;
