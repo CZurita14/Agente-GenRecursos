@@ -152,3 +152,57 @@ esa idea a los ítems:
 cuestionario, sobre las mismas dos clases y otras dos de facultades
 distintas. Mientras no se alcance, cuestionarios y simulacros se publican como
 **borrador para revisión del docente**, con las alertas del revisor visibles.
+
+## 6. Humo del núcleo con Qwen real (2026-10-27)
+
+Prueba `backend/tests/test_humo_servidor.py` (cuestionario de 4 ítems de M3-S4 y
+ficha de M2-S1, Qwen3-8B-AWQ, ~12 min por corrida, ninguna llamada sobre
+8 192 tokens). Las trazas completas, sin prompts ni razonamiento, están en
+`pruebas/resultados/20261027-humo-p1*.json`.
+
+| Corrida | Cambio | Ítems `ok` en la 1.ª revisión | Resultado final del cuestionario |
+|---|---|---|---|
+| 1 (`humo-p1`) | Ninguno | 1 de 4 | 1 de 4 `ok`; 3 devueltos por integridad; 1 casi duplicado |
+| 2 (`-integridad`) | Criterio de integridad del revisor alineado con §9.4 regla 1 | 0 de 4 | 2 de 4 `ok`; 1 casi duplicado |
+| 3 (`-entregables`) | La evidencia del momento entra en `entregables_momento`; el worker debe usar otros casos y datos; las correcciones que fallan la verificación se reintentan | 2 de 4 | 3 de 4 `ok`; 4 de 4 verificados |
+| 4 (`-escenarios`) | El planificador asigna a cada ítem un escenario del perfil de la carrera y descarta los que comparten palabras clave con el entregable | 3 de 4 | **4 de 4 `ok`, `listo`**; 12 llamadas y 400 s (antes 19–24 llamadas y 680–964 s) |
+
+**Causa raíz.** Todas las devoluciones de la corrida 1 fueron por integridad
+(«resuelve el entregable…»), no por la clave. El revisor tenía razón a medias:
+los ítems usaban el mismo escenario de la evidencia del M3 (tráfico normal
+frente a ataques). Pero `contexto_clase` no pasaba esa evidencia como
+entregable, porque solo tomaba los entregables por sesión, vacíos en este
+sílabo. El worker no sabía qué caso evitar y el revisor lo deducía de la
+rúbrica.
+
+**Corrida 4.** Los casos (tienda en línea, inicio de sesión fallido, API REST y
+compilación en Git) salen de `escenarios` en `agentes/ingenierias.yaml`. Solo se
+devolvió el ítem del caso más cercano a seguridad, «intentos de inicio de sesión
+fallidos», y quedó `ok` en la 2.ª ronda. Defectos para la fase de calidad: 3 de los
+4 enunciados son «¿Qué tipo de prueba…?», y los valores críticos del ítem
+reflexivo los inventa el modelo (falta «el código calcula» de §5).
+
+**Lo que quedaba tras la corrida 3.** En la corrida 3 el revisor real también devolvió claves
+dudosas (i2: «opción 4, no la 2»; i4: «opciones 2 y 4»), que es su trabajo. Un
+ítem seguía en el escenario de picos de tráfico. Para variar los casos hace
+falta darle al worker tipos de caso concretos distintos del entregable, junto
+con las mejoras de §5 (en pausa hasta la plantilla académica).
+
+## 7. Humo de herramientas de momento y asignatura (P3b, 2026-10-27)
+
+Prueba `test_humo_momento` en `backend/tests/test_humo_servidor.py`, con Qwen3-8B-AWQ
+real y la fixture de Datos. Traza en `pruebas/resultados/20261027-humo-p3b-momento.json`.
+
+| Herramienta | Ámbito | Estado | Revisor de integridad | Verificador |
+|---|---|---|---|---|
+| Simulacro (4 ítems) | M3 | `requiere_revision` | 3/4 ítems `ok`; i3 marcado «resuelve el entregable» (H0/H1 en ANOVA) | sin fallos |
+| Guía de la evidencia | M3 | `listo` | `ok` | sin fallos |
+| Estudio de caso | M3 | `listo` | `ok` | sin fallos |
+| Guía del producto final | asignatura | `listo` | `ok` | sin fallos |
+
+17 llamadas en 503 s; la más grande usó 5 614 tokens (límite 8 192). La única
+devolución es el mismo falso positivo de integridad que el P1 (§6): una pregunta
+conceptual sobre la técnica del entregable. Con `/tokenize` real, el prompt más
+grande de momento o asignatura mide 3 708 tokens. La corrida usó el código anterior
+a las correcciones de la revisión, que no cambian lo generado (controles de copia,
+requisitos del sílabo y contexto de asignatura sin contenidos por sesión).

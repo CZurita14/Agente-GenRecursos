@@ -14,4 +14,9 @@ rea/
 
 # Pruebas y espacio de trabajo de los agentes de construcción
 .pytest_cache/
+*.egg-info/
 .superpowers/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
