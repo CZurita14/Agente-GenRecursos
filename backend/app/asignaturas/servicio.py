@@ -18,14 +18,14 @@ def exigir_acceso(conn, aid, correo, *, editar=False, solo_dueno=False):
     bloqueo = "update" if solo_dueno else "share"
     fila = conn.execute("select * from asignatura where id=%s for " + bloqueo, (aid,)).fetchone()
     if fila is None:
-        raise HTTPException(404, "Asignatura inexistente")
+        raise HTTPException(404, "Proyecto Formativo inexistente")
     # Nueva sentencia, nueva instantánea READ COMMITTED DESPUÉS de obtener el lock.
     # Un JOIN en la sentencia anterior podía conservar un permiso ya revocado.
     permiso = conn.execute("select rol from asignatura_acceso where asignatura_id=%s and correo=%s",
                            (aid, correo)).fetchone()
     rol = "dueno" if fila["dueno"] == correo else (permiso["rol"] if permiso else None)
     if rol is None or (solo_dueno and rol != "dueno") or (editar and rol == "lector"):
-        raise HTTPException(403, "Sin permiso sobre la asignatura")
+        raise HTTPException(403, "Sin permiso sobre el Proyecto Formativo")
     return fila, rol
 
 

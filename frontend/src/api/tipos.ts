@@ -98,6 +98,7 @@ export interface RecursoResumen {
   estado: 'listo' | 'requiere_revision';
   revision: number;
   creado: string;
+  validado: boolean;
 }
 
 /** Presentación ordenada de una herramienta (backend: app/exportar/presentacion.py). */

@@ -38,7 +38,7 @@ export function Generar({ onSesionVencida, onVerAsignaturas }: GenerarProps) {
   return <>
     <div>
       <h1 className="text-2xl font-bold">Generar herramientas</h1>
-      <p className="text-muted mt-1">Paso 1 · Sube el sílabo de tu asignatura en PDF (el que genera el sistema institucional).</p>
+      <p className="text-muted mt-1">Paso 1 · Sube el sílabo de tu Proyecto Formativo en PDF (el que genera el sistema institucional).</p>
     </div>
     <Card title="Sube tu sílabo" icon={<FileUp aria-hidden="true" />}>
       <div className="space-y-4">
@@ -53,7 +53,7 @@ export function Generar({ onSesionVencida, onVerAsignaturas }: GenerarProps) {
         </Alert>}
         <div className="flex flex-wrap gap-3">
           <Button onClick={subir} loading={subiendo} disabled={!archivo}>Subir sílabo</Button>
-          {resultado && <Button variant="secondary" onClick={onVerAsignaturas}>Ver mis asignaturas</Button>}
+          {resultado && <Button variant="secondary" onClick={onVerAsignaturas}>Ver mis Proyectos Formativos</Button>}
         </div>
       </div>
     </Card>

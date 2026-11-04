@@ -134,7 +134,7 @@ def _guia_final(c: dict) -> list[dict]:
 def _hoja_ruta(c: dict) -> list[dict]:
     p = c["periodo"]
     return [
-        _texto("Asignatura", f"{c['asignatura']} ({c['codigo']})"),
+        _texto("Proyecto Formativo", f"{c['asignatura']} ({c['codigo']})"),
         _texto("Periodo", f"{p['codigo']} · {_fecha(p['inicio'])} – {_fecha(p['fin'])}"),
         _tabla("Momentos", ["Momento", "Fechas", "RA", "Evidencia", "Política de IA"],
                [[f"{m['numero']}. {m['titulo']}", f"{_fecha(m['fecha_inicio'])} – {_fecha(m['fecha_fin'])}",

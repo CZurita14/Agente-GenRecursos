@@ -173,7 +173,7 @@ export function Recurso({ aid, rid, puedeValidar, onVolver, onSesionVencida, onT
       setBorrador(null);
       edicionActiva.current = false;
       setRevisionEdicion(null);
-      setAviso(cambio ? 'Cambios guardados. El recurso volvió a «Sin validar»: revísalo y valídalo de nuevo.' : 'No había cambios que guardar.');
+      setAviso(cambio ? 'Cambios guardados. El recurso volvió a «Por validar»: revísalo y valídalo de nuevo.' : 'No había cambios que guardar.');
     } catch (e) {
       if (e instanceof ErrorApi && e.estado === 409) setError(`${e.message}. Tu borrador se conserva; cópialo antes de cancelar y cargar la versión actual.`);
       else if (e instanceof ErrorApi && e.estado === 422) setError(`${e.message}. Revisa que ningún campo quede vacío o demasiado corto.`);
@@ -191,10 +191,9 @@ export function Recurso({ aid, rid, puedeValidar, onVolver, onSesionVencida, onT
       <h1 className="text-2xl font-bold mt-2">{nombreHerramienta(r.herramienta)}</h1>
       <div className="flex flex-wrap items-center gap-2 mt-2">
         <Badge tone="brand">{nombreAmbito(r.ambito_id)}</Badge>
-        {r.evidencia.borrador === true && <Badge tone="warning">Borrador</Badge>}
         {r.revision > 0 && <Badge tone="neutral">Editado por el docente</Badge>}
         {r.validado ? <Badge tone="success" icon={<CheckCircle2 aria-hidden="true" className="w-3 h-3" />}>Validado</Badge>
-          : <Badge tone="neutral">Sin validar</Badge>}
+          : <Badge tone="neutral">Por validar</Badge>}
         {cantidad > 0 && <Badge tone="warning">{cantidad} {cantidad === 1 ? 'alerta' : 'alertas'}</Badge>}
       </div>
     </div>
@@ -240,7 +239,7 @@ export function Recurso({ aid, rid, puedeValidar, onVolver, onSesionVencida, onT
           <a href={urlExportar(aid, r.id, 'pdf')} download className="text-action underline">Descargar PDF</a>
           <a href={urlExportar(aid, r.id, 'docx')} download className="text-action underline">Descargar Word</a>
         </div>
-      </div> : !puedeValidar ? <p className="text-sm text-muted">Un editor o el dueño de la asignatura debe validarlo antes de descargarlo.</p>
+      </div> : !puedeValidar ? <p className="text-sm text-muted">Un editor o el dueño del Proyecto Formativo debe validarlo antes de descargarlo.</p>
         : <div className="space-y-3">
           <p className="text-sm text-muted">La descarga se habilita cuando validas el recurso: confirma que lo revisaste.</p>
           <Button onClick={() => cantidad > 0 ? setConfirmar(true) : validarRecurso()} loading={validando}>Validar recurso</Button>

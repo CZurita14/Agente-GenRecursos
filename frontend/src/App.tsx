@@ -26,7 +26,7 @@ type Ruta =
 
 const MENU = [
   { id: 'inicio', label: 'Inicio', icon: <Home aria-hidden="true" className="w-4 h-4" /> },
-  { id: 'asignaturas', label: 'Mis asignaturas', icon: <BookOpen aria-hidden="true" className="w-4 h-4" /> },
+  { id: 'asignaturas', label: 'Proyecto Formativo', icon: <BookOpen aria-hidden="true" className="w-4 h-4" /> },
   { id: 'recursos', label: 'Mis recursos', icon: <FolderOpen aria-hidden="true" className="w-4 h-4" /> },
 ];
 
@@ -75,7 +75,7 @@ export default function App() {
         creados: ids.map(id => ({ id, herramienta: 'recurso', estado: 'en_cola' })) })}
       onAbrir={(aid, rid, rol) => setRuta({ vista: 'recurso', curso: { aid, rol }, rid, volver: { vista: 'recursos', aid } })} />}
     {ruta.vista === 'recurso' && <Recurso key={`${ruta.curso.aid}:${ruta.rid}`} aid={ruta.curso.aid} rid={ruta.rid} puedeValidar={ruta.curso.rol !== 'lector'}
-      onTrabajos={ids => setRuta({ vista: 'progreso', curso: { ...ruta.curso, nombre: ruta.curso.nombre ?? 'Asignatura' },
+      onTrabajos={ids => setRuta({ vista: 'progreso', curso: { ...ruta.curso, nombre: ruta.curso.nombre ?? 'Proyecto Formativo' },
         creados: ids.map(id => ({ id, herramienta: 'recurso', estado: 'en_cola' })) })}
       onSesionVencida={expirar} onVolver={() => setRuta(ruta.volver)} />}
   </AppLayout>;

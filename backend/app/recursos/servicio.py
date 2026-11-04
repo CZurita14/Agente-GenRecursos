@@ -26,7 +26,7 @@ def _recurso(conn, aid, rid, *, editar=False):
                         "where r.id=%s and r.asignatura_id=%s" + (" for update of r" if editar else ""),
                         (rid, aid)).fetchone()
     if fila is None:
-        raise HTTPException(404, "Recurso inexistente en esta asignatura")
+        raise HTTPException(404, "Recurso inexistente en este Proyecto Formativo")
     return fila
 
 
@@ -115,7 +115,7 @@ class ServicioRecursos:
                 except KeyError:
                     contexto = None
                 if contexto is None:
-                    raise HTTPException(404, "Ámbito inexistente en esta asignatura")
+                    raise HTTPException(404, "Ámbito inexistente en este Proyecto Formativo")
             recomendaciones = self.perfiles[a["agente"]].herramientas_recomendadas.get(ambito, [])
             con_ia = [] if motivo else [h for h in WORKERS if h in DEFINICIONES and DEFINICIONES[h].ambito == ambito
                                         and (contexto is None or DEFINICIONES[h].requisitos(contexto) is None)]
@@ -223,7 +223,7 @@ class ServicioRecursos:
     def listar(self, aid, correo, limite, desde):
         with self._acceso(aid, correo) as (conn, _):
             return conn.execute("select id,trabajo_id,ambito_id,herramienta,version_silabo,estado,revision,"
-                                "creado,actualizado from recurso where asignatura_id=%s "
+                                "creado,actualizado,validado_por is not null as validado from recurso where asignatura_id=%s "
                                 "order by creado desc,id limit %s offset %s", (aid, limite, desde)).fetchall()
 
     def obtener(self, aid, rid, correo):

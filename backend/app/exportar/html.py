@@ -15,7 +15,7 @@ NOMBRES = {
     "cuestionario": "Cuestionario", "simulacro": "Simulacro", "ficha_clase": "Ficha de clase",
     "repaso_momento": "Repaso integrador", "guia_evidencia": "Guía de la evidencia",
     "estudio_caso": "Estudio de caso", "guia_producto_final": "Guía del producto final",
-    "hoja_ruta": "Hoja de ruta de la asignatura", "autoevaluacion_rubrica": "Autoevaluación con la rúbrica",
+    "hoja_ruta": "Hoja de ruta del Proyecto Formativo", "autoevaluacion_rubrica": "Autoevaluación con la rúbrica",
     "autoevaluacion_final": "Autoevaluación final", "lista_evidencia": "Lista de verificación de la evidencia",
     "rubrica_momento": "Rúbrica del momento", "rubrica_final": "Rúbrica del producto final",
 }

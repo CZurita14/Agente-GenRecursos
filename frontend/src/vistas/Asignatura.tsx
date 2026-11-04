@@ -13,7 +13,7 @@ interface AsignaturaProps {
   onSesionVencida: () => void;
 }
 
-/** Paso 1 del recorrido: el menú de la asignatura por semana; cada clase o momento abre la actividad. */
+/** Paso 1 del recorrido: el menú del Proyecto Formativo por semana; cada clase o momento abre la actividad. */
 export function Asignatura({ aid, nombre, onElegir, onVerRecursos, onSesionVencida }: AsignaturaProps) {
   const [datos, setDatos] = useState<MenuAsignatura | null>(null);
   const [cuenta, setCuenta] = useState<Record<string, number>>({});
@@ -47,8 +47,8 @@ export function Asignatura({ aid, nombre, onElegir, onVerRecursos, onSesionVenci
       <div className="flex flex-wrap gap-2">
         <Button variant="secondary" onClick={onVerRecursos}>Ver recursos</Button>
         {puedeGenerar && <Button variant="secondary"
-          onClick={() => onElegir({ tipo: 'asignatura', id: 'asignatura' }, 'Toda la asignatura')}>
-          Herramientas de la asignatura
+          onClick={() => onElegir({ tipo: 'asignatura', id: 'asignatura' }, 'Todo el Proyecto Formativo')}>
+          Herramientas del Proyecto Formativo
         </Button>}
       </div>
     </div>

@@ -7,7 +7,7 @@ export const NOMBRES: Record<string, string> = {
   guia_evidencia: 'Guía de la evidencia',
   estudio_caso: 'Estudio de caso',
   guia_producto_final: 'Guía del producto final',
-  hoja_ruta: 'Hoja de ruta de la asignatura',
+  hoja_ruta: 'Hoja de ruta del Proyecto Formativo',
   autoevaluacion_rubrica: 'Autoevaluación con la rúbrica',
   autoevaluacion_final: 'Autoevaluación final',
   lista_evidencia: 'Lista de verificación de la evidencia',
@@ -19,9 +19,9 @@ export const SIN_IA = new Set(['hoja_ruta', 'autoevaluacion_rubrica', 'autoevalu
 
 export const nombreHerramienta = (id: string) => NOMBRES[id] ?? id;
 
-/** «M2-S1» → «Clase M2-S1»; «M2» → «Momento 2»; «asignatura» → «Asignatura». */
+/** «M2-S1» → «Clase M2-S1»; «M2» → «Momento 2»; «asignatura» → «Proyecto Formativo». */
 export function nombreAmbito(id: string): string {
-  if (id === 'asignatura') return 'Asignatura';
+  if (id === 'asignatura') return 'Proyecto Formativo';
   const momento = /^M(\d+)$/.exec(id);
   return momento ? `Momento ${momento[1]}` : `Clase ${id}`;
 }
