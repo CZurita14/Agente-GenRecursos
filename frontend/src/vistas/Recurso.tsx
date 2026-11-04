@@ -4,7 +4,7 @@ import { Alert, Badge, Button, Card, Modal } from '../components';
 import { ErrorApi, editar, recurso as cargarRecurso, urlExportar, validar } from '../api/cliente';
 import { leer, poner } from '../api/edicion';
 import type { Bloque, Recurso as TipoRecurso, Ruta } from '../api/tipos';
-import { SIN_IA, legible, nombreAmbito, nombreHerramienta } from '../api/herramientas';
+import { CON_RESPUESTAS, SIN_IA, legible, nombreAmbito, nombreHerramienta } from '../api/herramientas';
 import { ChatAjustes } from '../components/ChatAjustes';
 
 interface RecursoProps {
@@ -241,6 +241,13 @@ export function Recurso({ aid, rid, puedeValidar, onVolver, onSesionVencida, onT
           <a href={urlExportar(aid, r.id, 'pdf')} download className="text-action underline">Descargar PDF</a>
           <a href={urlExportar(aid, r.id, 'docx')} download className="text-action underline">Descargar Word</a>
         </div>
+        {CON_RESPUESTAS.has(r.herramienta) && puedeValidar && <div className="rounded-lg border border-line p-3 space-y-2">
+          <p className="text-sm"><strong>Solo para el docente.</strong> Las descargas de arriba son para el estudiante y no llevan respuestas. Estas sí: no las compartas.</p>
+          <div className="flex flex-wrap gap-3">
+            <a href={urlExportar(aid, r.id, 'pdf', true)} download className="text-action underline">Descargar respuestas en PDF</a>
+            <a href={urlExportar(aid, r.id, 'docx', true)} download className="text-action underline">Descargar respuestas en Word</a>
+          </div>
+        </div>}
       </div> : !puedeValidar ? <p className="text-sm text-muted">Un editor o el dueño del Proyecto Formativo debe validarlo antes de descargarlo.</p>
         : <div className="space-y-3">
           <p className="text-sm text-muted">La descarga se habilita cuando validas el recurso: confirma que lo revisaste.</p>

@@ -17,6 +17,9 @@ export const NOMBRES: Record<string, string> = {
 
 export const SIN_IA = new Set(['hoja_ruta', 'autoevaluacion_rubrica', 'autoevaluacion_final', 'lista_evidencia', 'rubrica_momento', 'rubrica_final']);
 
+/** Tienen una descarga aparte con las respuestas, solo para el docente; la del estudiante no las lleva. */
+export const CON_RESPUESTAS = new Set(['cuestionario', 'simulacro', 'estudio_caso']);
+
 export const nombreHerramienta = (id: string) => NOMBRES[id] ?? id;
 
 /** Códigos a nombres completos, también dentro de lo que redacta la IA; solo al mostrar. */

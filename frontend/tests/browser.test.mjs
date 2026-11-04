@@ -545,3 +545,20 @@ test('avisa si la clave contradice su explicación, también en lo ya validado',
   await page.getByText('¿Validar con alertas pendientes?').waitFor();
   await context.close();
 });
+
+test('dos apartados: el estudiante sin respuestas y el docente con ellas', async () => {
+  const fila = (id, herramienta) => ({ id, trabajo_id: `t${id}`, ambito_id: 'M2-S1', herramienta, version_silabo: '1.0', estado: 'listo',
+    revision: 0, creado: '2026-11-04T10:00:00Z', validado: true });
+  const { context, page } = await abrir({ rutas: {
+    '/asignaturas/a1/recursos': route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([fila('q', 'cuestionario'), fila('f', 'ficha_clase')]) }),
+  } });
+  await page.getByRole('navigation', { name: 'Navegación principal' }).getByRole('button', { name: 'Mis recursos', exact: true }).click();
+  const tabla = page.getByRole('table', { name: 'Recursos del Proyecto Formativo' });
+  const quiz = tabla.getByRole('row').filter({ hasText: 'Cuestionario' });
+  await quiz.getByText('Docente (respuestas):').waitFor();
+  assert.ok(!/version=docente/.test(await quiz.getByRole('link', { name: 'Descargar Cuestionario en PDF' }).getAttribute('href')));
+  assert.match(await quiz.getByRole('link', { name: 'Descargar respuestas de Cuestionario en PDF' }).getAttribute('href'), /formato=pdf&version=docente$/);
+  assert.equal(await quiz.getByRole('link', { name: /respuestas de Cuestionario en HTML/ }).count(), 0);
+  assert.equal(await tabla.getByRole('row').filter({ hasText: 'Ficha de clase' }).getByText('Docente (respuestas):').count(), 0, 'la ficha no tiene respuestas');
+  await context.close();
+});

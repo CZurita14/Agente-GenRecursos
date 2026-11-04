@@ -13,7 +13,7 @@ from app.agentes.workers.definiciones import DEFINICIONES
 from app.asignaturas.servicio import exigir_acceso
 from app.herramientas.sin_ia import HERRAMIENTAS_SIN_IA, generar_sin_ia
 from app.recursos.validacion import EdicionInvalida, validar_contenido
-from app.exportar.html import exportar_html, nombre_archivo
+from app.exportar.html import CON_RESPUESTAS, exportar_html, nombre_archivo
 from app.exportar.presentacion import presentar
 from app.herramientas.politica import excluye_ia_en_evaluacion
 from app.silabo.contexto import contexto_por_id
@@ -182,21 +182,24 @@ class ServicioRecursos:
             trabajos.append({"id": str(tid), "herramienta": herramienta, "estado": "listo", "recurso_id": str(rid)})
         return {"trabajos": trabajos}
 
-    def exportar(self, aid, rid, correo, formato="html"):
-        """Exportación de una instantánea validada por el docente (spec §13)."""
-        with self._acceso(aid, correo) as (conn, _):
+    def exportar(self, aid, rid, correo, formato="html", version="estudiante"):
+        """Exportación validada (spec §13). La versión del docente trae las respuestas: lector no accede."""
+        docente = version == "docente"
+        with self._acceso(aid, correo, editar=docente) as (conn, _):
             r = _recurso(conn, aid, rid)
             if r["validado_por"] is None:
                 raise HTTPException(409, "Valida el recurso antes de descargarlo")
             contexto = _contexto(r, None)
             if formato not in ("html", "pdf", "docx"):
                 raise HTTPException(422, "Formato no soportado")
-            nombre = nombre_archivo(r["herramienta"], r["ambito_id"], contexto.asignatura, formato)
+            if docente and (formato == "html" or r["herramienta"] not in CON_RESPUESTAS):
+                raise HTTPException(422, "Esta versión no está disponible")
+            nombre = nombre_archivo(r["herramienta"], r["ambito_id"], contexto.asignatura, formato, docente)
         if formato == "html":
             return nombre, exportar_html(r, contexto)
         from app.exportar.documento import exportar_documento, FormulaInvalida
         try:
-            return nombre, exportar_documento(r, contexto, formato)
+            return nombre, exportar_documento(r, contexto, formato, docente)
         except FormulaInvalida:
             raise HTTPException(422, "No se pudo representar una fórmula. Revisa su notación antes de exportar.") from None
 

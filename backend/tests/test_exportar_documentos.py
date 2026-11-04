@@ -12,19 +12,18 @@ from tests.test_generacion_api import HEADERS, compartir
 
 
 @pytest.mark.parametrize('formato', ['pdf', 'docx'])
-def test_documento_preguntas_respuestas_y_formula(silabo, formato):
+def test_documento_del_docente_con_respuestas_y_formula(silabo, formato):
     r = _recurso('cuestionario', [_item(1, 'Calcula $x^2 + \\frac{1}{2}$')])
-    datos = exportar_documento(r, contexto_clase(silabo, 'M2-S1'), formato)
+    datos = exportar_documento(r, contexto_clase(silabo, 'M2-S1'), formato, docente=True)
     if formato == 'pdf':
         with pdfplumber.open(BytesIO(datos)) as pdf:
             texto = '\n'.join(p.extract_text() or '' for p in pdf.pages)
-            assert len(pdf.pages) >= 2
     else:
         with ZipFile(BytesIO(datos)) as z:
             texto = z.read('word/document.xml').decode()
             assert any(n.startswith('word/media/') for n in z.namelist())
             assert not any(b'TargetMode="External"' in z.read(n) for n in z.namelist() if n.endswith('.rels'))
-    assert texto.index('Calcula') < texto.index('Respuestas y justificaciones')
+    assert 'solo para el docente' in texto and 'Respuesta correcta: B' in texto and 'Porque 1' in texto
     assert 'Momento 2' in texto and 'M2-S1' not in texto and 'revisado por el docente' in texto
     assert 'item_id' not in texto
 
@@ -117,3 +116,43 @@ def test_lector_descarga_solo_validado_y_pertenencia(entorno, silabo, formato):
     assert d.get(f"/asignaturas/{otro}/recursos/{recurso['id']}/exportar?formato={formato}").status_code == 404
     lector.cookies.clear()
     assert lector.get(url).status_code == 401
+
+
+def _texto_de(datos, formato):
+    if formato == 'pdf':
+        with pdfplumber.open(BytesIO(datos)) as pdf:
+            return '\n'.join(p.extract_text() or '' for p in pdf.pages)
+    with ZipFile(BytesIO(datos)) as z:
+        return z.read('word/document.xml').decode()
+
+
+@pytest.mark.parametrize('formato', ['pdf', 'docx'])
+def test_documento_del_estudiante_sin_respuestas(silabo, formato):
+    texto = _texto_de(exportar_documento(_recurso('cuestionario', [_item(1)]), contexto_clase(silabo, 'M2-S1'), formato), formato)
+    assert 'Opción 3' in texto and 'Porque' not in texto and 'Respuesta' not in texto
+
+
+@pytest.mark.parametrize('formato', ['pdf', 'docx'])
+def test_caso_del_estudiante_sin_respuesta_orientativa(silabo, formato):
+    c = {'caso': {'caso': 'Un caso', 'ra': 'RA2', 'preguntas': [
+        {'nivel': 'critico', 'pregunta': 'Por que ocurre', 'respuesta_orientativa': 'ORIENTATIVA-OCULTA'}]}}
+    ctx = contexto_clase(silabo, 'M2-S1')
+    estudiante = _texto_de(exportar_documento(_recurso('estudio_caso', c), ctx, formato), formato)
+    docente = _texto_de(exportar_documento(_recurso('estudio_caso', c), ctx, formato, docente=True), formato)
+    assert 'Por que ocurre' in estudiante and 'ORIENTATIVA-OCULTA' not in estudiante
+    assert 'ORIENTATIVA-OCULTA' in docente
+
+
+def test_respuestas_solo_para_quien_edita(entorno):
+    _, clientes, d, aid, producir = entorno
+    recurso = producir()
+    base = f"/asignaturas/{aid}/recursos/{recurso['id']}/exportar?formato=pdf"
+    assert d.get(base + '&version=docente').status_code == 409  # Sin validar, tampoco.
+    assert d.post(f"/asignaturas/{aid}/recursos/{recurso['id']}/validar", json={'revision': recurso['revision']}, headers=HEADERS).status_code == 200
+    r = d.get(base + '&version=docente')
+    assert r.status_code == 200 and 'Respuestas%20-%20' in r.headers['content-disposition']
+    assert d.get(f"/asignaturas/{aid}/recursos/{recurso['id']}/exportar?formato=html&version=docente").status_code == 422
+    lector = clientes('lector@uti.edu.ec')
+    assert compartir(d, aid, 'lector@uti.edu.ec', 'lector').status_code == 200
+    assert lector.get(base).status_code == 200 and lector.get(base + '&version=docente').status_code == 403
+    assert d.get(base + '&version=otra').status_code == 422

@@ -1,11 +1,10 @@
 """P6b T2: HTML autónomo para Canvas (spec §13): escapado, sin recursos externos y con el pie."""
 from html import escape
-import json
 import re
 
 import pytest
 
-from app.exportar.html import PIE, _clave, cabecera_descarga, exportar_html, nombre_archivo
+from app.exportar.html import PIE, cabecera_descarga, exportar_html, nombre_archivo
 from app.herramientas.sin_ia import generar_sin_ia
 from app.silabo.contexto import contexto_clase, contexto_por_id
 from tests.test_generacion_api import HEADERS, entorno  # noqa: F401
@@ -24,23 +23,13 @@ def _recurso(herramienta, contenido, ambito="M2-S1"):
     return {"herramienta": herramienta, "ambito_id": ambito, "contenido": contenido}
 
 
-def test_html_cuestionario_no_muestra_la_clave(silabo):
+def test_html_del_estudiante_no_contiene_respuestas(silabo):
     html = exportar_html(_recurso("cuestionario", [_item(1), _item(2)]), contexto_clase(silabo, "M2-S1"))
-    assert html.startswith("<!DOCTYPE html>") and "<script>" in html
+    assert html.startswith("<!DOCTYPE html>")
     assert not re.search(r"\b(src|href)\s*=\s*[\"']?https?:", html)  # Sin recursos externos.
     assert "Opción 3" in html and html.count('type="radio"') == 8
-    # Ni la clave ni las justificaciones quedan legibles antes de entregar.
-    assert "data-correcta" not in html and "data-justificacion" not in html and "Porque 2" not in html
-    assert "data-entregar disabled" in html and "<details" not in html
-
-
-def test_clave_se_recupera_al_entregar():
-    """Lo mismo que revierte el JavaScript."""
-    item = _item(3)
-    item["opciones"][1]["justificacion"] = "Según RA2 es <b>correcta</b> ñ"
-    crudo = bytes.fromhex(_clave(item, 3))
-    datos = json.loads(bytes(b ^ ((3 * 7 + i * 13 + 91) & 255) for i, b in enumerate(crudo)).decode("utf-8"))
-    assert datos["c"] == 1 and datos["j"][1] == "Según Resultado de aprendizaje 2 es <b>correcta</b> ñ"
+    for rastro in ("data-correcta", "data-justificacion", "data-clave", "Porque 2", "data-entregar", "data-puntaje", "<details"):
+        assert rastro not in html, rastro
 
 
 def test_html_escapa_contenido(silabo):
@@ -117,11 +106,11 @@ def test_lista_evidencia_con_casillas(silabo):
     assert "data-lista" in html and "data-avance" in html
 
 
-def test_estudio_caso_oculta_la_respuesta_y_el_escenario(silabo):
+def test_estudio_caso_sin_respuesta_ni_escenario(silabo):
     c = {"caso": {"escenario": "ESCENARIO-INTERNO", "caso": "Un caso", "ra": "RA2",
                   "preguntas": [{"nivel": "critico", "pregunta": "¿Por qué?", "respuesta_orientativa": "Porque sí"}]}}
     html = exportar_html(_recurso("estudio_caso", c, "M2"), contexto_por_id(silabo, "M2"))
-    assert "<textarea" in html and "<details><summary>Ver respuesta orientativa</summary><p>Porque sí</p></details>" in html
+    assert "<textarea" in html and "Porque sí" not in html and "Respuesta orientativa" not in html
     assert "ESCENARIO-INTERNO" not in html
 
 
@@ -141,10 +130,9 @@ def test_forma_anterior_se_muestra_sin_interaccion(silabo):
     assert "Texto del docente" in html
 
 
-def test_simulacro_se_corrige_igual_que_el_cuestionario(silabo):
+def test_simulacro_del_estudiante_sin_solucionario(silabo):
     html = exportar_html(_recurso("simulacro", [_item(1), _item(2)], "M2"), contexto_por_id(silabo, "M2"))
-    assert "data-puntaje" in html and "data-entregar" in html
-    assert "Ver solucionario" not in html and "Porque 1" not in html
+    assert "Ver solucionario" not in html and "Porque 1" not in html and "data-entregar" not in html
 
 
 def test_marcables_y_resultado_ocultable(silabo):
@@ -212,3 +200,7 @@ def test_cabecera_no_se_rompe_al_normalizar():
     valor = cabecera.split('filename="')[1].split('"')[0]
     assert ";" not in valor and "/" not in valor
     assert cabecera.count("; filename=") == 1 and cabecera.count("; filename*=") == 1  # Lo demás queda dentro de las comillas.
+
+
+def test_archivo_del_docente_se_distingue():
+    assert nombre_archivo("cuestionario", "M1-S1", "DATOS", "pdf", docente=True) == "Respuestas - Cuestionario - Momento 1, sesión 1 - Datos.pdf"

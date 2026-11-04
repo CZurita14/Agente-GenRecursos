@@ -80,8 +80,9 @@ def validar(asig: UUID, rid: UUID, datos: Validacion, request: Request):
 
 
 @router.get("/recursos/{rid}/exportar")
-def exportar(asig: UUID, rid: UUID, request: Request, formato: Literal["html", "pdf", "docx"] = "html"):
-    nombre, contenido = request.app.state.recursos.exportar(asig, rid, request.state.usuario, formato)
+def exportar(asig: UUID, rid: UUID, request: Request, formato: Literal["html", "pdf", "docx"] = "html",
+             version: Literal["estudiante", "docente"] = "estudiante"):
+    nombre, contenido = request.app.state.recursos.exportar(asig, rid, request.state.usuario, formato, version)
     mime = {"html": "text/html", "pdf": "application/pdf", "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"}
     return Response(contenido, media_type=mime[formato], headers={"Content-Disposition": cabecera_descarga(nombre),
                                             "Cache-Control": "private, no-store",

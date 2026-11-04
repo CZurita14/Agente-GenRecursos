@@ -47,41 +47,51 @@ def _fragmentos(texto):
             yield parte, None
 
 
-def bloques_documento(recurso, contexto):
+def bloques_documento(recurso, contexto, docente=False):
     """Los bloques del documento con nombres completos en lugar de códigos."""
-    for bloque in _bloques_documento(recurso, contexto):
+    for bloque in _bloques_documento(recurso, contexto, docente):
         yield legibles(bloque)
 
 
-def _bloques_documento(recurso, contexto):
+def _sin_respuestas(b):
+    """Quita las respuestas orientativas de la versión del estudiante."""
+    if b.get("tipo") == "grupo":
+        return {**b, "bloques": [x for x in b["bloques"] if x.get("titulo") != "Respuesta orientativa"]}
+    return b
+
+
+def _bloques_documento(recurso, contexto, docente):
     """Proyección explícita: nunca exportar evidencia o razonamiento interno."""
-    yield {'tipo': 'texto', 'titulo': NOMBRES.get(recurso['herramienta'], recurso['herramienta']),
+    nombre = NOMBRES.get(recurso['herramienta'], recurso['herramienta'])
+    yield {'tipo': 'texto', 'titulo': f'Respuestas: {nombre} (solo para el docente)' if docente else nombre,
            'texto': contexto.asignatura if contexto.momento_titulo == contexto.asignatura
            else contexto.asignatura + ' · ' + contexto.momento_titulo}
     contenido = recurso['contenido']
-    if es_quiz(contenido):
+    if es_quiz(contenido) and docente:
+        for n, item in enumerate(contenido, 1):
+            o = item['opciones'][item['correcta']]
+            yield {'tipo': 'grupo', 'titulo': '', 'mantener': True, 'bloques': [
+                {'tipo': 'texto', 'titulo': f'Pregunta {n}', 'texto': item['pregunta']},
+                {'tipo': 'texto', 'titulo': f'Respuesta correcta: {chr(65+item["correcta"])}',
+                 'texto': o['texto'] + '\n' + o.get('justificacion', '')}]}
+    elif es_quiz(contenido):
         for n, item in enumerate(contenido, 1):
             yield {'tipo': 'grupo', 'titulo': '', 'mantener': True, 'bloques': [
                 {'tipo': 'texto', 'titulo': f'Pregunta {n}', 'texto': item.get('contexto', '') + '\n' + item['pregunta']},
                 {'tipo': 'lista', 'titulo': '', 'items': [f'{chr(65+k)}) {o["texto"]}' for k, o in enumerate(item['opciones'])]}]}
-        yield {'tipo': 'salto'}
-        yield {'tipo': 'texto', 'titulo': 'Respuestas y justificaciones', 'texto': ''}
-        for n, item in enumerate(contenido, 1):
-            o = item['opciones'][item['correcta']]
-            yield {'tipo': 'texto', 'titulo': f'Pregunta {n}: {chr(65+item["correcta"])}',
-                   'texto': o['texto'] + '\n' + o.get('justificacion', '')}
     else:
-        yield from presentar(recurso['herramienta'], contenido)
+        bloques = presentar(recurso['herramienta'], contenido)
+        yield from (bloques if docente else [_sin_respuestas(b) for b in bloques])
     yield {'tipo': 'texto', 'titulo': 'Datos del recurso', 'texto':
            f'{contexto.asignatura} · {nombre_ambito(contexto.clase_id)} · {contexto.fecha:%d/%m/%Y}\n'
            + 'Resultados de aprendizaje: ' + '; '.join(f'{r.id}: {r.texto}' for r in contexto.ra)
            + '\nPolítica de IA: ' + (contexto.politica_ia or 'No indicada en el sílabo') + '\n' + PIE}
 
 
-def exportar_documento(recurso, contexto, formato):
+def exportar_documento(recurso, contexto, formato, docente=False):
     if formato not in ('pdf', 'docx'):
         raise ValueError('Formato no soportado')
-    return _docx(list(bloques_documento(recurso, contexto))) if formato == 'docx' else _pdf(list(bloques_documento(recurso, contexto)))
+    return _docx(list(bloques_documento(recurso, contexto, docente))) if formato == 'docx' else _pdf(list(bloques_documento(recurso, contexto, docente)))
 
 
 def _docx(bloques):

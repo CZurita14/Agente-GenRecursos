@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Alert, Badge, Button, Card, DataTable, type Column } from '../components';
 import { ErrorApi, asignaturas as cargarAsignaturas, recursos as cargarRecursos, trabajos as cargarTrabajos, urlExportar } from '../api/cliente';
 import type { AsignaturaResumen, RecursoResumen, Trabajo } from '../api/tipos';
-import { nombreAmbito, nombreHerramienta } from '../api/herramientas';
+import { CON_RESPUESTAS, nombreAmbito, nombreHerramienta } from '../api/herramientas';
 import { ChatAjustes } from '../components/ChatAjustes';
 import { ETAPAS, FINALES, INTERVALO_MS } from './Progreso';
 
@@ -87,11 +87,19 @@ export function Recursos({ aidInicial, onAbrir, onSesionVencida, onTrabajos }: R
       const nombre = nombreHerramienta(r.herramienta);
       const abrir = () => onAbrir(aid, r.id, rol);
       if (!r.validado) return <Button size="sm" onClick={abrir} aria-label={`Revisar ${nombre}`}>{rol === 'lector' ? 'Ver' : 'Revisar y validar'}</Button>;
-      return <div className="flex flex-wrap items-center gap-2">
-        <span className="text-muted">Descargar:</span>
-        {FORMATOS.map(([formato, etiqueta]) => <a key={formato} href={urlExportar(aid, r.id, formato)} download
-          aria-label={`Descargar ${nombre} en ${etiqueta}`} className="rounded px-2 py-1 text-action-ink font-semibold underline">{etiqueta}</a>)}
-        <Button variant="ghost" size="sm" onClick={abrir} aria-label={`Revisar ${nombre}`}>Ver</Button>
+      const enlace = 'rounded px-2 py-1 text-action-ink font-semibold underline';
+      return <div className="space-y-1">
+        <div className="flex flex-wrap items-center gap-1">
+          <span className="text-muted">Estudiante:</span>
+          {FORMATOS.map(([formato, etiqueta]) => <a key={formato} href={urlExportar(aid, r.id, formato)} download
+            aria-label={`Descargar ${nombre} en ${etiqueta}`} className={enlace}>{etiqueta}</a>)}
+          <Button variant="ghost" size="sm" onClick={abrir} aria-label={`Revisar ${nombre}`}>Ver</Button>
+        </div>
+        {CON_RESPUESTAS.has(r.herramienta) && rol !== 'lector' && <div className="flex flex-wrap items-center gap-1">
+          <span className="text-muted">Docente (respuestas):</span>
+          {FORMATOS.filter(([formato]) => formato !== 'html').map(([formato, etiqueta]) => <a key={formato} href={urlExportar(aid, r.id, formato, true)} download
+            aria-label={`Descargar respuestas de ${nombre} en ${etiqueta}`} className={enlace}>{etiqueta}</a>)}
+        </div>}
       </div>;
     } },
   ];

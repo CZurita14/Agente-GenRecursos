@@ -3,9 +3,11 @@
 Seguridad: el contenido viene del modelo y del docente, así que TODO texto pasa por
 `html.escape`. El JavaScript es fijo (no lleva datos del recurso): lee atributos del DOM ya
 escapados. Lo que el estudiante marca o escribe no se guarda: al recargar vuelve a empezar.
+
+Este archivo es para el estudiante: no lleva claves ni respuestas orientativas, ni ocultas.
+Las respuestas se descargan aparte, solo para el docente (app.exportar.documento).
 """
 from html import escape
-import json
 import re
 import unicodedata
 from urllib.parse import quote
@@ -24,6 +26,8 @@ NOMBRES = {
     "rubrica_momento": "Rúbrica del momento", "rubrica_final": "Rúbrica del producto final",
 }
 # Listas de la presentación que el estudiante va marcando, y textos que descubre cuando quiere.
+# Las que tienen una versión con respuestas, solo para el docente.
+CON_RESPUESTAS = {"cuestionario", "simulacro", "estudio_caso"}
 LISTAS_MARCABLES = {"Autocomprobación", "Autochequeo", "Preguntas de repaso", "Recomendaciones"}
 TEXTOS_OCULTABLES = {"Resultado": "Ver el resultado"}
 ESTILO = """
@@ -40,48 +44,11 @@ footer{margin-top:32px;border-top:1px solid #E2D9EE;padding-top:12px;font-size:1
 .chk{display:flex;gap:8px;align-items:flex-start}.chk input{margin-top:5px}.avance{font-weight:700;color:#6E5987}
 details{margin:8px 0;padding:8px;background:#F4F0F9;border-radius:8px}summary{cursor:pointer;font-weight:600}
 textarea{width:100%;min-height:80px;box-sizing:border-box;padding:8px;border:1px solid #E2D9EE;border-radius:8px;font:inherit}
-.clave{background:#E2F6ED;font-weight:600}.errada{background:#FFE7EC}label:has(input:disabled){cursor:default}
 .nivel{font-weight:700}button{font:inherit;padding:6px 12px;border:1px solid #6E5987;border-radius:8px;background:#fff;cursor:pointer}
 @media print{button,textarea{display:none}details{background:none}section,fieldset{break-inside:avoid}}
 """
 # Autocorrección, autoevaluación, listas marcables e impresión; todo sale de atributos del DOM.
 SCRIPT = """
-function clave(f, n) {
-  // Clave ofuscada: no aparece en pantalla ni se encuentra leyendo el archivo a simple vista.
-  var h = f.getAttribute('data-clave'), b = new Uint8Array(h.length / 2);
-  for (var i = 0; i < b.length; i++) b[i] = parseInt(h.substr(i * 2, 2), 16) ^ ((n * 7 + i * 13 + 91) & 255);
-  return JSON.parse(new TextDecoder().decode(b));
-}
-var preguntas = document.querySelectorAll('fieldset[data-item]');
-var entregar = document.querySelector('[data-entregar]');
-function respondidas() {
-  var hechas = document.querySelectorAll('fieldset[data-item] input:checked').length;
-  document.querySelector('[data-puntaje]').textContent = 'Respondidas ' + hechas + ' de ' + preguntas.length;
-  entregar.disabled = hechas < preguntas.length;
-}
-if (entregar) {
-  preguntas.forEach(function (f) { f.addEventListener('change', respondidas); });
-  entregar.addEventListener('click', function () {
-    var bien = 0;
-    preguntas.forEach(function (f, n) {
-      var c = clave(f, n + 1), opciones = f.querySelectorAll('label'), fb = f.querySelector('.fb'), elegida = -1;
-      opciones.forEach(function (l, k) { var i = l.querySelector('input'); if (i.checked) elegida = k; i.disabled = true; });
-      var acierto = elegida === c.c;
-      if (acierto) bien++;
-      opciones[c.c].classList.add('clave');
-      if (!acierto) opciones[elegida].classList.add('errada');
-      fb.className = 'fb ' + (acierto ? 'ok' : 'mal');
-      fb.textContent = acierto ? 'Correcto. ' + c.j[c.c]
-        : 'Incorrecto. ' + c.j[elegida] + ' Respuesta correcta: ' + opciones[c.c].textContent.trim() + '. ' + c.j[c.c];
-      fb.style.display = 'block';
-    });
-    var p = document.querySelector('[data-puntaje]');
-    p.textContent = 'Resultado: ' + bien + ' de ' + preguntas.length + ' correctas';
-    entregar.style.display = 'none';
-    p.scrollIntoView();
-  });
-  respondidas();
-}
 function resumen() {
   var p = document.querySelector('[data-resumen]');
   if (!p) return;
@@ -123,9 +90,10 @@ def _sin_prohibidos(texto: str) -> str:
     return re.sub(r'[\x00-\x1f\x7f\\/:*?"<>|;]+', " ", texto)
 
 
-def nombre_archivo(herramienta: str, ambito_id: str, proyecto: str, formato: str) -> str:
+def nombre_archivo(herramienta: str, ambito_id: str, proyecto: str, formato: str, docente: bool = False) -> str:
     """«Ficha de clase - Momento 2, sesión 1 - Analisis de datos.pdf», sin códigos internos."""
-    partes = [NOMBRES.get(herramienta, herramienta)]
+    partes = ["Respuestas"] if docente else []
+    partes.append(NOMBRES.get(herramienta, herramienta))
     if ambito_id != "asignatura":
         partes.append(nombre_ambito(ambito_id))
     partes.append(proyecto.strip().capitalize()[:60].strip())
@@ -199,14 +167,13 @@ def _lista_evidencia(c: dict) -> str:
 
 
 def _estudio_caso(c: dict) -> str:
-    """El estudiante responde primero y luego compara con la respuesta orientativa."""
+    """El estudiante escribe su respuesta; la orientativa va solo en la versión del docente."""
     caso = c["caso"]
     partes = [f"<h2>Caso</h2><p>{escape(caso['caso'])}</p><p><strong>Se relaciona con:</strong> {escape(caso['ra'])}</p>"]
     for n, p in enumerate(caso["preguntas"], 1):
         partes.append(
             f"<section><h3>Pregunta {n} · {escape(NIVELES.get(p['nivel'], p['nivel']))}</h3><p>{escape(p['pregunta'])}</p>"
-            f'<textarea aria-label="Tu respuesta a la pregunta {n}" placeholder="Escribe aquí tu respuesta antes de comparar"></textarea>'
-            f"<details><summary>Ver respuesta orientativa</summary><p>{escape(p['respuesta_orientativa'])}</p></details></section>")
+            f'<textarea aria-label="Tu respuesta a la pregunta {n}" placeholder="Escribe aquí tu respuesta"></textarea></section>')
     return "".join(partes)
 
 
@@ -216,8 +183,7 @@ INTERACTIVAS = {"autoevaluacion_rubrica": _autoevaluacion, "autoevaluacion_final
 
 def _cuerpo(herramienta: str, contenido) -> str:
     if es_quiz(contenido):
-        return ('<p class="avance" data-puntaje role="status"></p>' + _items(contenido)
-                + '<p><button type="button" data-entregar disabled>Entregar y ver el resultado</button></p>')
+        return _items(contenido)
     interactiva = INTERACTIVAS.get(herramienta)
     if interactiva and isinstance(contenido, dict):
         try:
@@ -227,19 +193,6 @@ def _cuerpo(herramienta: str, contenido) -> str:
     return "".join(_bloque(b, 2) for b in presentar(herramienta, contenido))
 
 
-def _clave(item: dict, n: int) -> str:
-    """Clave y justificaciones ofuscadas (el JavaScript las revierte al entregar).
-
-    Es un archivo sin servidor: evita ver las respuestas a simple vista, pero alguien con
-    conocimientos técnicos podría revertirlo. Para una evaluación calificada, usar Canvas.
-    Hexadecimal: `legible` no puede alterarlo porque no contiene mayúsculas.
-    """
-    datos = json.dumps({"c": item.get("correcta"),
-                        "j": [legible(str(o.get("justificacion", ""))) for o in item.get("opciones", [])]},
-                       ensure_ascii=False).encode("utf-8")
-    return bytes(b ^ ((n * 7 + i * 13 + 91) & 255) for i, b in enumerate(datos)).hex()
-
-
 def _items(items: list[dict]) -> str:
     partes = []
     for n, item in enumerate(items, 1):
@@ -247,9 +200,8 @@ def _items(items: list[dict]) -> str:
                            for o in item.get("opciones", []))
         contexto = f'<p class="ctx">{escape(str(item["contexto"]))}</p>' if item.get("contexto") else ""
         partes.append(
-            f'<fieldset data-item data-clave="{_clave(item, n)}"><legend>Pregunta {n}</legend>{contexto}'
-            f'<p><strong>{escape(str(item.get("pregunta", "")))}</strong></p>{opciones}'
-            f'<div class="fb" role="status"></div></fieldset>')
+            f'<fieldset data-item><legend>Pregunta {n}</legend>{contexto}'
+            f'<p><strong>{escape(str(item.get("pregunta", "")))}</strong></p>{opciones}</fieldset>')
     return "".join(partes)
 
 
