@@ -5,6 +5,7 @@ Seguridad: el contenido viene del modelo y del docente, así que TODO texto pasa
 escapados. Lo que el estudiante marca o escribe no se guarda: al recargar vuelve a empezar.
 """
 from html import escape
+import json
 import re
 import unicodedata
 from urllib.parse import quote
@@ -30,7 +31,7 @@ body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;max-width:860px;m
 color:#2C1547;background:#F4F0F9;line-height:1.5}
 header{border-bottom:4px solid #F57021;margin-bottom:24px}h1{margin:0 0 4px}h2{margin-top:28px}
 .sub{color:#6E5987;margin:0 0 12px}section,fieldset{background:#fff;border:1px solid #E2D9EE;border-radius:12px;
-padding:16px;margin:12px 0}legend{font-weight:700;padding:0 6px}label{display:block;padding:6px;border-radius:8px;
+padding:16px;margin:12px 0}legend{float:left;width:100%;font-weight:700;padding:0;margin:0 0 8px}legend+*{clear:both}label{display:block;padding:6px;border-radius:8px;
 cursor:pointer}label:hover{background:#F4F0F9}.fb{display:none;margin-top:8px;padding:8px;border-radius:8px}
 .ok{background:#E2F6ED;color:#046446}.mal{background:#FFE7EC;color:#B41437}.ctx{color:#6E5987;font-style:italic}
 .tabla{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:14px}th,td{border:1px solid #E2D9EE;
@@ -39,30 +40,48 @@ footer{margin-top:32px;border-top:1px solid #E2D9EE;padding-top:12px;font-size:1
 .chk{display:flex;gap:8px;align-items:flex-start}.chk input{margin-top:5px}.avance{font-weight:700;color:#6E5987}
 details{margin:8px 0;padding:8px;background:#F4F0F9;border-radius:8px}summary{cursor:pointer;font-weight:600}
 textarea{width:100%;min-height:80px;box-sizing:border-box;padding:8px;border:1px solid #E2D9EE;border-radius:8px;font:inherit}
+.clave{background:#E2F6ED;font-weight:600}.errada{background:#FFE7EC}label:has(input:disabled){cursor:default}
 .nivel{font-weight:700}button{font:inherit;padding:6px 12px;border:1px solid #6E5987;border-radius:8px;background:#fff;cursor:pointer}
 @media print{button,textarea{display:none}details{background:none}section,fieldset{break-inside:avoid}}
 """
 # Autocorrección, autoevaluación, listas marcables e impresión; todo sale de atributos del DOM.
 SCRIPT = """
-function puntaje() {
-  var p = document.querySelector('[data-puntaje]');
-  if (!p) return;
-  var todas = document.querySelectorAll('fieldset[data-item]');
-  var bien = document.querySelectorAll('fieldset[data-item] label[data-correcta="1"] input:checked').length;
-  var hechas = document.querySelectorAll('fieldset[data-item] input:checked').length;
-  p.textContent = 'Respondidas ' + hechas + ' de ' + todas.length + ' · Correctas ' + bien;
+function clave(f, n) {
+  // Clave ofuscada: no aparece en pantalla ni se encuentra leyendo el archivo a simple vista.
+  var h = f.getAttribute('data-clave'), b = new Uint8Array(h.length / 2);
+  for (var i = 0; i < b.length; i++) b[i] = parseInt(h.substr(i * 2, 2), 16) ^ ((n * 7 + i * 13 + 91) & 255);
+  return JSON.parse(new TextDecoder().decode(b));
 }
-document.querySelectorAll('fieldset[data-item]').forEach(function (f) {
-  f.addEventListener('change', function (e) {
-    var opcion = e.target.closest('label');
-    var fb = f.querySelector('.fb');
-    var bien = opcion.getAttribute('data-correcta') === '1';
-    fb.className = 'fb ' + (bien ? 'ok' : 'mal');
-    fb.textContent = (bien ? 'Correcto. ' : 'Revisa tu respuesta. ') + opcion.getAttribute('data-justificacion');
-    fb.style.display = 'block';
-    puntaje();
+var preguntas = document.querySelectorAll('fieldset[data-item]');
+var entregar = document.querySelector('[data-entregar]');
+function respondidas() {
+  var hechas = document.querySelectorAll('fieldset[data-item] input:checked').length;
+  document.querySelector('[data-puntaje]').textContent = 'Respondidas ' + hechas + ' de ' + preguntas.length;
+  entregar.disabled = hechas < preguntas.length;
+}
+if (entregar) {
+  preguntas.forEach(function (f) { f.addEventListener('change', respondidas); });
+  entregar.addEventListener('click', function () {
+    var bien = 0;
+    preguntas.forEach(function (f, n) {
+      var c = clave(f, n + 1), opciones = f.querySelectorAll('label'), fb = f.querySelector('.fb'), elegida = -1;
+      opciones.forEach(function (l, k) { var i = l.querySelector('input'); if (i.checked) elegida = k; i.disabled = true; });
+      var acierto = elegida === c.c;
+      if (acierto) bien++;
+      opciones[c.c].classList.add('clave');
+      if (!acierto) opciones[elegida].classList.add('errada');
+      fb.className = 'fb ' + (acierto ? 'ok' : 'mal');
+      fb.textContent = acierto ? 'Correcto. ' + c.j[c.c]
+        : 'Incorrecto. ' + c.j[elegida] + ' Respuesta correcta: ' + opciones[c.c].textContent.trim() + '. ' + c.j[c.c];
+      fb.style.display = 'block';
+    });
+    var p = document.querySelector('[data-puntaje]');
+    p.textContent = 'Resultado: ' + bien + ' de ' + preguntas.length + ' correctas';
+    entregar.style.display = 'none';
+    p.scrollIntoView();
   });
-});
+  respondidas();
+}
 function resumen() {
   var p = document.querySelector('[data-resumen]');
   if (!p) return;
@@ -95,7 +114,6 @@ document.querySelectorAll('[data-lista]').forEach(function (l) {
 document.querySelectorAll('[data-imprimir]').forEach(function (b) {
   b.addEventListener('click', function () { window.print(); });
 });
-puntaje();
 resumen();
 """
 IMPRIMIR = '<p><button type="button" data-imprimir>Imprimir o guardar en PDF</button></p>'
@@ -196,18 +214,10 @@ INTERACTIVAS = {"autoevaluacion_rubrica": _autoevaluacion, "autoevaluacion_final
                 "lista_evidencia": _lista_evidencia, "estudio_caso": _estudio_caso}
 
 
-def _solucionario(items: list[dict]) -> str:
-    filas = "".join(
-        f"<li><strong>{chr(65 + i['correcta'])})</strong> {escape(str(i['opciones'][i['correcta']].get('texto', '')))} — "
-        f"{escape(str(i['opciones'][i['correcta']].get('justificacion', '')))}</li>"
-        for i in items if isinstance(i.get("correcta"), int) and 0 <= i["correcta"] < len(i.get("opciones", [])))
-    return f"<details><summary>Ver solucionario</summary><ol>{filas}</ol></details>"
-
-
 def _cuerpo(herramienta: str, contenido) -> str:
     if es_quiz(contenido):
-        cuerpo = '<p class="avance" data-puntaje role="status"></p>' + _items(contenido)
-        return cuerpo + (_solucionario(contenido) if herramienta == "simulacro" else "")
+        return ('<p class="avance" data-puntaje role="status"></p>' + _items(contenido)
+                + '<p><button type="button" data-entregar disabled>Entregar y ver el resultado</button></p>')
     interactiva = INTERACTIVAS.get(herramienta)
     if interactiva and isinstance(contenido, dict):
         try:
@@ -217,17 +227,27 @@ def _cuerpo(herramienta: str, contenido) -> str:
     return "".join(_bloque(b, 2) for b in presentar(herramienta, contenido))
 
 
+def _clave(item: dict, n: int) -> str:
+    """Clave y justificaciones ofuscadas (el JavaScript las revierte al entregar).
+
+    Es un archivo sin servidor: evita ver las respuestas a simple vista, pero alguien con
+    conocimientos técnicos podría revertirlo. Para una evaluación calificada, usar Canvas.
+    Hexadecimal: `legible` no puede alterarlo porque no contiene mayúsculas.
+    """
+    datos = json.dumps({"c": item.get("correcta"),
+                        "j": [legible(str(o.get("justificacion", ""))) for o in item.get("opciones", [])]},
+                       ensure_ascii=False).encode("utf-8")
+    return bytes(b ^ ((n * 7 + i * 13 + 91) & 255) for i, b in enumerate(datos)).hex()
+
+
 def _items(items: list[dict]) -> str:
     partes = []
     for n, item in enumerate(items, 1):
-        opciones = "".join(
-            f'<label data-correcta="{int(k == item.get("correcta"))}" '
-            f'data-justificacion="{escape(str(o.get("justificacion", "")), quote=True)}">'
-            f'<input type="radio" name="p{n}"> {escape(str(o.get("texto", "")))}</label>'
-            for k, o in enumerate(item.get("opciones", [])))
+        opciones = "".join(f'<label><input type="radio" name="p{n}"> {escape(str(o.get("texto", "")))}</label>'
+                           for o in item.get("opciones", []))
+        contexto = f'<p class="ctx">{escape(str(item["contexto"]))}</p>' if item.get("contexto") else ""
         partes.append(
-            f'<fieldset data-item><legend>Pregunta {n}</legend>'
-            f'<p class="ctx">{escape(str(item.get("contexto", "")))}</p>'
+            f'<fieldset data-item data-clave="{_clave(item, n)}"><legend>Pregunta {n}</legend>{contexto}'
             f'<p><strong>{escape(str(item.get("pregunta", "")))}</strong></p>{opciones}'
             f'<div class="fb" role="status"></div></fieldset>')
     return "".join(partes)

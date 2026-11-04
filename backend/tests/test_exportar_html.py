@@ -1,10 +1,11 @@
 """P6b T2: HTML autónomo para Canvas (spec §13): escapado, sin recursos externos y con el pie."""
 from html import escape
+import json
 import re
 
 import pytest
 
-from app.exportar.html import PIE, cabecera_descarga, exportar_html, nombre_archivo
+from app.exportar.html import PIE, _clave, cabecera_descarga, exportar_html, nombre_archivo
 from app.herramientas.sin_ia import generar_sin_ia
 from app.silabo.contexto import contexto_clase, contexto_por_id
 from tests.test_generacion_api import HEADERS, entorno  # noqa: F401
@@ -23,12 +24,23 @@ def _recurso(herramienta, contenido, ambito="M2-S1"):
     return {"herramienta": herramienta, "ambito_id": ambito, "contenido": contenido}
 
 
-def test_html_cuestionario_autocorregible(silabo):
+def test_html_cuestionario_no_muestra_la_clave(silabo):
     html = exportar_html(_recurso("cuestionario", [_item(1), _item(2)]), contexto_clase(silabo, "M2-S1"))
     assert html.startswith("<!DOCTYPE html>") and "<script>" in html
     assert not re.search(r"\b(src|href)\s*=\s*[\"']?https?:", html)  # Sin recursos externos.
-    assert "Opción 3" in html and "Porque 2" in html and 'data-correcta="1"' in html
-    assert html.count('type="radio"') == 8
+    assert "Opción 3" in html and html.count('type="radio"') == 8
+    # Ni la clave ni las justificaciones quedan legibles antes de entregar.
+    assert "data-correcta" not in html and "data-justificacion" not in html and "Porque 2" not in html
+    assert "data-entregar disabled" in html and "<details" not in html
+
+
+def test_clave_se_recupera_al_entregar():
+    """Lo mismo que revierte el JavaScript."""
+    item = _item(3)
+    item["opciones"][1]["justificacion"] = "Según RA2 es <b>correcta</b> ñ"
+    crudo = bytes.fromhex(_clave(item, 3))
+    datos = json.loads(bytes(b ^ ((3 * 7 + i * 13 + 91) & 255) for i, b in enumerate(crudo)).decode("utf-8"))
+    assert datos["c"] == 1 and datos["j"][1] == "Según Resultado de aprendizaje 2 es <b>correcta</b> ñ"
 
 
 def test_html_escapa_contenido(silabo):
@@ -129,11 +141,10 @@ def test_forma_anterior_se_muestra_sin_interaccion(silabo):
     assert "Texto del docente" in html
 
 
-def test_simulacro_con_puntaje_y_solucionario(silabo):
+def test_simulacro_se_corrige_igual_que_el_cuestionario(silabo):
     html = exportar_html(_recurso("simulacro", [_item(1), _item(2)], "M2"), contexto_por_id(silabo, "M2"))
-    assert "data-puntaje" in html and "Ver solucionario" in html and "Porque 1" in html
-    solo = exportar_html(_recurso("cuestionario", [_item(1)]), contexto_clase(silabo, "M2-S1"))
-    assert "data-puntaje" in solo and "Ver solucionario" not in solo
+    assert "data-puntaje" in html and "data-entregar" in html
+    assert "Ver solucionario" not in html and "Porque 1" not in html
 
 
 def test_marcables_y_resultado_ocultable(silabo):
