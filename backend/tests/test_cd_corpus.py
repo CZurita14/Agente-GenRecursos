@@ -1,0 +1,80 @@
+import json
+
+import pytest
+
+from app.silabo.modelo import SilaboUTI
+from ciencia_datos.corpus import fragmentos, leer_carpeta
+
+RUTA = "tests/fixtures/silabo_datos.json"
+
+
+@pytest.fixture
+def silabo_datos(silabo) -> SilaboUTI:
+    return silabo
+
+
+def _con_texto(silabo: SilaboUTI, texto: str) -> SilaboUTI:
+    d = silabo.model_dump(mode="json")
+    for m in d["momentos"]:
+        for s in m["sesiones"]:
+            s["contenidos"] = [texto]
+            s["docente"]["texto"] = texto
+            s["practico"]["texto"] = texto
+            s["autonomo"]["texto"] = texto
+        m["evidencia"] = texto
+    for r in d["resultados_aprendizaje"]:
+        r["texto"] = texto
+    return SilaboUTI.model_validate(d)
+
+
+def test_fragmentos_toma_solo_contenido_academico(silabo_datos):
+    f = fragmentos(silabo_datos)
+    assert {x.tipo for x in f} == {"contenido", "actividad", "resultado", "evidencia"}
+    assert all(x.codigo_pf == silabo_datos.proyecto_formativo.codigo for x in f)
+
+
+def test_fragmentos_sin_repetidos_ni_vacios(silabo_datos):
+    textos = [x.texto for x in fragmentos(silabo_datos)]
+    assert len(textos) == len(set(textos)) and all(t.strip() for t in textos)
+
+
+@pytest.mark.parametrize("dato", ["ana@uti.edu.ec", "0987654321", "0000-0002-1825-0097"])
+def test_descarta_fragmentos_con_datos_personales(silabo_datos, dato):
+    assert dato not in str(fragmentos(_con_texto(silabo_datos, f"Contactar a {dato}")))
+
+
+def test_descarta_sin_imprimir_el_texto(silabo_datos):
+    assert fragmentos(_con_texto(silabo_datos, "Escribir a ana@uti.edu.ec")) == []
+
+
+def _escribir(carpeta, nombre, datos, codigo=None, aprobado=None):
+    d = dict(datos)
+    pf = dict(d["proyecto_formativo"])
+    if codigo:
+        pf["codigo"] = codigo
+    if aprobado:
+        pf["aprobado"] = aprobado
+    d["proyecto_formativo"] = pf
+    (carpeta / nombre).write_text(json.dumps(d), encoding="utf-8")
+
+
+def test_leer_carpeta_lee_json_y_rechaza_ilegibles(tmp_path, datos):
+    _escribir(tmp_path, "a.json", datos)
+    (tmp_path / "roto.json").write_text("{no es json", encoding="utf-8")
+    (tmp_path / "falso.pdf").write_bytes(b"no es un pdf")
+    (tmp_path / "otro.txt").write_text("ignorado", encoding="utf-8")
+    silabos, rechazados = leer_carpeta(tmp_path)
+    assert len(silabos) == 1
+    assert rechazados == ["falso.pdf", "roto.json"]
+
+
+def test_leer_carpeta_conserva_la_version_mas_reciente_por_codigo(tmp_path, datos):
+    _escribir(tmp_path, "a.json", datos, codigo="X-1", aprobado="2024-01-01")
+    _escribir(tmp_path, "b.json", datos, codigo="X-1", aprobado="2025-01-01")
+    _escribir(tmp_path, "c.json", datos, codigo="Y-2", aprobado="2024-01-01")
+    _escribir(tmp_path, "d.json", datos, codigo="Y-2", aprobado="2024-01-01")
+    silabos, rechazados = leer_carpeta(tmp_path)
+    assert rechazados == []
+    por_codigo = {s.proyecto_formativo.codigo: s for s in silabos}
+    assert set(por_codigo) == {"X-1", "Y-2"}
+    assert por_codigo["X-1"].proyecto_formativo.aprobado.year == 2025
