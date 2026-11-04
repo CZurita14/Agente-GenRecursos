@@ -123,4 +123,6 @@ export interface Recurso extends RecursoResumen {
   revision_ia?: Record<string, unknown> | null;
   /** Comprobaciones deterministas de la última edición (null si no se ha editado). */
   verificacion_edicion: Record<string, string[]> | null;
+  /** Claves que contradicen sus explicaciones; se calcula sobre el contenido actual. */
+  revision_claves?: Record<string, string[]>;
 }

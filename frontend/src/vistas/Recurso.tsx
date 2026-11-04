@@ -27,14 +27,16 @@ const letra = (k: number) => String.fromCharCode(65 + k);
 /** Alertas por ítem o sección: las del coordinador o, si el docente editó, las de su edición. */
 function alertas(r: TipoRecurso): Record<string, string[]> {
   const salida: Record<string, string[]> = {};
+  const sumar = (id: string, avisos: string[]) => { salida[id] = [...new Set([...(salida[id] ?? []), ...avisos])]; };
+  for (const [id, avisos] of Object.entries(r.revision_claves ?? {})) if (avisos.length) sumar(id, avisos);
   if (!r.evidencia_vigente) {
-    for (const [id, fallos] of Object.entries(r.verificacion_edicion ?? {})) if (fallos.length) salida[id] = [...fallos];
+    for (const [id, fallos] of Object.entries(r.verificacion_edicion ?? {})) if (fallos.length) sumar(id, fallos);
     return salida;
   }
   const verificaciones = (r.evidencia.verificaciones ?? {}) as Record<string, string[]>;
   const veredictos = (r.evidencia.veredictos ?? {}) as Record<string, string>;
-  for (const [id, fallos] of Object.entries(verificaciones)) if (fallos.length) salida[id] = [...fallos];
-  for (const [id, veredicto] of Object.entries(veredictos)) if (veredicto !== 'ok') (salida[id] ??= []).push(veredicto);
+  for (const [id, fallos] of Object.entries(verificaciones)) if (fallos.length) sumar(id, fallos);
+  for (const [id, veredicto] of Object.entries(veredictos)) if (veredicto !== 'ok') sumar(id, [veredicto]);
   return salida;
 }
 

@@ -8,6 +8,7 @@ from psycopg.types.json import Jsonb
 from app.agentes.orquestador import SolicitudGeneracion, crear_trabajos
 from app.agentes.planificador import perfil_por_nivel
 from app.agentes.workers import WORKERS
+from app.agentes.verificador import revision_claves
 from app.agentes.workers.definiciones import DEFINICIONES
 from app.asignaturas.servicio import exigir_acceso
 from app.herramientas.sin_ia import HERRAMIENTAS_SIN_IA, generar_sin_ia
@@ -75,6 +76,8 @@ def _detalle(recurso, asignatura):
     resultado["validado"] = recurso["validado_por"] is not None
     resultado['revision_ia'] = recurso.get('revision_ia')
     resultado["presentacion"] = presentar(recurso["herramienta"], recurso["contenido"])
+    # Sobre lo guardado: también cubre lo generado antes de esta comprobación y lo editado después.
+    resultado["revision_claves"] = revision_claves(recurso["contenido"])
     resultado["evidencia_vigente"] = recurso["revision"] == 0
     if recurso["herramienta"] in HERRAMIENTAS_SIN_IA:
         resultado["silabo_actualizado"] = _actualizado_sin_ia(recurso, asignatura)

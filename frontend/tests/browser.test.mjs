@@ -532,3 +532,16 @@ test('sin códigos: clases y momentos con nombres completos', async () => {
   assert.ok(!/\bM\d+(-S\d+)?\b/.test(await tabla.innerText()));
   await context.close();
 });
+
+test('avisa si la clave contradice su explicación, también en lo ya validado', async () => {
+  const conAlerta = { ...RECURSO(false), evidencia: {}, revision_claves: { i1: ['la explicación de la respuesta marcada como correcta dice que está equivocada; revisa la clave'] } };
+  const { context, page } = await abrir({ rutas: {
+    '/asignaturas/a1/recursos/r1': route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(conAlerta) }),
+  } });
+  await revisar(page, 'Cuestionario');
+  await page.getByText('dice que está equivocada; revisa la clave').waitFor();
+  await page.getByText('1 alerta', { exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Validar recurso' }).click();
+  await page.getByText('¿Validar con alertas pendientes?').waitFor();
+  await context.close();
+});

@@ -24,6 +24,18 @@ TOLERANCIA_DISTRIBUCION = 1  # §10.1.4
 
 OTRA_ASIGNATURA = "entrega de otra asignatura"
 
+# Coherencia entre la clave y las justificaciones: el modelo a veces marca una opción y explica
+# como correcta otra. Es una señal, no una prueba: el docente decide.
+JUSTIFICA_ERROR = re.compile(
+    r"\b(confunde|incorrect[ao]s?|ignora|invierte|sobregeneraliza|es un error)\b", re.I)
+JUSTIFICA_ACIERTO = re.compile(
+    r"(?<!no )\b(interpreta|identifica|describe|refleja) (correctamente|claramente)\b"
+    r"|(?<!no )\bes (la )?(opción |respuesta )?correcta\b", re.I)
+PLANTILLA = re.compile(r"\berror que representa\b", re.I)
+CLAVE_CONTRADICHA = "la explicación de la respuesta marcada como correcta dice que está equivocada; revisa la clave"
+OTRA_PARECE_CLAVE = "la explicación de una opción marcada como incorrecta la presenta como correcta; revisa la clave"
+EXPLICACION_PLANTILLA = "las explicaciones son texto de plantilla y no explican la opción"
+
 
 def _normal(texto: str) -> str:
     return " ".join(texto.lower().split())
@@ -31,6 +43,33 @@ def _normal(texto: str) -> str:
 
 def _parecidas(a: str, b: str) -> bool:
     return SequenceMatcher(None, _normal(a), _normal(b)).ratio() >= UMBRAL_DUPLICADO
+
+
+def fallos_justificacion(correcta: int, justificaciones: list[str]) -> list[str]:
+    """Clave que contradice sus propias explicaciones, o explicaciones de plantilla."""
+    f = []
+    if 0 <= correcta < len(justificaciones) and JUSTIFICA_ERROR.search(justificaciones[correcta]):
+        f.append(CLAVE_CONTRADICHA)
+    if any(JUSTIFICA_ACIERTO.search(j) for k, j in enumerate(justificaciones) if k != correcta):
+        f.append(OTRA_PARECE_CLAVE)
+    if any(PLANTILLA.search(j) for j in justificaciones):
+        f.append(EXPLICACION_PLANTILLA)
+    return f
+
+
+def revision_claves(contenido) -> dict[str, list[str]]:
+    """La misma comprobación sobre un cuestionario ya guardado; los que no lo son no tienen hallazgos."""
+    if not isinstance(contenido, list):
+        return {}
+    salida = {}
+    for item in contenido:
+        try:
+            f = fallos_justificacion(item["correcta"], [str(o.get("justificacion", "")) for o in item["opciones"]])
+        except (KeyError, TypeError, AttributeError):
+            continue  # Forma no prevista: no hay nada que comprobar.
+        if f:
+            salida[str(item.get("item_id"))] = f
+    return salida
 
 
 def verificar_items(
@@ -68,6 +107,7 @@ def verificar_items(
             f.append("enunciado casi duplicado de otro ya generado")
         if any(PROHIBIDAS.search(t) for t in [item.pregunta, *(o.texto for o in item.opciones)]):
             f.append("frase prohibida (todas/ninguna de las anteriores)")
+        f.extend(fallos_justificacion(item.correcta, [o.justificacion for o in item.opciones]))
         esperado = niveles_plan.get(item.item_id)
         if esperado is not None and item.nivel != esperado:
             f.append(f"nivel {item.nivel} distinto del planificado ({esperado})")
