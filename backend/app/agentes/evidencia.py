@@ -17,6 +17,7 @@ class PaqueteEvidencia(BaseModel):
     tokens: tuple[int, int]
     borrador: bool = False
     motivos_revision: list[str] = Field(default_factory=list)
+    razonador_version: str | None = None  # La del plan usado; None si el plan no pasó por el razonador.
 
     def resumen(self) -> str:
         total = sum(self.tabla_real.values())

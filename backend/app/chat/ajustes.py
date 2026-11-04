@@ -9,8 +9,9 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.agentes.facultades import PerfilFacultad, estilo_para
+from app.agentes.facultades import PerfilFacultad
 from app.agentes.mensajes import PlanItem, TareaLote
+from app.agentes.planificador import estilo_razonado
 from app.agentes.revisor import revisar_ficha, revisar_items
 from app.agentes.verificador import verificar_items
 from app.agentes.workers import WORKERS
@@ -170,7 +171,7 @@ def _revision(resultados, alcance, esperados, verificaciones):
 
 def regenerar(cliente: ClienteLLM, *, recurso: dict, contexto: ContextoClase,
               perfil: PerfilFacultad, accion, trabajo_id: UUID,
-              asignatura_id: UUID) -> tuple[list[dict] | dict, dict[str, list[str]], dict]:
+              asignatura_id: UUID, razonador=None) -> tuple[list[dict] | dict, dict[str, list[str]], dict]:
     """Devuelve (candidato canónico, verificaciones completas, revisión acotada).
 
     `revision_ia.alcance` contiene tipo, items y rutas; tipo es `items` para
@@ -199,7 +200,7 @@ def regenerar(cliente: ClienteLLM, *, recurso: dict, contexto: ContextoClase,
     if base != original:
         raise EdicionInvalida("El original no está en formato canónico.")
     cliente = _Presupuestado(cliente)
-    estilo = estilo_para(perfil, contexto.carrera)
+    estilo = estilo_razonado(perfil, contexto.carrera, contexto, razonador)
     candidato = deepcopy(original)
     if DEFINICIONES[herramienta].es_quiz:
         if rutas or not set(items) <= {i["item_id"] for i in original}:

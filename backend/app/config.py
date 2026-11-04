@@ -23,6 +23,8 @@ class Ajustes(BaseSettings):
     llm_timeout_revisor_s: float = 240
     lease_s: int = 360
     agentes_dir: Path = Path("agentes")
+    # Carpeta del modelo entrenado. Sin ella la generación no usa el razonador.
+    razonador_ruta: Path | None = None
     api_origen: str = "https://localhost:5173"
     auth_secreto: SecretStr | None = Field(default=None, min_length=32)
     entorno: Literal["desarrollo", "produccion"] = "produccion"
@@ -52,6 +54,12 @@ class Ajustes(BaseSettings):
     limite_pdf_correo_hora: int = Field(default=10, ge=1, le=100000)
     limite_editar_correo_minuto: int = Field(default=30, ge=1, le=100000)
     auditoria_retencion_dias: int = Field(default=30, ge=1, le=365)
+
+    @field_validator("razonador_ruta", mode="before")
+    @classmethod
+    def ruta_vacia_es_apagado(cls, valor):
+        # El compose pasa la variable vacía cuando no hay modelo; Path("") sería la carpeta actual.
+        return None if isinstance(valor, str) and not valor.strip() else valor
 
     @field_validator("administradores")
     @classmethod

@@ -9,10 +9,14 @@ import hashlib
 import re
 from itertools import zip_longest
 from math import gcd
+from typing import TYPE_CHECKING
 
-from app.agentes.facultades import normalizar
-from app.agentes.mensajes import PlanItem
+from app.agentes.facultades import PerfilFacultad, estilo_para, normalizar
+from app.agentes.mensajes import EstiloFacultad, PlanItem
 from app.silabo.contexto import ContextoClase
+
+if TYPE_CHECKING:
+    from app.razonador import Razonador
 
 # Orden de niveles de menor a mayor; también es el desempate del mayor resto.
 NIVELES = ("receptivo", "resolutivo", "reflexivo", "critico")
@@ -92,9 +96,33 @@ def _casos_libres(escenarios: list[str], entregables: list[str]) -> list[str]:
     return [e for e in escenarios if not _palabras(e) & vetadas]
 
 
+def estilo_razonado(
+    perfil: PerfilFacultad, carrera: str, contexto: ContextoClase, razonador: "Razonador | None",
+) -> EstiloFacultad:
+    """Estilo de la carrera con los casos que el razonador deja libres.
+
+    Sin razonador es `estilo_para`. Con razonador decide solo sobre lo que ya pasó el filtro de
+    palabras, así que nunca es menos estricto. Sin casos libres, `escenarios` queda vacío y rige
+    lo de siempre: ítems sin caso y `escenario_para` con sus respaldos.
+    """
+    estilo = estilo_para(perfil, carrera)
+    if razonador is None:
+        return estilo
+    entregables = contexto.entregables_momento
+    libres = _casos_libres(list(estilo.escenarios), entregables)
+    return estilo.model_copy(update={"escenarios": razonador.casos_libres(libres, entregables)})
+
+
+def _rotacion_por_tema(focos: list[str], razonador: "Razonador") -> list[str]:
+    """Un foco de cada tema antes de repetir; el tema que se agota se salta."""
+    temas = razonador.temas(focos)
+    rondas = max(map(len, temas), default=0)
+    return [focos[tema[r]] for r in range(rondas) for tema in temas if r < len(tema)]
+
+
 def planificar(
     contexto: ContextoClase, n: int, perfil: str, tam_lote: int = 4,
-    escenarios: list[str] = (),
+    escenarios: list[str] = (), razonador: "Razonador | None" = None,
 ) -> list[list[PlanItem]]:
     """Plan de `n` ítems `i1…in`, de menor a mayor nivel, en lotes de `tam_lote`.
 
@@ -106,16 +134,24 @@ def planificar(
     Con `escenarios`, cada ítem recibe un caso que no se parece a los entregables
     del momento; la rotación arranca en un punto fijo por clase para que dos
     clases no repitan la misma secuencia.
+
+    Con `razonador`, los focos se recorren por tema en lugar de con `_indice_foco`. Los casos no
+    pasan por él aquí: `escenarios` ya llega de `estilo_razonado`.
     """
     if tam_lote < 1:
         raise ValueError("tam_lote debe ser >= 1")
     tabla = tabla_especificaciones(n, perfil)
     focos = _focos(contexto)
+    if razonador is None:
+        asignados = [focos[_indice_foco(k, n, len(focos))] for k in range(n)]
+    else:
+        rotacion = _rotacion_por_tema(focos, razonador)
+        asignados = [rotacion[k % len(rotacion)] for k in range(n)]
     casos = _casos_libres(list(escenarios), contexto.entregables_momento)
     inicio = int(hashlib.sha256(contexto.clase_id.encode()).hexdigest(), 16) % len(casos) if casos else 0
     niveles = [nv for nv in NIVELES for _ in range(tabla[nv])]
     items = [
-        PlanItem(item_id=f"i{k + 1}", nivel=nv, foco=focos[_indice_foco(k, n, len(focos))],
+        PlanItem(item_id=f"i{k + 1}", nivel=nv, foco=asignados[k],
                  caso=casos[(inicio + k) % len(casos)] if casos else "")
         for k, nv in enumerate(niveles)
     ]

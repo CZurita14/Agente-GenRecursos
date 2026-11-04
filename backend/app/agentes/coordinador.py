@@ -7,9 +7,9 @@ from psycopg.types.json import Jsonb
 from app.agentes.evidencia import PaqueteEvidencia
 from app.agentes.facultades import estilo_para
 from app.agentes.mensajes import (
-    CheckpointRevision, Cierre, Devolucion, Encargo, EntregaLote, TareaLote, Veredicto, guardar, leer,
+    CheckpointRevision, Cierre, Devolucion, Encargo, EntregaLote, PlanRazonado, TareaLote, Veredicto, guardar, leer,
 )
-from app.agentes.planificador import NIVELES, planificar, tabla_especificaciones
+from app.agentes.planificador import NIVELES, estilo_razonado, planificar, tabla_especificaciones
 from app.agentes.revisor import revisar_ficha, revisar_items
 from app.agentes.verificador import verificar_distribucion, verificar_items
 from app.agentes.workers.definiciones import DEFINICIONES
@@ -45,8 +45,8 @@ class _ClienteConLease:
 
 
 class Coordinador:
-    def __init__(self, perfil, workers, cliente):
-        self.perfil, self.workers, self.cliente = perfil, workers, cliente
+    def __init__(self, perfil, workers, cliente, razonador=None):
+        self.perfil, self.workers, self.cliente, self.razonador = perfil, workers, cliente, razonador
 
     def ejecutar(self, conn, trabajo, encargo: Encargo, contexto, latido: Callable[[], bool]) -> Cierre:
         if (encargo.trabajo_id, encargo.asignatura_id, encargo.codigo_pf, encargo.version_silabo,
@@ -66,9 +66,6 @@ class Coordinador:
         definicion = DEFINICIONES[trabajo.herramienta]
         es_quiz = definicion.es_quiz
         cantidad = trabajo.parametros.get("cantidad", 12)
-        estilo = estilo_para(self.perfil, encargo.carrera)
-        planes = (planificar(contexto, cantidad, encargo.perfil_dificultad, escenarios=estilo.escenarios)
-                  if es_quiz else [[] for _ in definicion.secciones])
         ids = dict(trabajo_id=trabajo.id, asignatura_id=trabajo.asignatura_id)
 
         def bloquear():
@@ -109,8 +106,25 @@ class Coordinador:
         encargos = [m for m in existentes if isinstance(m, Encargo)]
         if encargos and encargos[0] != encargo:
             raise ValueError("el encargo cambió al reanudar")
+        guardado = next((m for m in existentes if isinstance(m, PlanRazonado)), None)
+        if guardado is not None:
+            # El plan guardado manda sobre el modelo instalado, o sobre su ausencia.
+            razonador_version = guardado.version
+            estilo = estilo_para(self.perfil, encargo.carrera).model_copy(update={"escenarios": guardado.escenarios})
+            planes = guardado.planes if es_quiz else [[] for _ in definicion.secciones]
+        else:
+            # Encargo sin plan guardado: empezó sin razonador y sus lotes entregados siguen ese plan.
+            razonador = None if encargos else self.razonador
+            razonador_version = razonador.version if razonador is not None else None
+            estilo = estilo_razonado(self.perfil, encargo.carrera, contexto, razonador)
+            planes = (planificar(contexto, cantidad, encargo.perfil_dificultad, escenarios=estilo.escenarios,
+                                 razonador=razonador)
+                      if es_quiz else [[] for _ in definicion.secciones])
         if not encargos:
-            persistir([encargo])
+            # Encargo y plan se confirman juntos: un encargo sin plan prueba que no hubo razonador.
+            persistir([encargo, *([PlanRazonado(**ids, version=razonador_version, planes=planes,
+                                                escenarios=estilo.escenarios)]
+                                  if razonador_version is not None else [])])
         cliente = _ClienteConLease(self.cliente, comprobar, lambda t: persistir(tokens=t))
         entregas = [m for m in existentes if isinstance(m, EntregaLote)]
         primeras = {}
@@ -265,6 +279,7 @@ class Coordinador:
                 veredictos={r.item_id: r.motivo or r.revisor for r in resultados},
                 devoluciones=sum(isinstance(m, Devolucion) for m in leer(conn, trabajo.id)),
                 tokens=tokens, borrador=es_quiz, motivos_revision=distribucion,
+                razonador_version=razonador_version,
             )
             rid = uuid4()
             conn.execute(

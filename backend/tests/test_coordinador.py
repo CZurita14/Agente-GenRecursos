@@ -9,8 +9,10 @@ import pytest
 from psycopg.types.json import Jsonb
 
 from app.agentes.coordinador import Coordinador, LeasePerdido
-from app.agentes.facultades import cargar_perfiles
-from app.agentes.mensajes import Encargo, EntregaLote, leer
+from app.agentes.facultades import cargar_catalogo, cargar_perfiles, estilo_para
+from app.agentes.mensajes import Encargo, EntregaLote, PlanRazonado, leer
+from app.agentes.orquestador import SolicitudGeneracion, crear_asignatura, crear_trabajos, procesar_uno
+from app.agentes.planificador import _casos_libres, planificar
 from app.cola.trabajos import Ambito, encolar, tomar_siguiente
 from app.llm.cliente import ClienteSimulado
 from app.silabo.contexto import contexto_clase
@@ -290,3 +292,145 @@ def test_lease_perdido_durante_llamada_no_guarda_recurso(conn, silabo):
     with pytest.raises(LeasePerdido):
         coordinador(WorkerPrueba(), cliente).ejecutar(conn, t, e, ctx, lambda: True)
     assert conn.execute("select count(*) as n from recurso").fetchone()["n"] == 0
+
+
+# --- Plan razonado -------------------------------------------------------------
+
+class FalsoRazonador:
+    """Agrupa los focos de dos en dos y descarta el primer caso."""
+    def __init__(self, version="v-prueba"):
+        self.version = version
+
+    def temas(self, textos):
+        return [g for g in (list(range(i, len(textos), 2)) for i in range(2)) if g]
+
+    def casos_libres(self, casos, entregables):
+        return list(casos)[1:]
+
+
+class RazonadorVetado:
+    """Otro modelo instalado al reanudar: si se le consulta, la prueba falla."""
+    version = "v-otra"
+
+    def temas(self, textos):
+        raise AssertionError("el plan guardado no se recalcula")
+
+    def casos_libres(self, casos, entregables):
+        raise AssertionError("el plan guardado no se recalcula")
+
+
+class RazonadorRoto:
+    version = "v-rota"
+
+    def temas(self, textos):
+        raise RuntimeError("texto-privado-del-silabo")
+
+    def casos_libres(self, casos, entregables):
+        raise RuntimeError("texto-privado-del-silabo")
+
+
+def coordinador_con(worker, razonador):
+    perfil = cargar_perfiles(RAIZ / "agentes")["ingenierias"]
+    return Coordinador(perfil, {worker.herramienta: worker}, cliente_revisor(), razonador=razonador)
+
+
+def cae_tras_lotes(conn, t, lotes):
+    return lambda: conn.execute("select lotes_hechos from trabajo where id=%s", (t.id,)).fetchone()["lotes_hechos"] < lotes
+
+
+def estilo_base(ctx):
+    return estilo_para(cargar_perfiles(RAIZ / "agentes")["ingenierias"], ctx.carrera)
+
+
+def evidencia(conn):
+    return conn.execute("select evidencia from recurso").fetchone()["evidencia"]
+
+
+def test_evidencia_registra_la_version_y_el_plan_usa_los_temas(conn, silabo):
+    t, e, ctx = preparar(conn, silabo)
+    worker = WorkerPrueba()
+    cierre = coordinador_con(worker, FalsoRazonador()).ejecutar(conn, t, e, ctx, lambda: True)
+    assert cierre.estado == "listo"
+    assert evidencia(conn)["razonador_version"] == "v-prueba"
+    guardado = leer(conn, t.id, PlanRazonado)
+    assert len(guardado) == 1 and guardado[0].version == "v-prueba"
+    assert [x.plan for x in worker.tareas] == guardado[0].planes
+    esperados = _casos_libres(estilo_base(ctx).escenarios, ctx.entregables_momento)[1:]
+    assert guardado[0].escenarios == esperados == worker.tareas[0].estilo.escenarios
+    assert [type(m).__name__ for m in leer(conn, t.id)][:3] == ["Encargo", "PlanRazonado", "TareaLote"]
+
+
+def test_sin_razonador_no_se_guarda_plan_ni_version(conn, silabo):
+    t, e, ctx = preparar(conn, silabo, cantidad=4)
+    worker = WorkerPrueba()
+    coordinador(worker).ejecutar(conn, t, e, ctx, lambda: True)
+    assert leer(conn, t.id, PlanRazonado) == []
+    assert evidencia(conn)["razonador_version"] is None
+    assert [x.plan for x in worker.tareas] == planificar(ctx, 4, "fundamentacion", escenarios=estilo_base(ctx).escenarios)
+
+
+def test_reanudar_conserva_el_plan_guardado_con_otro_modelo(conn, silabo):
+    t, e, ctx = preparar(conn, silabo)
+    with pytest.raises(LeasePerdido):
+        coordinador_con(WorkerPrueba(), FalsoRazonador()).ejecutar(conn, t, e, ctx, cae_tras_lotes(conn, t, 2))
+    guardado = leer(conn, t.id, PlanRazonado)[0]
+    assert guardado.planes != planificar(ctx, 12, "fundamentacion", escenarios=estilo_base(ctx).escenarios)
+    worker = WorkerPrueba()
+    coordinador_con(worker, RazonadorVetado()).ejecutar(conn, t, e, ctx, lambda: True)
+    assert [x.plan for x in worker.tareas] == guardado.planes[2:]
+    assert worker.tareas[0].estilo.escenarios == guardado.escenarios
+    assert len(leer(conn, t.id, PlanRazonado)) == 1
+    assert evidencia(conn)["razonador_version"] == "v-prueba"
+
+
+def test_reanudar_sin_razonador_usa_el_plan_guardado(conn, silabo):
+    t, e, ctx = preparar(conn, silabo)
+    with pytest.raises(LeasePerdido):
+        coordinador_con(WorkerPrueba(), FalsoRazonador()).ejecutar(conn, t, e, ctx, cae_tras_lotes(conn, t, 2))
+    guardado = leer(conn, t.id, PlanRazonado)[0]
+    worker = WorkerPrueba()
+    cierre = coordinador(worker).ejecutar(conn, t, e, ctx, lambda: True)
+    assert cierre.estado == "listo"
+    assert [x.plan for x in worker.tareas] == guardado.planes[2:]
+    assert evidencia(conn)["razonador_version"] == "v-prueba"
+
+
+def test_trabajo_empezado_sin_razonador_no_mezcla_planes(conn, silabo):
+    # Los lotes ya entregados siguen el plan antiguo: un plan nuevo a medias rompería la verificación.
+    t, e, ctx = preparar(conn, silabo)
+    with pytest.raises(LeasePerdido):
+        coordinador(WorkerPrueba()).ejecutar(conn, t, e, ctx, cae_tras_lotes(conn, t, 2))
+    worker = WorkerPrueba()
+    cierre = coordinador_con(worker, RazonadorVetado()).ejecutar(conn, t, e, ctx, lambda: True)
+    assert cierre.estado == "listo"
+    original = planificar(ctx, 12, "fundamentacion", escenarios=estilo_base(ctx).escenarios)
+    assert [x.plan for x in worker.tareas] == original[2:]
+    assert leer(conn, t.id, PlanRazonado) == []
+    assert evidencia(conn)["razonador_version"] is None
+
+
+def test_herramienta_sin_plan_conserva_los_casos_al_reanudar(conn, silabo):
+    t, e, ctx = preparar(conn, silabo, herramienta="ficha_clase")
+    primero = WorkerPrueba("ficha_clase")
+    with pytest.raises(LeasePerdido):
+        coordinador_con(primero, FalsoRazonador()).ejecutar(conn, t, e, ctx, cae_tras_lotes(conn, t, 1))
+    guardado = leer(conn, t.id, PlanRazonado)[0]
+    assert guardado.planes == [[], []]
+    assert guardado.escenarios == primero.tareas[0].estilo.escenarios != estilo_base(ctx).escenarios
+    worker = WorkerPrueba("ficha_clase")
+    coordinador_con(worker, RazonadorVetado()).ejecutar(conn, t, e, ctx, lambda: True)
+    assert [x.lote for x in worker.tareas] == [2]
+    assert worker.tareas[0].estilo.escenarios == guardado.escenarios
+    assert evidencia(conn)["razonador_version"] == "v-prueba"
+
+
+def test_razonador_roto_termina_en_error_sin_filtrar_texto(conn, silabo):
+    perfiles = cargar_perfiles(RAIZ / "agentes")
+    aid = crear_asignatura(conn, dueno="prueba@uti.edu.ec", silabo=silabo,
+                           catalogo=cargar_catalogo(RAIZ / "kb/catalogo.yaml"), perfiles=perfiles)
+    tid = crear_trabajos(conn, SolicitudGeneracion(aid, Ambito("clase", "M2-S1"), ["cuestionario"], 4))[0]
+    assert procesar_uno(conn, cliente_revisor(), perfiles, "w", 360, razonador=RazonadorRoto())
+    fila = conn.execute("select estado,error from trabajo where id=%s", (tid,)).fetchone()
+    assert fila == dict(estado="error", error="RuntimeError: no se pudo completar el trabajo")
+    assert conn.execute("select count(*) as n from recurso").fetchone()["n"] == 0
+    assert leer(conn, tid) == []  # Sin plan alternativo silencioso: nada avanzó con el filtro de palabras.

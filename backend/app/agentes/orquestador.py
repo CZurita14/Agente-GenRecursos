@@ -74,7 +74,7 @@ def crear_trabajos(conn, solicitud: SolicitudGeneracion) -> list[UUID]:
                 for h in solicitud.herramientas]
 
 
-def procesar_uno(conn, cliente, perfiles, worker_id: str, lease_s: int) -> bool:
+def procesar_uno(conn, cliente, perfiles, worker_id: str, lease_s: int, razonador=None) -> bool:
     trabajo = tomar_siguiente(conn, worker_id, lease_s)
     if trabajo is None:
         return False
@@ -85,7 +85,7 @@ def procesar_uno(conn, cliente, perfiles, worker_id: str, lease_s: int) -> bool:
             return True
         if trabajo.tipo == 'chat':
             from app.chat.ejecutor import procesar_chat
-            procesar_chat(conn, trabajo, cliente, perfiles, worker_id, lease_s)
+            procesar_chat(conn, trabajo, cliente, perfiles, worker_id, lease_s, razonador=razonador)
             return True
         silabo = SilaboUTI.model_validate(trabajo.parametros["silabo"])
         ctx = contexto_ambito(silabo, trabajo.ambito)
@@ -96,7 +96,7 @@ def procesar_uno(conn, cliente, perfiles, worker_id: str, lease_s: int) -> bool:
             herramienta=trabajo.herramienta, perfil_dificultad=trabajo.parametros.get("perfil_dificultad", perfil_por_nivel(ctx.nivel)),
             instrucciones=trabajo.parametros.get("instrucciones", ""),
         )
-        Coordinador(perfiles[trabajo.agente], WORKERS, cliente).ejecutar(
+        Coordinador(perfiles[trabajo.agente], WORKERS, cliente, razonador=razonador).ejecutar(
             conn, trabajo, encargo, ctx,
             lambda: renovar_lease(conn, trabajo.id, worker_id, lease_s, lease_version=trabajo.lease_version),
         )

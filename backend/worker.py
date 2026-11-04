@@ -18,7 +18,7 @@ from app.config import RAIZ, ajustes
 from app.db.conexion import conectar
 from app.db.migrar import aplicar_migraciones, migraciones_preparadas
 from app.llm.cliente import ClienteVLLM
-from app.operacion import LatidoWorker, plazo_latido, ruta_latido, validar_configuracion
+from app.operacion import LatidoWorker, cargar_razonador, plazo_latido, ruta_latido, validar_configuracion
 
 registro = logging.getLogger(__name__)
 
@@ -88,6 +88,9 @@ def main():
         raise ValueError('Configuración de worker inválida')
     directorio = config.agentes_dir if config.agentes_dir.is_absolute() else RAIZ / config.agentes_dir
     perfiles = cargar_perfiles(directorio)
+    razonador = cargar_razonador(config)  # Una sola vez; un modelo inválido detiene el arranque.
+    if razonador is not None:
+        registro.info('razonador cargado: version=%s', razonador.version)
     preparar_esquema(config)
     latido = LatidoWorker(ruta_latido(), config.llm_max_concurrencia)
     latido.escribir()  # Invalida cualquier archivo de un arranque anterior.
@@ -115,7 +118,8 @@ def main():
                     conn.autocommit = True
                     while not detener.is_set():
                         latido.pulsar(numero)
-                        trabajo = procesar_uno(conn, cliente, perfiles, worker_id, config.lease_s)
+                        trabajo = procesar_uno(conn, cliente, perfiles, worker_id, config.lease_s,
+                                               razonador=razonador)
                         latido.pulsar(numero)
                         if not trabajo:
                             detener.wait(2)

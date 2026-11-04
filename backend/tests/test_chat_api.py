@@ -264,3 +264,20 @@ def test_trabajos_por_id_incluye_antiguos_y_excluye_chat(entorno,conn):
     privado = conn.execute('select trabajo_id from chat_pedido where id=%s',(pedido['id'],)).fetchone()['trabajo_id']
     lista = d.get(f'/asignaturas/{aid}/trabajos?ids={antiguo}&ids={privado}').json()
     assert [x['id'] for x in lista]==[str(antiguo)]
+
+
+def test_el_chat_recibe_el_razonador_del_worker(entorno, conn, monkeypatch):
+    app, _, d, aid, producir = entorno
+    r = producir()
+    _interpretar(monkeypatch, {'accion':'ajustar_recurso','mensaje_al_docente':'Ajustaré la primera pregunta.',
+                  'recurso_id':r['id'],'items':[r['contenido'][0]['item_id']],'rutas':[],'instrucciones':'Mayor precisión'})
+    recibidos, falso = [], object()
+
+    def regenerar(*args, razonador=None, **kw):
+        recibidos.append(razonador)
+        return r['contenido'], {}, {'alcance':[], 'veredictos':[]}
+
+    monkeypatch.setattr('app.chat.ajustes.regenerar', regenerar)
+    enviar(d,aid,r)
+    assert procesar_uno(conn,cliente_revisor(),app.state.perfiles,'chat-test',360,razonador=falso)
+    assert recibidos == [falso]
