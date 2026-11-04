@@ -496,3 +496,21 @@ test('la interfaz dice Proyecto Formativo, no asignatura', async () => {
   assert.ok(!/asignatura/i.test(await page.locator('body').innerText()));
   await context.close();
 });
+
+test('Mis recursos solo lista resultados finales: nada de momentos, y de rúbricas solo la final', async () => {
+  const fila = (id, ambito_id, herramienta) => ({ id, trabajo_id: `t${id}`, ambito_id, herramienta, version_silabo: '1.0', estado: 'listo',
+    revision: 0, creado: '2026-11-04T10:00:00Z', validado: false });
+  const { context, page } = await abrir({ rutas: {
+    '/asignaturas/a1/recursos': route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([
+      fila('a', 'M3', 'simulacro'), fila('b', 'M1', 'rubrica_momento'), fila('c', 'M2', 'guia_evidencia'),
+      fila('d', 'asignatura', 'rubrica_final'), fila('e', 'M1-S1', 'ficha_clase')]) }),
+  } });
+  await page.getByRole('navigation', { name: 'Navegación principal' }).getByRole('button', { name: 'Mis recursos', exact: true }).click();
+  const tabla = page.getByRole('table', { name: 'Recursos del Proyecto Formativo' });
+  await tabla.getByText('Rúbrica del producto final').waitFor();
+  await tabla.getByText('Ficha de clase').waitFor();
+  for (const oculto of ['Simulacro', 'Rúbrica del momento', 'Guía de la evidencia', 'Momento']) {
+    assert.equal(await tabla.getByText(oculto).count(), 0, oculto);
+  }
+  await context.close();
+});
