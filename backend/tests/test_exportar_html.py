@@ -4,7 +4,7 @@ import re
 
 import pytest
 
-from app.exportar.html import PIE, exportar_html
+from app.exportar.html import PIE, cabecera_descarga, exportar_html, nombre_archivo
 from app.herramientas.sin_ia import generar_sin_ia
 from app.silabo.contexto import contexto_clase, contexto_por_id
 from tests.test_generacion_api import HEADERS, entorno  # noqa: F401
@@ -76,7 +76,8 @@ def test_exportar_validado_200_attachment(entorno):
     r = d.get(f"/asignaturas/{aid}/recursos/{recurso['id']}/exportar?formato=html")
     assert r.status_code == 200 and r.headers["content-type"].startswith("text/html")
     disposicion = r.headers["content-disposition"]
-    assert disposicion.startswith("attachment") and re.search(r'filename="cuestionario-M2-S1\.html"', disposicion)
+    assert disposicion.startswith("attachment") and "filename*=UTF-8''Cuestionario%20-%20Momento%202%2C%20sesi%C3%B3n%201%20-%20" in disposicion
+    assert 'filename="Cuestionario - Momento 2, sesion 1 - ' in disposicion and "M2-S1" not in disposicion
     assert PIE in r.text
 
 
@@ -174,3 +175,19 @@ def test_generar_no_duplica_lo_que_esta_en_curso(entorno):
     assert r1["id"] == r2["id"]
     otro = d.post(f"/asignaturas/{aid}/generar", json={**cuerpo, "herramientas": ["cuestionario", "ficha_clase"]}, headers=HEADERS).json()["trabajos"]
     assert otro[0]["id"] != r1["id"] and otro[1]["id"] == r1["id"]
+
+
+@pytest.mark.parametrize("herramienta,ambito,formato,esperado", [
+    ("ficha_clase", "M2-S1", "pdf", "Ficha de clase - Momento 2, sesión 1 - Analisis de datos.pdf"),
+    ("rubrica_final", "asignatura", "docx", "Rúbrica del producto final - Analisis de datos.docx"),
+    ("cuestionario", "M1-S1", "html", "Cuestionario - Momento 1, sesión 1 - Analisis de datos.html"),
+])
+def test_nombre_de_archivo_claro(herramienta, ambito, formato, esperado):
+    assert nombre_archivo(herramienta, ambito, "ANALISIS DE DATOS", formato) == esperado
+
+
+def test_nombre_de_archivo_seguro():
+    malo = nombre_archivo("ficha_clase", "M1-S1", 'A/../b"\r\nX-Mala: 1<>|', "pdf")
+    assert not re.search(r'[/\\:*?"<>|\r\n]', malo)
+    cabecera = cabecera_descarga(malo)
+    assert "\r" not in cabecera and "\n" not in cabecera and cabecera.isascii()

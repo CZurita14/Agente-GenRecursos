@@ -5,6 +5,9 @@ Seguridad: el contenido viene del modelo y del docente, así que TODO texto pasa
 escapados. Lo que el estudiante marca o escribe no se guarda: al recargar vuelve a empezar.
 """
 from html import escape
+import re
+import unicodedata
+from urllib.parse import quote
 
 from app.exportar.presentacion import NIVELES, SIN_POLITICA, es_quiz, legible, nombre_ambito, presentar
 from app.silabo.contexto import ContextoClase
@@ -96,6 +99,23 @@ puntaje();
 resumen();
 """
 IMPRIMIR = '<p><button type="button" data-imprimir>Imprimir o guardar en PDF</button></p>'
+
+
+def nombre_archivo(herramienta: str, ambito_id: str, proyecto: str, formato: str) -> str:
+    """«Ficha de clase - Momento 2, sesión 1 - Analisis de datos.pdf», sin códigos internos."""
+    partes = [NOMBRES.get(herramienta, herramienta)]
+    if ambito_id != "asignatura":
+        partes.append(nombre_ambito(ambito_id))
+    partes.append(proyecto.strip().capitalize()[:60].strip())
+    # El nombre del proyecto viene del sílabo: sin caracteres que el sistema de archivos o la cabecera rechacen.
+    limpio = re.sub(r'[\x00-\x1f\x7f\\/:*?"<>|]+', " ", " - ".join(partes))
+    return re.sub(r"\s+", " ", limpio).strip(" .") + "." + formato
+
+
+def cabecera_descarga(nombre: str) -> str:
+    """Content-Disposition con acentos (RFC 6266) y una alternativa ASCII para clientes antiguos."""
+    ascii_ = unicodedata.normalize("NFKD", nombre).encode("ascii", "ignore").decode()
+    return f"attachment; filename=\"{ascii_}\"; filename*=UTF-8''{quote(nombre, safe='')}"
 
 
 def _marcable(titulo: str, items, nivel: int) -> str:

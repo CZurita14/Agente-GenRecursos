@@ -12,7 +12,7 @@ from app.agentes.workers.definiciones import DEFINICIONES
 from app.asignaturas.servicio import exigir_acceso
 from app.herramientas.sin_ia import HERRAMIENTAS_SIN_IA, generar_sin_ia
 from app.recursos.validacion import EdicionInvalida, validar_contenido
-from app.exportar.html import exportar_html
+from app.exportar.html import exportar_html, nombre_archivo
 from app.exportar.presentacion import presentar
 from app.herramientas.politica import excluye_ia_en_evaluacion
 from app.silabo.contexto import contexto_por_id
@@ -188,7 +188,7 @@ class ServicioRecursos:
             contexto = _contexto(r, None)
             if formato not in ("html", "pdf", "docx"):
                 raise HTTPException(422, "Formato no soportado")
-            nombre = re.sub(r"[^A-Za-z0-9_-]", "_", f"{r['herramienta']}-{r['ambito_id']}") + "." + formato
+            nombre = nombre_archivo(r["herramienta"], r["ambito_id"], contexto.asignatura, formato)
         if formato == "html":
             return nombre, exportar_html(r, contexto)
         from app.exportar.documento import exportar_documento, FormulaInvalida

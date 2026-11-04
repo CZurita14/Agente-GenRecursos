@@ -7,6 +7,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field, StrictInt
 
 from app.cola.trabajos import Ambito
+from app.exportar.html import cabecera_descarga
 
 router = APIRouter(prefix="/asignaturas/{asig}")
 
@@ -82,6 +83,6 @@ def validar(asig: UUID, rid: UUID, datos: Validacion, request: Request):
 def exportar(asig: UUID, rid: UUID, request: Request, formato: Literal["html", "pdf", "docx"] = "html"):
     nombre, contenido = request.app.state.recursos.exportar(asig, rid, request.state.usuario, formato)
     mime = {"html": "text/html", "pdf": "application/pdf", "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"}
-    return Response(contenido, media_type=mime[formato], headers={"Content-Disposition": f'attachment; filename="{nombre}"',
+    return Response(contenido, media_type=mime[formato], headers={"Content-Disposition": cabecera_descarga(nombre),
                                             "Cache-Control": "private, no-store",
                                             "X-Content-Type-Options": "nosniff"})

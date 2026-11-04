@@ -76,7 +76,7 @@ def test_api_documentos(entorno, formato, mime):
     respuesta = d.get(url)
     assert respuesta.status_code == 200
     assert respuesta.headers['content-type'] == mime
-    assert respuesta.headers['content-disposition'].endswith(f'.{formato}"')
+    assert f'.{formato}"; filename*=' in respuesta.headers['content-disposition'] and respuesta.headers['content-disposition'].endswith(f'.{formato}')
     assert respuesta.content.startswith(b'%PDF' if formato == 'pdf' else b'PK')
     contenido = recurso['contenido']
     contenido[0]['pregunta'] = '¿Qué procedimiento corresponde al contexto descrito en esta pregunta editada?'
