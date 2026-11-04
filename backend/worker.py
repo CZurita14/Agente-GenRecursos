@@ -88,7 +88,13 @@ def main():
         raise ValueError('Configuración de worker inválida')
     directorio = config.agentes_dir if config.agentes_dir.is_absolute() else RAIZ / config.agentes_dir
     perfiles = cargar_perfiles(directorio)
-    razonador = cargar_razonador(config)  # Una sola vez; un modelo inválido detiene el arranque.
+    try:
+        razonador = cargar_razonador(config)  # Una sola vez; un modelo inválido detiene el arranque.
+    except Exception as error:
+        from app.razonador import RazonadorInvalido
+        if isinstance(error, RazonadorInvalido):
+            registro.error('razonador inválido: %s', error)  # El mensaje nombra la causa, nunca un texto.
+        raise
     if razonador is not None:
         registro.info('razonador cargado: version=%s', razonador.version)
     preparar_esquema(config)

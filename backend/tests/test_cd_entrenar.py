@@ -150,3 +150,23 @@ def test_sin_ajuste_exporta_el_modelo_base(tmp_path):
     m = json.loads((ruta / "metadatos.json").read_text(encoding="utf-8"))
     assert m["ajuste"] is False and m["epocas"] == 0 and m["aprobado"] is False
     assert (ruta / "onnx" / "model.onnx").exists()
+
+
+@pytest.mark.parametrize("modulo_cli, parche", [
+    ("entrenar", "e.leer_carpeta = lambda ruta: (print('\u2705 listo'), sys.exit(0))"),
+    ("evaluar", "e._main_temas = lambda argv: (print('\u2705 listo'), 0)[1]"),
+])
+def test_la_consola_cp1252_no_rompe_la_cli(modulo_cli, parche):
+    """torch.onnx imprime emojis: la CLI debe correr sin que el usuario defina PYTHONUTF8=1."""
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    codigo = (f"import sys, ciencia_datos.{modulo_cli} as e; {parche}; "
+              f"e.main({['temas-para-revisar'] if modulo_cli == 'evaluar' else ['--silabos', '.', '--salida', '.']!r})")
+    entorno = {**os.environ, "PYTHONIOENCODING": "cp1252", "PYTHONUTF8": "0"}
+    r = subprocess.run([sys.executable, "-c", codigo], capture_output=True, env=entorno, timeout=120,
+                       cwd=Path(__file__).resolve().parents[1])
+    assert r.returncode == 0, r.stderr.decode("utf-8", "replace")[-300:]
+    assert "✅ listo" in r.stdout.decode("utf-8")

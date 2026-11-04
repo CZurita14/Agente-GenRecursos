@@ -48,7 +48,7 @@ class PlanRazonado(Mensaje):
     """Lo que decidió el razonador; al reanudar manda sobre el modelo instalado, sea cual sea."""
     version: str
     planes: list[list[PlanItem]]
-    escenarios: list[str] = []  # Casos que quedaron libres, para que el estilo no cambie al reanudar.
+    escenarios: list[str]  # Casos que quedaron libres, para que el estilo no cambie al reanudar.
 
 
 class Devolucion(Mensaje):

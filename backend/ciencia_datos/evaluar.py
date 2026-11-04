@@ -32,6 +32,7 @@ import numpy as np
 from app.agentes.facultades import cargar_catalogo
 from app.agentes.planificador import _casos_libres
 from app.razonador import Razonador
+from ciencia_datos import consola_utf8
 from ciencia_datos.corpus import fragmentos, leer_carpeta
 from ciencia_datos.entrenar import RAIZ, codigo_a_facultad, huella
 from ciencia_datos.estadistica import (  # noqa: F401  (se reexportan: siguen importables desde aquí)
@@ -543,6 +544,7 @@ def _main_temas(argv: list[str]) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    consola_utf8()
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv[:1] == ["temas-para-revisar"]:
         return _main_temas(argv[1:])

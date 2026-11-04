@@ -67,6 +67,18 @@ Comprobar preparación interna de API (`/salud/listo`), latido de worker, dispon
 
 Una imagen anterior no garantiza rollback tras cambiar el esquema. Si hay incompatibilidad, mantener detenidas las escrituras y preparar recuperación desde un respaldo probado en una base nueva, con procedimiento institucional de cambio de destino. Esta CLI no cambia el destino de producción ni elimina bases.
 
+## Razonador entrenado (opcional)
+
+Apagado por omisión: `RAZONADOR_RUTA` vacía en el archivo de entorno. El Compose solo se la entrega al servicio `worker`, junto con el volumen `modelos` en `/modelos` de solo lectura; la API y los demás servicios no la reciben. Guía completa, criterios y etiquetado en [ciencia-datos.md](ciencia-datos.md).
+
+Para instalar un modelo aprobado (solo con la decisión del usuario), copiar su carpeta al volumen con un contenedor auxiliar, porque dentro del `worker` el volumen es de solo lectura (usar una imagen mínima ya aprobada por TI en lugar de `alpine` si corresponde):
+
+```text
+docker run --rm -v genrecursos-app_modelos:/modelos -v /ruta/del/modelo/v1:/origen:ro alpine cp -r /origen /modelos/v1
+```
+
+Después escribir `RAZONADOR_RUTA=/modelos/v1` en el archivo de entorno, ejecutar `validar` y recrear el `worker` (`up -d worker`). Con `ENTORNO=produccion` el `worker` no arranca si el modelo falta, está dañado, es de humo o no está aprobado; el motivo se lee en su bitácora (`docker compose … logs worker`) y no incluye textos. Para apagarlo, dejar la variable vacía y recrear el `worker`. Un trabajo en curso que se reanude conserva el plan que ya había decidido.
+
 ## Respaldo e integridad
 
 `respaldo --salida PATH` requiere la BD activa y genera `pg_dump --format=custom`. Transmite stdout a un temporal en el directorio de salida, sincroniza el archivo y calcula SHA-256 por bloques. Publica `<PATH>.sha256` y después `PATH` mediante enlaces duros exclusivos; el dump aparece completo y no se sobrescribe ningún destino, incluso ante una creación concurrente. El directorio debe existir y el sistema de archivos admitir enlaces duros (por ejemplo NTFS o ext4); no hay fallback que sobrescriba. Un fallo ordinario limpia sus temporales y publicaciones parciales. Una interrupción abrupta del sistema puede dejar un manifiesto sin dump o temporales: revisar antes de reintentar con un nombre nuevo.

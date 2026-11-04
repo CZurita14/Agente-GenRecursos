@@ -105,6 +105,21 @@ def test_worker_se_detiene_antes_de_lanzar_consumidores(monkeypatch, tmp_path):
         worker.main()
 
 
+def test_worker_registra_la_causa_de_un_modelo_invalido(monkeypatch, tmp_path, caplog):
+    import worker
+    from app.razonador import RazonadorInvalido
+
+    def invalido(config):
+        raise RazonadorInvalido("el modelo no está aprobado")
+
+    monkeypatch.setattr(worker, "ajustes", lambda: Ajustes(razonador_ruta=tmp_path, **DESARROLLO))
+    monkeypatch.setattr(worker, "cargar_razonador", invalido)
+    monkeypatch.setattr(worker, "preparar_esquema", lambda config: pytest.fail("no debió llegar al esquema"))
+    with caplog.at_level("ERROR"), pytest.raises(RazonadorInvalido):
+        worker.main()
+    assert "razonador inválido: el modelo no está aprobado" in caplog.text
+
+
 def test_worker_carga_una_vez_y_entrega_la_instancia_a_los_consumidores(monkeypatch, tmp_path, caplog):
     import worker
     falso = SimpleNamespace(version="v-prueba")

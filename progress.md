@@ -73,6 +73,7 @@ P1–P6 implementados técnicamente, incluido chat privado de ajustes y exportac
 | P5 Chat de ajustes | 🔄 | [plan](docs/superpowers/plans/2026-10-28-p5-chat-ajustes.md) | Implementación y cierre técnico en `codex/p5-chat`; humo del intérprete con Qwen real pasa. [15 casos para docentes piloto](docs/pruebas/p5-piloto.md) pendientes: no equivalen a pruebas automáticas. |
 | P6 Entrega y frontend | 🔄 | [P6a](docs/superpowers/plans/2026-10-28-p6a-frontend-menu.md) · [P6b](docs/superpowers/plans/2026-10-28-p6b-mis-recursos.md) · [P6d](docs/superpowers/plans/2026-10-28-p6d-exportacion-pdf-word.md) | Implementados menú, generación, avance, revisión, edición y descargas HTML/PDF/DOCX. P6d publicado en PR #10; QA visual completado. Plantilla institucional y aceptación académica pendientes. |
 | P7 Despliegue | 🔄 | [plan](docs/superpowers/plans/2026-10-28-p7-despliegue.md) | D1–D3 implementados y probados en instalación aislada (PR #12); D4: [ficha de entrega a TI](docs/entrega-ti.md) en borrador, sin enviar. Puesta en marcha bloqueada por B4/B5/B6/B9/B10 |
+| Razonador entrenado | 🔄 | [plan](docs/superpowers/plans/2026-11-04-razonador-entrenado.md) · [guía](docs/ciencia-datos.md) | Rama `p9/razonador`. Corpus, separación 70/30 por sílabo, entrenamiento ONNX, evaluación, razonador sin PyTorch e integración en el planificador implementados; **apagado** salvo `RAZONADOR_RUTA` (solo en el `worker`). Prueba de humo con 2 sílabos corrida (no mide calidad). Faltan: 20 sílabos mínimo, confirmación de los criterios por el usuario, etiquetado docente y la comparación con Qwen real |
 
 ### P4 · Registro por tarea
 
@@ -152,6 +153,10 @@ P1–P6 implementados técnicamente, incluido chat privado de ajustes y exportac
 ---
 
 ## Bitácora (lo ya hecho)
+
+### 2026-11-04
+- **Razonador entrenado (rama `p9/razonador`):** tarea final de despliegue y documentación. Volumen `modelos` de solo lectura y `RAZONADOR_RUTA` vacía solo en el `worker`; `requirements.lock` con `numpy`, `scikit-learn`, `onnxruntime`, `tokenizers` y sus dependencias, sin PyTorch. Guía para el área académica en [docs/ciencia-datos.md](docs/ciencia-datos.md), con los criterios de aprobación marcados como **propuestos, pendientes de confirmación del usuario**.
+- **Prueba de humo** con los 2 sílabos locales (1 entrenamiento, 1 evaluación, 27 fragmentos): entrenamiento, exportación e informe corren de punta a punta con `humo: true` y `aprobado: false`. **No es una evaluación de calidad.** Ni los modelos ni los datos derivados se versionan.
 
 ### 2026-10-28
 - **Dos descargas: estudiante y docente** (rama `p8/acceso-prueba`): pedido del usuario; reemplaza la entrega y la ofuscación de abajo. El HTML, PDF y Word del estudiante solo llevan preguntas: las respuestas no están en el archivo, ni ocultas. `exportar?version=docente` (PDF y Word, cuestionario, simulacro y estudio de caso) trae clave y explicaciones; lector recibe 403. **Abierto:** el HTML no envía las respuestas del estudiante al docente; para recogerlas o calificar hace falta el cuestionario de Canvas (QTI), o que el estudiante guarde en PDF. El lector tampoco recibe la clave al abrir el recurso (`_para_lector`).

@@ -234,3 +234,27 @@ def test_un_texto_mas_largo_que_la_longitud_maxima_se_trunca_y_corre(modelo_humo
     assert inicio.shape[0] == 1 and np.isfinite(inicio).all()
     # Solo cuenta lo que cabe: añadir texto de más no cambia el vector.
     assert np.allclose(inicio, r.vectores([largo + " palabras sobrantes al final"]), atol=1e-5)
+
+
+@pytest.mark.modelo
+def test_un_modelo_exportado_de_verdad_planifica_de_punta_a_punta(modelo_humo, silabo):
+    from app.agentes.facultades import cargar_perfiles, estilo_para
+    from app.agentes.planificador import _casos_libres, _focos, estilo_razonado, planificar
+    from app.silabo.contexto import contexto_clase
+
+    perfil = cargar_perfiles(BACKEND.parent / "agentes")["ingenierias"]
+    ctx = contexto_clase(silabo, "M2-S1")
+    r = Razonador.cargar(modelo_humo, exigir_aprobado=False)
+
+    def correr():
+        estilo = estilo_razonado(perfil, "SOFTWARE", ctx, r)
+        return estilo, planificar(ctx, 12, "profesional", escenarios=estilo.escenarios, razonador=r)
+
+    estilo, lotes = correr()
+    plan = [p for lote in lotes for p in lote]
+    assert [p.item_id for p in plan] == [f"i{k + 1}" for k in range(12)]
+    assert all(p.foco and p.foco in _focos(ctx) for p in plan)
+    permitidos = set(_casos_libres(list(estilo_para(perfil, "SOFTWARE").escenarios), ctx.entregables_momento))
+    assert set(estilo.escenarios) <= permitidos  # El razonador solo descarta: nunca añade ni afloja el filtro.
+    assert all(p.caso in estilo.escenarios for p in plan) or not estilo.escenarios
+    assert correr() == (estilo, lotes)

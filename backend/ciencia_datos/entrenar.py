@@ -16,6 +16,7 @@ import warnings
 from pathlib import Path
 
 from app.agentes.facultades import cargar_catalogo, normalizar
+from ciencia_datos import consola_utf8
 from ciencia_datos.corpus import fragmentos, leer_carpeta
 from ciencia_datos.separar import MIN_FACULTADES, MIN_POR_FACULTAD, cumple_minimo, separar
 
@@ -174,6 +175,7 @@ def huella(separacion: dict) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
+    consola_utf8()
     p = argparse.ArgumentParser(prog="python -m ciencia_datos.entrenar")
     p.add_argument("--silabos", type=Path, required=True)
     p.add_argument("--salida", type=Path, required=True)
