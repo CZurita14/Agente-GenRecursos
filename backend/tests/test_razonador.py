@@ -154,6 +154,27 @@ def test_carga_aprobada_usa_umbral_y_longitud_de_metadatos(carpeta_con, monkeypa
     assert (r.version, r.umbral, visto["l"]) == ("v9", 0.73, 64)
 
 
+@pytest.mark.parametrize("umbral", [float("nan"), float("inf"), float("-inf"), 1.5, -1.01, "0.7", True])
+def test_umbral_fuera_de_rango_o_no_finito_se_rechaza(carpeta_con, umbral):
+    meta = {"humo": False, "aprobado": True, "umbral": umbral}
+    for exigir in (True, False):
+        with pytest.raises(RazonadorInvalido, match="umbral"):
+            Razonador.cargar(carpeta_con(meta), exigir_aprobado=exigir)
+
+
+@pytest.mark.parametrize("longitud", [0, -5, 513, 1000000, 64.5, "128", True, None])
+def test_longitud_maxima_invalida_se_rechaza(carpeta_con, longitud):
+    meta = {"humo": False, "aprobado": True, "umbral": 0.7, "longitud_maxima": longitud}
+    with pytest.raises(RazonadorInvalido, match="longitud_maxima"):
+        Razonador.cargar(carpeta_con(meta), exigir_aprobado=True)
+
+
+def test_caso_con_coseno_igual_al_umbral_se_descarta():
+    r = _falso({"caso": [1, 0], "entregable": [1, 0], "lejano": [0, 1]}, umbral=1.0)
+    assert np.isclose(float(r.vectores(["caso"])[0] @ r.vectores(["entregable"])[0]), 1.0)
+    assert r.casos_libres(["caso", "lejano"], ["entregable"]) == ["lejano"]
+
+
 def test_sin_umbral_en_desarrollo_usa_el_de_desarrollo(carpeta_con, monkeypatch):
     monkeypatch.setattr(modulo, "_abrir", lambda ruta, longitud: lambda t: np.eye(len(t)))
     r = Razonador.cargar(carpeta_con({"humo": True, "aprobado": False, "umbral": None}), exigir_aprobado=False)
@@ -190,3 +211,26 @@ def test_onnx_da_los_mismos_vectores_que_el_entrenamiento(modelo_humo):
     esperado = st.encode(FRASES, normalize_embeddings=True)
     obtenido = Razonador.cargar(modelo_humo, exigir_aprobado=False).vectores(FRASES)
     assert np.allclose(obtenido, esperado, atol=1e-3)
+
+
+@pytest.mark.modelo
+def test_un_razonador_real_da_lo_mismo_desde_varios_hilos(modelo_humo):
+    from concurrent.futures import ThreadPoolExecutor
+
+    r = Razonador.cargar(modelo_humo, exigir_aprobado=False)
+    lotes = [[f"frase número {i} sobre análisis de datos", f"otra frase {i} de redes"] for i in range(16)]
+    esperado = [r.vectores(lote) for lote in lotes]
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        obtenido = list(pool.map(r.vectores, lotes * 3))
+    for i, v in enumerate(obtenido):
+        assert np.allclose(v, esperado[i % 16], atol=1e-5)
+
+
+@pytest.mark.modelo
+def test_un_texto_mas_largo_que_la_longitud_maxima_se_trunca_y_corre(modelo_humo):
+    r = Razonador.cargar(modelo_humo, exigir_aprobado=False)
+    largo = "Analizar los datos de ventas de la empresa. " * 200
+    inicio = r.vectores([largo])
+    assert inicio.shape[0] == 1 and np.isfinite(inicio).all()
+    # Solo cuenta lo que cabe: añadir texto de más no cambia el vector.
+    assert np.allclose(inicio, r.vectores([largo + " palabras sobrantes al final"]), atol=1e-5)

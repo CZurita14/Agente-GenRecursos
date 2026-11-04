@@ -11,6 +11,7 @@ descarta los casos que se parecen a algún entregable aunque no compartan palabr
 evalúa y el que se sirve no puedan diferir. Este módulo no importa `torch` ni `ciencia_datos`.
 """
 import json
+import math
 from collections.abc import Callable
 from pathlib import Path
 
@@ -19,6 +20,7 @@ import numpy as np
 UMBRAL_DESARROLLO = 0.6  # solo con exigir_aprobado=False y un modelo sin umbral fijado
 LONGITUD_POR_OMISION = 128  # la de entrenar.py, para carpetas que no registran su longitud
 LOTE = 32
+LONGITUD_TOPE = 512  # el máximo de posiciones del modelo base
 K_MAXIMO = 8
 SEMILLA = 42
 
@@ -50,8 +52,11 @@ def _validar(ruta: Path, exigir_aprobado: bool) -> tuple[dict, float]:
     if not (ruta / "tokenizer.json").is_file():
         raise RazonadorInvalido("falta tokenizer.json")
     umbral = meta.get("umbral")
-    if umbral is not None and (isinstance(umbral, bool) or not isinstance(umbral, (int, float))):
-        raise RazonadorInvalido("el umbral de metadatos.json no es un número")
+    if umbral is not None and (
+        isinstance(umbral, bool) or not isinstance(umbral, (int, float))
+        or not math.isfinite(umbral) or not -1 <= umbral <= 1
+    ):
+        raise RazonadorInvalido("el umbral de metadatos.json no es un coseno válido (finito, entre -1 y 1)")
     if exigir_aprobado:
         if meta.get("humo") is not False:
             raise RazonadorInvalido("el modelo es de humo o no declara humo: false")
@@ -102,8 +107,8 @@ class Razonador:
         ruta = Path(ruta)
         meta, umbral = _validar(ruta, exigir_aprobado)
         longitud = meta.get("longitud_maxima", LONGITUD_POR_OMISION)
-        if isinstance(longitud, bool) or not isinstance(longitud, int) or longitud < 2:
-            raise RazonadorInvalido("longitud_maxima de metadatos.json no es válida")
+        if isinstance(longitud, bool) or not isinstance(longitud, int) or not 1 <= longitud <= LONGITUD_TOPE:
+            raise RazonadorInvalido(f"longitud_maxima de metadatos.json debe ser un entero de 1 a {LONGITUD_TOPE}")
         return cls(_abrir(ruta, longitud), version=str(meta.get("version", ruta.name)), umbral=umbral)
 
     def vectores(self, textos: list[str]) -> np.ndarray:
@@ -146,4 +151,5 @@ class Razonador:
         if not entregables or not casos:
             return list(casos)
         parecido = (self.vectores(casos) @ self.vectores(entregables).T).max(axis=1)
+        # Regla: un caso con coseno igual al umbral se descarta; solo queda libre el estrictamente menor.
         return [c for c, p in zip(casos, parecido) if p < self.umbral]
