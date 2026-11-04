@@ -141,6 +141,7 @@ def entrenar(
         "humo": humo,
         "aprobado": False,
         "umbral": None,
+        "longitud_maxima": modelo.max_seq_length,
         "ajuste": ajuste,
         "epocas": epocas if ajuste else 0,
         "n_fragmentos": len(usados) if ajuste else 0,

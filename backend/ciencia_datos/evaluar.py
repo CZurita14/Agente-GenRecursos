@@ -16,8 +16,8 @@ Si faltan los de quien gana, la fracción de grupos con sentido es null y no se 
 El candado de «una sola vez» es `evaluacion.candado` dentro de la carpeta de cada modelo:
 `--salida` solo decide dónde se escribe el informe.
 
-Los vectores salen del ONNX con `onnxruntime` y `tokenizers` (agrupación media con la
-máscara y normalización L2) en `vectores`, que las pruebas reemplazan por vectores fijos.
+Los vectores salen de `app.razonador` (el mismo código que sirve en producción) mediante
+`vectores`, que las pruebas reemplazan por vectores fijos.
 """
 import argparse
 import csv
@@ -31,6 +31,7 @@ import numpy as np
 
 from app.agentes.facultades import cargar_catalogo
 from app.agentes.planificador import _casos_libres
+from app.razonador import Razonador
 from ciencia_datos.corpus import fragmentos, leer_carpeta
 from ciencia_datos.entrenar import RAIZ, codigo_a_facultad, huella
 from ciencia_datos.estadistica import (  # noqa: F401  (se reexportan: siguen importables desde aquí)
@@ -48,7 +49,6 @@ MIN_PARES_KAPPA = 100
 MIN_POSITIVOS_PRUEBA = 60
 K_POR_OMISION = 8
 SEMILLA = 42
-LONGITUD_MAXIMA = 128
 SALIDA_POR_DEFECTO = RAIZ / "pruebas" / "ciencia_datos"
 CANDADO = "evaluacion.candado"
 CABECERA_PARES = ("caso", "evidencia", "codigo_pf", "docente", "parecido")
@@ -87,28 +87,9 @@ def dictaminar(medidas: dict) -> dict:
 # --- vectores -----------------------------------------------------------------------
 
 
-def vectores(carpeta: Path, textos: list[str], lote: int = 32) -> np.ndarray:
-    """Vectores de `textos` desde `carpeta/onnx/model.onnx`: media con máscara y norma L2."""
-    import onnxruntime as ort
-    from tokenizers import Tokenizer
-
-    carpeta = Path(carpeta)
-    tok = Tokenizer.from_file(str(carpeta / "tokenizer.json"))
-    tok.enable_truncation(max_length=LONGITUD_MAXIMA)
-    tok.enable_padding()
-    sesion = ort.InferenceSession(str(carpeta / "onnx" / "model.onnx"), providers=["CPUExecutionProvider"])
-    pedidas = {i.name for i in sesion.get_inputs()}
-    salida = []
-    for i in range(0, len(textos), lote):
-        codificados = tok.encode_batch(textos[i : i + lote])
-        ids = np.array([c.ids for c in codificados], dtype=np.int64)
-        mascara = np.array([c.attention_mask for c in codificados], dtype=np.int64)
-        entradas = {"input_ids": ids, "attention_mask": mascara, "token_type_ids": np.zeros_like(ids)}
-        oculto = sesion.run(None, {k: v for k, v in entradas.items() if k in pedidas})[0]
-        m = mascara[..., None].astype(oculto.dtype)
-        media = (oculto * m).sum(axis=1) / np.maximum(m.sum(axis=1), 1)
-        salida.append(media / np.maximum(np.linalg.norm(media, axis=1, keepdims=True), 1e-12))
-    return np.vstack(salida) if salida else np.zeros((0, 0))
+def vectores(carpeta: Path, textos: list[str]) -> np.ndarray:
+    """Vectores de `textos` con el mismo código que sirve en producción (`app.razonador`)."""
+    return Razonador.cargar(Path(carpeta), exigir_aprobado=False).vectores(textos)
 
 
 # --- etiquetas ----------------------------------------------------------------------
