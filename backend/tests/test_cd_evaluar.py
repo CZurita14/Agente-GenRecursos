@@ -195,7 +195,7 @@ def _unitario(v):
 
 
 def _vector_falso(bueno: str):
-    """Los pares «parecidos» comparten vector solo en la carpeta `bueno`; el resto es azar."""
+    """Los pares «parecidos» comparten vector en la carpeta `bueno`, y solo débilmente en la otra."""
 
     def vectorizar(carpeta, textos):
         salida = []
@@ -208,6 +208,8 @@ def _vector_falso(bueno: str):
             i = int(m.group(2))
             if i % 2 == 1 and carpeta.name == bueno:
                 salida.append(_unitario(_azar(f"u{i}").normal(size=DIM) + _azar(t).normal(scale=.1, size=DIM)))
+            elif i % 2 == 1:  # el otro modelo solo separa un poco: su umbral depende de las etiquetas
+                salida.append(_unitario(.6 * _unitario(_azar(f"u{i}").normal(size=DIM)) + _unitario(_azar(t).normal(size=DIM))))
             else:
                 salida.append(_unitario(_azar(t).normal(size=DIM)))
         return np.array(salida)
@@ -228,8 +230,7 @@ def _carpeta_modelo(ruta, version, ajuste, sep, huella_sep=None, humo=False):
     }))
 
 
-@pytest.fixture
-def entorno(tmp_path, datos):
+def _construir(tmp_path, datos, invertir_prueba=False):
     silabos = tmp_path / "silabos"
     silabos.mkdir()
     codigos = [f"PF-{c}" for c in "ABCDEFGH"]
@@ -245,11 +246,19 @@ def entorno(tmp_path, datos):
     _carpeta_modelo(tmp_path / "base", "v-base", False, sep)
     datos_cd = tmp_path / "datos_cd"
     datos_cd.mkdir()
-    filas = [(f"caso secreto {i}", f"evidencia secreta {i}", codigos[(i // 2) % 8], d, str(i % 2))
-             for i in range(600) for d in ("ana", "luis")]
+    filas = []
+    for i in range(600):
+        codigo = codigos[(i // 2) % 8]
+        etiqueta = i % 2 if not (invertir_prueba and codigo in sep.prueba) else 1 - i % 2
+        filas += [(f"caso secreto {i}", f"evidencia secreta {i}", codigo, d, str(etiqueta)) for d in ("ana", "luis")]
     _csv(datos_cd / "pares.csv", filas)
     return {"ajustado": tmp_path / "ajustado", "base": tmp_path / "base", "silabos": silabos,
-            "datos": datos_cd, "salida": tmp_path / "pruebas", "tmp": tmp_path}
+            "datos": datos_cd, "salida": tmp_path / "pruebas", "tmp": tmp_path, "sep": sep}
+
+
+@pytest.fixture
+def entorno(tmp_path, datos):
+    return _construir(tmp_path, datos)
 
 
 def _correr(e, modelo="ajustado", base="base", bueno="ajustado", **kw):
@@ -416,3 +425,112 @@ def test_k_reducido_por_pocos_textos_se_informa(entorno):
     r = ev.temas_para_revisar(entorno["ajustado"], entorno["silabos"], entorno["datos"] / "rev.csv", k=500,
                               vectorizar=_vector_falso("ajustado"))
     assert r["k_reducido"] is True and r["k"] < 500
+
+
+# --- validación previa al candado ------------------------------------------------------
+
+
+def _argv(e, **cambios):
+    a = {"--modelo": e["ajustado"], "--base-modelo": e["base"], "--silabos": e["silabos"],
+         "--datos": e["datos"], "--salida": e["salida"], "--k": 3} | cambios
+    return [x for par in a.items() if par[1] is not None for x in (par[0], str(par[1]))]
+
+
+def _sin_candados(e):
+    return not (e["ajustado"] / "evaluacion.candado").exists() and not (e["base"] / "evaluacion.candado").exists()
+
+
+def _csv_truncado(ruta):
+    lineas = ruta.read_text(encoding="utf-8").splitlines()
+    ruta.write_text(chr(10).join(lineas[:2] + [lineas[2].rsplit(",", 2)[0]] + lineas[3:]), encoding="utf-8")
+
+
+@pytest.mark.parametrize("caso", [
+    "silabos_inexistente", "sin_onnx_del_modelo", "sin_onnx_del_base", "salida_es_archivo", "k_menor_que_2",
+    "pares_truncado", "temas_truncado", "ajustado_sin_base", "base_sobre_un_base",
+])
+def test_argumento_malo_sale_con_2_sin_quemar_el_candado(entorno, caso):
+    e = entorno
+    _juzgar_temas(e, "ajustado")
+    restaurar = None
+    cambios = {}
+    if caso == "silabos_inexistente":
+        cambios["--silabos"] = e["tmp"] / "no_hay"
+    elif caso == "sin_onnx_del_modelo":
+        restaurar = (e["ajustado"] / "onnx" / "model.onnx", b"onnx v-aj")
+        restaurar[0].unlink()
+    elif caso == "sin_onnx_del_base":
+        restaurar = (e["base"] / "onnx" / "model.onnx", b"onnx v-base")
+        restaurar[0].unlink()
+    elif caso == "salida_es_archivo":
+        archivo = e["tmp"] / "archivo"
+        archivo.write_text("x")
+        cambios["--salida"] = archivo
+    elif caso == "k_menor_que_2":
+        cambios["--k"] = 1
+    elif caso == "pares_truncado":
+        copia = e["datos"] / "pares.csv"
+        original = copia.read_text(encoding="utf-8")
+        _csv_truncado(copia)
+        restaurar = (copia, original.encode())
+    elif caso == "temas_truncado":
+        copia = e["datos"] / "temas.csv"
+        original = copia.read_text(encoding="utf-8")
+        _csv_truncado(copia)
+        restaurar = (copia, original.encode())
+    elif caso == "ajustado_sin_base":
+        cambios["--base-modelo"] = None
+    elif caso == "base_sobre_un_base":
+        cambios["--modelo"] = e["base"]
+        cambios["--base-modelo"] = e["base"]
+    assert ev.main(_argv(e, **cambios)) == 2
+    assert _sin_candados(e) and not (e["salida"] / "v-aj.json").exists()
+    if restaurar:
+        restaurar[0].write_bytes(restaurar[1])
+    r = _correr(e)  # una corrida correcta después sigue funcionando
+    assert r["version"] == "v-aj" and (e["ajustado"] / "evaluacion.candado").exists()
+
+
+def test_invertir_las_etiquetas_de_prueba_no_mueve_el_umbral_de_ningun_candidato(tmp_path, datos):
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    a = _construir(tmp_path / "a", datos)
+    b = _construir(tmp_path / "b", datos, invertir_prueba=True)
+    for e in (a, b):
+        _juzgar_temas(e, "ajustado")
+    ra, rb = _correr(a), _correr(b)
+    assert set(ra["candidatos"]) == set(rb["candidatos"]) == {"ajustado", "base"}
+    for nombre in ra["candidatos"]:
+        assert ra["candidatos"][nombre]["umbral"] == rb["candidatos"][nombre]["umbral"], nombre
+    assert ra["medidas"]["positivos_prueba"] != 0  # y las métricas de prueba sí cambian
+    assert ra["candidatos"]["ajustado"]["f1"] != rb["candidatos"]["ajustado"]["f1"]
+
+
+def test_dejar_fuera_mide_con_el_base_aunque_gane_el_ajustado(entorno):
+    _juzgar_temas(entorno, "ajustado")
+    r = _correr(entorno)  # el ajustado es bueno; el base, débil
+    assert r["modelo_elegido"] == "ajustado"
+    assert r["dejar_fuera"]["peor_f1"] < 0.9  # con el ajustado sería ~1,0
+
+
+def test_pares_de_silabos_desconocidos_se_cuentan_y_no_entran_a_dejar_fuera(entorno):
+    _juzgar_temas(entorno, "ajustado")
+    perdido = entorno["sep"].entrenamiento[0]
+    (entorno["silabos"] / f"{perdido}.json").unlink()
+    esperados = sum(1 for f in csv.DictReader(open(entorno["datos"] / "pares.csv", encoding="utf-8"))
+                    if f["codigo_pf"] == perdido and f["docente"] == "ana")
+    r = _correr(entorno)
+    assert esperados > 0 and r["dejar_fuera"]["pares_sin_facultad"] == esperados
+
+
+def test_las_filas_del_azar_de_la_silueta_van_en_l2(monkeypatch):
+    from ciencia_datos import estadistica
+
+    vistos = []
+    real = estadistica.agrupar
+    monkeypatch.setattr(estadistica, "agrupar", lambda X, k, semilla=42: (vistos.append(np.asarray(X)), real(X, k, semilla))[1])
+    X = np.random.default_rng(5).normal(size=(40, 16))
+    silueta_frente_al_azar(X / np.linalg.norm(X, axis=1, keepdims=True), 3, veces=4)
+    assert len(vistos) == 5
+    for Y in vistos:
+        assert np.allclose(np.linalg.norm(Y, axis=1), 1.0)

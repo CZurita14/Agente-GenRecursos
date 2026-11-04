@@ -9,6 +9,9 @@ Flujo con docentes:
 1. `temas-para-revisar` agrupa los fragmentos de prueba y escribe `huella_temas,grupo,texto`.
 2. Los docentes juzgan cada grupo en `temas.csv` (`huella_temas,grupo,docente,tiene_sentido`).
 3. `evaluar` solo usa las filas con la huella del modelo elegido.
+Hasta correr la evaluación no se sabe cuál de los dos candidatos (ajustado o base) gana: los
+docentes deben juzgar los temas de AMBOS, ejecutando `temas-para-revisar` sobre cada carpeta.
+Si faltan los de quien gana, la fracción de grupos con sentido es null y no se aprueba.
 
 El candado de «una sola vez» es `evaluacion.candado` dentro de la carpeta de cada modelo:
 `--salida` solo decide dónde se escribe el informe.
@@ -116,17 +119,18 @@ def _valor(texto: str) -> int | None:
     return 1 if t in _SI else 0 if t in _NO else None
 
 
-def _leer_csv(ruta: Path) -> list[dict]:
+def _leer_csv(ruta: Path, requeridas: tuple[str, ...] = ()) -> list[dict]:
+    """Filas del CSV; con `requeridas`, exige las columnas y rechaza filas cortas o con sobrantes."""
     with open(ruta, encoding="utf-8-sig", newline="") as f:
-        return list(csv.DictReader(f))
-
-
-def _validar_cabecera(ruta: Path, requeridas: tuple[str, ...]) -> None:
-    with open(ruta, encoding="utf-8-sig", newline="") as f:
-        cabecera = next(csv.reader(f), [])
-    falta = [c for c in requeridas if c not in cabecera]
-    if falta:
-        raise EntradaInvalida(f"{ruta.name}: faltan columnas {', '.join(falta)}")
+        lector = csv.DictReader(f)
+        falta = [c for c in requeridas if c not in (lector.fieldnames or [])]
+        if falta:
+            raise EntradaInvalida(f"{ruta.name}: faltan columnas {', '.join(falta)}")
+        filas = list(lector)
+    for n, fila in enumerate(filas, start=2):
+        if None in fila or any(fila.get(c) is None for c in requeridas):
+            raise EntradaInvalida(f"{ruta.name}: la fila {n} está incompleta o tiene columnas de más")
+    return filas
 
 
 def cargar_pares(ruta: Path, entrenamiento: list[str], prueba: list[str]) -> dict:
@@ -136,7 +140,7 @@ def cargar_pares(ruta: Path, entrenamiento: list[str], prueba: list[str]) -> dic
     y se cuenta. El kappa usa los dos docentes con más pares y los pares que ambos etiquetaron.
     """
     grupo_de = {c: "entrenamiento" for c in entrenamiento} | {c: "prueba" for c in prueba}
-    filas = _leer_csv(ruta)
+    filas = _leer_csv(ruta, CABECERA_PARES)
     por_par: dict[tuple[str, str], list[tuple[str, str, str, int]]] = {}
     fuera_de_grupo = valor_invalido = 0
     for f in filas:
@@ -190,7 +194,7 @@ def grupos_con_sentido(ruta: Path, huella_temas: str, esperados: set[str]) -> di
     alguno, la fracción es NaN (y no se aprueba).
     """
     votos: dict[str, list[int]] = {}
-    for f in _leer_csv(ruta):
+    for f in _leer_csv(ruta, CABECERA_TEMAS):
         v = _valor(f.get("tiene_sentido", ""))
         if (f.get("huella_temas") or "").strip() == huella_temas and v is not None and (f.get("grupo") or "").strip():
             votos.setdefault(f["grupo"].strip(), []).append(v)
@@ -369,6 +373,36 @@ def _meta(carpeta: Path) -> dict:
     return json.loads((Path(carpeta) / "metadatos.json").read_text(encoding="utf-8"))
 
 
+def _validar_entradas(modelo: Path, base_modelo: Path | None, meta: dict, silabos: Path, salida: Path, k: int) -> None:
+    """Todo lo que puede fallar por argumentos va antes del candado: un error no quema la evaluación."""
+    if not silabos.is_dir():
+        raise EntradaInvalida("--silabos no es una carpeta existente")
+    if k < 2:
+        raise EntradaInvalida("--k debe ser al menos 2")
+    if salida.exists() and not salida.is_dir():
+        raise EntradaInvalida("--salida existe y no es una carpeta")
+    try:
+        salida.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        raise EntradaInvalida("--salida no se puede crear") from None
+    if not (modelo / "onnx" / "model.onnx").is_file():
+        raise EntradaInvalida("el modelo no tiene onnx/model.onnx")
+    if meta.get("humo"):
+        return  # el humo no compara con un base
+    if meta.get("ajuste") is False:
+        if base_modelo is not None:
+            raise EntradaInvalida("--base-modelo sobra: el modelo ya es un base")
+        return
+    if base_modelo is None:
+        raise EntradaInvalida("un modelo ajustado exige --base-modelo para decidir")
+    base_modelo = Path(base_modelo)
+    if not (base_modelo / "onnx" / "model.onnx").is_file():
+        raise EntradaInvalida("el base no tiene onnx/model.onnx")
+    mb = _meta(base_modelo)
+    if mb.get("ajuste") is not False or mb.get("humo") or mb.get("huella_separacion") != meta.get("huella_separacion"):
+        raise EntradaInvalida("--base-modelo no es un base válido: exige ajuste false, humo false y la misma separación")
+
+
 def ejecutar(
     modelo: Path,
     silabos: Path,
@@ -389,6 +423,8 @@ def ejecutar(
         raise EntradaInvalida("--humo solo se acepta sobre un modelo con humo: true")
     if meta.get("humo") and not humo:
         raise EntradaInvalida("el modelo tiene humo: true: solo se evalúa con --humo")
+    _validar_entradas(modelo, base_modelo, meta, Path(silabos), salida, k)
+    base_modelo = Path(base_modelo) if base_modelo is not None else None
     sep = meta["separacion"]
     informe = {"version": version, "humo": humo, "aprobado": False,
                "huella_separacion": meta.get("huella_separacion"), "huella_modelo": _sha(modelo / "onnx" / "model.onnx")}
@@ -401,22 +437,15 @@ def ejecutar(
         informe["ruta"] = str(escribir_informe(informe, salida, version, True))
         return informe
 
-    if meta.get("ajuste") is False:
-        base_modelo = None  # el modelo ya es el base
-    elif base_modelo is not None:
-        mb = _meta(Path(base_modelo))
-        if mb.get("ajuste") is not False or mb.get("humo") or mb.get("huella_separacion") != meta.get("huella_separacion"):
-            raise EntradaInvalida("--base-modelo no es un base válido: exige ajuste false, humo false y la misma separación")
-        base_modelo = Path(base_modelo)
-
     pares_csv, temas_csv = datos / "pares.csv", datos / "temas.csv"
+    for r, cab in ((pares_csv, CABECERA_PARES), (temas_csv, CABECERA_TEMAS)):
+        if r.exists():
+            _leer_csv(r, cab)  # completo y bien formado, antes del candado
     faltan = [r.name for r in (pares_csv, temas_csv) if not r.exists()]
     if faltan:
         informe |= {"motivo": "faltan archivos de etiquetas: " + ", ".join(faltan)}
         informe["ruta"] = str(escribir_informe(informe, salida, version, False, completo=False))
         return informe
-    _validar_cabecera(pares_csv, CABECERA_PARES)
-    _validar_cabecera(temas_csv, CABECERA_TEMAS)
 
     _tomar_candados([modelo] + ([base_modelo] if base_modelo else []))
 
@@ -513,7 +542,11 @@ def ejecutar(
 
 
 def _main_temas(argv: list[str]) -> int:
-    p = argparse.ArgumentParser(prog="python -m ciencia_datos.evaluar temas-para-revisar")
+    p = argparse.ArgumentParser(
+        prog="python -m ciencia_datos.evaluar temas-para-revisar",
+        description="Escribe los grupos de temas para que los docentes los juzguen. Ejecútelo sobre "
+        "AMBOS candidatos (ajustado y base): el ganador se conoce solo al evaluar.",
+    )
     p.add_argument("--modelo", type=Path, required=True)
     p.add_argument("--silabos", type=Path, required=True)
     p.add_argument("--salida", type=Path, required=True, help="p. ej. datos_cd/temas-revision-<version>.csv")
