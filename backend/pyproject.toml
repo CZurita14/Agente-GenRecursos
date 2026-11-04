@@ -41,4 +41,7 @@ include = ["app*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
-markers = ["servidor: requiere el servidor de IA real"]
+markers = [
+    "servidor: requiere el servidor de IA real",
+    "modelo: requiere el modelo base en caché",
+]
