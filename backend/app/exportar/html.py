@@ -101,6 +101,10 @@ resumen();
 IMPRIMIR = '<p><button type="button" data-imprimir>Imprimir o guardar en PDF</button></p>'
 
 
+def _sin_prohibidos(texto: str) -> str:
+    return re.sub(r'[\x00-\x1f\x7f\\/:*?"<>|;]+', " ", texto)
+
+
 def nombre_archivo(herramienta: str, ambito_id: str, proyecto: str, formato: str) -> str:
     """«Ficha de clase - Momento 2, sesión 1 - Analisis de datos.pdf», sin códigos internos."""
     partes = [NOMBRES.get(herramienta, herramienta)]
@@ -108,13 +112,14 @@ def nombre_archivo(herramienta: str, ambito_id: str, proyecto: str, formato: str
         partes.append(nombre_ambito(ambito_id))
     partes.append(proyecto.strip().capitalize()[:60].strip())
     # El nombre del proyecto viene del sílabo: sin caracteres que el sistema de archivos o la cabecera rechacen.
-    limpio = re.sub(r'[\x00-\x1f\x7f\\/:*?"<>|]+', " ", " - ".join(partes))
+    limpio = _sin_prohibidos(" - ".join(partes))
     return re.sub(r"\s+", " ", limpio).strip(" .") + "." + formato
 
 
 def cabecera_descarga(nombre: str) -> str:
     """Content-Disposition con acentos (RFC 6266) y una alternativa ASCII para clientes antiguos."""
-    ascii_ = unicodedata.normalize("NFKD", nombre).encode("ascii", "ignore").decode()
+    # Se limpia después de normalizar: NFKD convierte, p. ej., «＂» (U+FF02) en una comilla real.
+    ascii_ = _sin_prohibidos(unicodedata.normalize("NFKD", nombre).encode("ascii", "ignore").decode())
     return f"attachment; filename=\"{ascii_}\"; filename*=UTF-8''{quote(nombre, safe='')}"
 
 

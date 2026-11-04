@@ -191,3 +191,13 @@ def test_nombre_de_archivo_seguro():
     assert not re.search(r'[/\\:*?"<>|\r\n]', malo)
     cabecera = cabecera_descarga(malo)
     assert "\r" not in cabecera and "\n" not in cabecera and cabecera.isascii()
+
+
+def test_cabecera_no_se_rompe_al_normalizar():
+    """Caracteres de ancho completo pasan el primer filtro y NFKD los vuelve comillas o barras."""
+    nombre = nombre_archivo("ficha_clase", "M1-S1", "A\uff02; filename=\uff02mala.exe\uff3c\uff0f", "pdf")
+    cabecera = cabecera_descarga(nombre)
+    assert cabecera.count('"') == 2 and "\\" not in cabecera
+    valor = cabecera.split('filename="')[1].split('"')[0]
+    assert ";" not in valor and "/" not in valor
+    assert cabecera.count("; filename=") == 1 and cabecera.count("; filename*=") == 1  # Lo demás queda dentro de las comillas.
