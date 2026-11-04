@@ -50,7 +50,8 @@ def _fragmentos(texto):
 def bloques_documento(recurso, contexto):
     """Proyección explícita: nunca exportar evidencia o razonamiento interno."""
     yield {'tipo': 'texto', 'titulo': NOMBRES.get(recurso['herramienta'], recurso['herramienta']),
-           'texto': contexto.asignatura + ' · ' + contexto.momento_titulo}
+           'texto': contexto.asignatura if contexto.momento_titulo == contexto.asignatura
+           else contexto.asignatura + ' · ' + contexto.momento_titulo}
     contenido = recurso['contenido']
     if es_quiz(contenido):
         for n, item in enumerate(contenido, 1):

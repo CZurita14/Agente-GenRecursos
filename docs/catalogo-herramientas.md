@@ -53,7 +53,7 @@
 
 | Herramienta | Motivo |
 |---|---|
-| Rúbricas nuevas | El sílabo ya trae las suyas |
+| Rúbricas nuevas redactadas por IA | El sílabo ya trae las suyas; se entregan tal cual como herramienta sin IA (rúbrica del momento y del producto final) |
 | Preguntas sobre libros o lecturas de la bibliografía | El sistema solo conoce el sílabo; no inventa el contenido de las fuentes |
 | Pódcasts o audio | No hay servicio de voz en la infraestructura actual |
 | Soluciones o borradores de tareas, PAE, evaluaciones o evidencias | Regla de integridad académica (spec §9.4) |

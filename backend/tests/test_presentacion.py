@@ -25,7 +25,8 @@ CON_IA = {
                                            "recomendaciones": ["r1"]}},
 }
 SIN_IA = [("hoja_ruta", "asignatura"), ("autoevaluacion_rubrica", "M2"), ("autoevaluacion_final", "asignatura"),
-          ("lista_evidencia", "M3")]
+          ("lista_evidencia", "M3"),
+          ("rubrica_momento", "M2"), ("rubrica_final", "asignatura")]
 
 
 def _recorrer(bloques):

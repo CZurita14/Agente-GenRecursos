@@ -53,7 +53,7 @@ def test_catalogo_restringido(entorno, silabo):
     _restringir_m3(app, silabo)
     r = d.get(f"/asignaturas/{aid}/herramientas?ambito=momento&id=M3").json()
     assert r["restringido"] is True and "IA" in r["motivo"]
-    assert {h["id"] for h in r["herramientas"]} == {"autoevaluacion_rubrica", "lista_evidencia"}
+    assert {h["id"] for h in r["herramientas"]} == {"autoevaluacion_rubrica", "lista_evidencia", "rubrica_momento"}
     clase = d.get(f"/asignaturas/{aid}/herramientas?ambito=clase&id=M3-S2").json()
     assert clase["restringido"] is True and clase["herramientas"] == []
     libre = d.get(f"/asignaturas/{aid}/herramientas?ambito=momento&id=M2").json()

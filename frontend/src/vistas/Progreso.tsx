@@ -12,7 +12,7 @@ interface ProgresoProps {
   onSesionVencida: () => void;
 }
 
-const ETAPAS: Record<EstadoTrabajo, { texto: string; avance: number; tono: 'neutral' | 'info' | 'success' | 'warning' | 'danger' }> = {
+export const ETAPAS: Record<EstadoTrabajo, { texto: string; avance: number; tono: 'neutral' | 'info' | 'success' | 'warning' | 'danger' }> = {
   en_cola: { texto: 'En cola', avance: 10, tono: 'neutral' },
   en_espera: { texto: 'En espera del servidor de IA', avance: 10, tono: 'warning' },
   generando: { texto: 'Generando', avance: 40, tono: 'info' },
@@ -22,7 +22,7 @@ const ETAPAS: Record<EstadoTrabajo, { texto: string; avance: number; tono: 'neut
   requiere_revision: { texto: 'Lista · requiere tu revisión', avance: 100, tono: 'warning' },
   error: { texto: 'No se pudo generar', avance: 100, tono: 'danger' },
 };
-const FINALES = new Set<EstadoTrabajo>(['listo', 'requiere_revision', 'error']);
+export const FINALES = new Set<EstadoTrabajo>(['listo', 'requiere_revision', 'error']);
 export const INTERVALO_MS = 4000;
 
 /** Paso 3: avance de los trabajos del pedido; consulta cada 4 s mientras alguno siga activo. */
@@ -74,6 +74,7 @@ export function Progreso({ aid, creados, onAbrir, onVolver, onSesionVencida }: P
             aria-valuemax={100} aria-valuenow={etapa.avance} aria-label={`Avance de ${nombreHerramienta(c.herramienta)}`}>
             <div className="h-full bg-highlight transition-all" style={{ width: `${etapa.avance}%` }} />
           </div>
+          {(t?.estado ?? c.estado) === 'en_cola' && <p className="text-xs text-muted mt-2">Esperando su turno: cada asignatura genera una herramienta a la vez. Las que llevan revisión pueden tardar varios minutos.</p>}
           {rid && FINALES.has(t?.estado ?? c.estado) && <div className="mt-3"><Button size="sm" onClick={() => onAbrir(rid)}>Revisar</Button></div>}
         </Card>;
       })}

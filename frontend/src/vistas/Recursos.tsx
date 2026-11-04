@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Badge, DataTable, type Column } from '../components';
-import { ErrorApi, asignaturas as cargarAsignaturas, recursos as cargarRecursos } from '../api/cliente';
-import type { AsignaturaResumen, RecursoResumen } from '../api/tipos';
+import { Alert, Badge, Card, DataTable, type Column } from '../components';
+import { ErrorApi, asignaturas as cargarAsignaturas, recursos as cargarRecursos, trabajos as cargarTrabajos } from '../api/cliente';
+import type { AsignaturaResumen, RecursoResumen, Trabajo } from '../api/tipos';
 import { nombreAmbito, nombreHerramienta } from '../api/herramientas';
 import { ChatAjustes } from '../components/ChatAjustes';
+import { ETAPAS, FINALES, INTERVALO_MS } from './Progreso';
 
 interface RecursosProps {
   aidInicial?: string;
@@ -55,6 +56,28 @@ export function Recursos({ aidInicial, onAbrir, onSesionVencida, onTrabajos }: R
     void refrescar(aid);
   }, [aid]);
 
+  // Lo que sigue generándose: se consulta mientras la vista está abierta y, al terminar algo, se recarga la tabla.
+  const [activos, setActivos] = useState<Trabajo[]>([]);
+  const previos = useRef(0);
+  useEffect(() => {
+    if (!aid) return;
+    let vigente = true;
+    previos.current = 0;
+    setActivos([]);
+    const consultar = () => cargarTrabajos(aid).then(lista => {
+      if (!vigente) return;
+      const enCurso = lista.filter(t => !FINALES.has(t.estado));
+      if (enCurso.length < previos.current) void refrescar(aid);
+      previos.current = enCurso.length;
+      setActivos(enCurso);
+    }).catch(e => {
+      if (vigente && e instanceof ErrorApi && e.estado === 401) onSesionVencida();
+    });
+    void consultar();
+    const temporizador = setInterval(consultar, INTERVALO_MS);
+    return () => { vigente = false; clearInterval(temporizador); };
+  }, [aid, onSesionVencida]);
+
   const rol = lista?.find(a => a.id === aid)?.rol ?? 'lector';
 
   return <>
@@ -68,6 +91,14 @@ export function Recursos({ aidInicial, onAbrir, onSesionVencida, onTrabajos }: R
         {lista.map(a => <option key={a.id} value={a.id}>{a.nombre}</option>)}
       </select>
     </label>}
+    {activos.length > 0 && <Card title="En curso" description="Cada asignatura genera una herramienta a la vez; las demás esperan su turno.">
+      <ul className="space-y-2">{activos.map(t => <li key={t.id} className="flex flex-wrap items-center gap-2 text-sm">
+        <span className="font-medium">{nombreHerramienta(t.herramienta)}</span>
+        <span className="text-muted">{nombreAmbito(t.ambito_id)}</span>
+        <Badge tone={ETAPAS[t.estado].tono}>{ETAPAS[t.estado].texto}</Badge>
+        {t.lotes_total > 0 && <span className="text-xs text-muted">lote {t.lotes_hechos} de {t.lotes_total}</span>}
+      </li>)}</ul>
+    </Card>}
     {aid && <DataTable caption="Recursos de la asignatura" columns={COLUMNAS} rows={filas ?? []} rowKey={r => r.id}
       loading={filas === null} emptyMessage="Aún no hay recursos. Elige una clase en «Mis asignaturas» para generarlos."
       onRowClick={r => onAbrir(aid, r.id, rol)} rowActionLabel={r => `Revisar ${nombreHerramienta(r.herramienta)}`} />}

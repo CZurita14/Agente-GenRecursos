@@ -179,7 +179,21 @@ def _lista_evidencia(c: dict) -> list[dict]:
     ]
 
 
+def _rubrica_momento(c: dict) -> list[dict]:
+    return [
+        _momento(c),
+        _texto("Evidencia que se evalúa", c["evidencia"]),
+        _lista("Resultados de aprendizaje", [f"{r['id']}: {r['texto']}" for r in c["ra"]]),
+        _rubrica(c["indicadores"], c["niveles"]),
+    ]
+
+
+def _rubrica_final(c: dict) -> list[dict]:
+    return [_texto("Producto final que se evalúa", c["evidencia"]), _rubrica(c["indicadores"], c["niveles"])]
+
+
 VISTAS: dict[str, Callable[[dict], list[dict]]] = {
+    "rubrica_momento": _rubrica_momento, "rubrica_final": _rubrica_final,
     "ficha_clase": _ficha, "repaso_momento": _repaso, "guia_evidencia": _guia, "estudio_caso": _caso,
     "guia_producto_final": _guia_final, "hoja_ruta": _hoja_ruta, "autoevaluacion_rubrica": _autoevaluacion,
     "autoevaluacion_final": _autoevaluacion_final, "lista_evidencia": _lista_evidencia,

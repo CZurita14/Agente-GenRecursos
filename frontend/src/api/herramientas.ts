@@ -11,9 +11,11 @@ export const NOMBRES: Record<string, string> = {
   autoevaluacion_rubrica: 'Autoevaluación con la rúbrica',
   autoevaluacion_final: 'Autoevaluación final',
   lista_evidencia: 'Lista de verificación de la evidencia',
+  rubrica_momento: 'Rúbrica del momento',
+  rubrica_final: 'Rúbrica del producto final',
 };
 
-export const SIN_IA = new Set(['hoja_ruta', 'autoevaluacion_rubrica', 'autoevaluacion_final', 'lista_evidencia']);
+export const SIN_IA = new Set(['hoja_ruta', 'autoevaluacion_rubrica', 'autoevaluacion_final', 'lista_evidencia', 'rubrica_momento', 'rubrica_final']);
 
 export const nombreHerramienta = (id: string) => NOMBRES[id] ?? id;
 

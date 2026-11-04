@@ -135,13 +135,22 @@ class ServicioRecursos:
             motivo = _restriccion(SilaboUTI.model_validate(a["silabo"]), ambito.tipo, ambito.id)
             if motivo:
                 raise HTTPException(422, motivo)
+            # Pedir otra vez lo que ya está en curso no gasta GPU: se sigue el trabajo existente.
+            activos = {} if instrucciones else {f["herramienta"]: f for f in conn.execute(
+                "select distinct on (herramienta) id,herramienta,estado from trabajo where asignatura_id=%s "
+                "and ambito_id=%s and tipo='generacion' and herramienta=any(%s) "
+                "and estado in ('en_cola','en_espera','generando','verificando','revisando') order by herramienta,creado",
+                (aid, ambito.id, herramientas)).fetchall()}
+            nuevas = [h for h in herramientas if h not in activos]
             try:
-                ids = crear_trabajos(conn, SolicitudGeneracion(aid, ambito, herramientas,
-                                      cantidad=cantidad, instrucciones=instrucciones, perfil_dificultad=perfil))
+                ids = crear_trabajos(conn, SolicitudGeneracion(aid, ambito, nuevas, cantidad=cantidad,
+                                     instrucciones=instrucciones, perfil_dificultad=perfil)) if nuevas else []
             except (ValueError, KeyError):
                 raise HTTPException(422, "Selección de generación no válida") from None
-            return {"trabajos": [{"id": str(tid), "herramienta": h, "estado": "en_cola"}
-                                 for tid, h in zip(ids, herramientas)]}
+            creados = dict(zip(nuevas, ids))
+            return {"trabajos": [{"id": str(activos[h]["id"]), "herramienta": h, "estado": activos[h]["estado"]}
+                                 if h in activos else {"id": str(creados[h]), "herramienta": h, "estado": "en_cola"}
+                                 for h in herramientas]}
 
     @staticmethod
     def _generar_sin_ia(conn, aid, asignatura, ambito, herramientas):

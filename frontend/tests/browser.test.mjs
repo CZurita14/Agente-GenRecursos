@@ -443,3 +443,25 @@ test('sin modo de prueba el ingreso sigue pidiendo código', async () => {
   assert.equal(await page.getByRole('button', { name: 'Entrar como invitado' }).count(), 0);
   await context.close();
 });
+
+test('Mis recursos muestra lo que sigue generándose y explica la espera', async () => {
+  const json = (route, body) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  const { context, page, estado } = await abrir({ rutas: {
+    '/asignaturas/a1/trabajos': (route, e) => {
+      e.consultas = (e.consultas ?? 0) + 1;
+      const fin = e.consultas > 1;
+      return json(route, [{ id: 't9', herramienta: 'cuestionario', ambito_tipo: 'clase', ambito_id: 'M1-S1', lotes_total: 0, lotes_hechos: 0,
+        error: null, estado: fin ? 'listo' : 'en_cola', recurso_id: fin ? 'r1' : null }]);
+    },
+  } });
+  await page.getByRole('navigation', { name: 'Navegación principal' }).getByRole('button', { name: 'Mis recursos', exact: true }).click();
+  await page.getByText('En curso', { exact: true }).waitFor();
+  await page.getByText('Cada asignatura genera una herramienta a la vez').waitFor();
+  await page.getByText('En cola', { exact: true }).waitFor();
+  // Al terminar desaparece y la tabla se recarga sola.
+  const recargas = () => estado.llamadas.filter(l => l.ruta === '/asignaturas/a1/recursos').length;
+  const antes = recargas();
+  await page.getByText('En curso', { exact: true }).waitFor({ state: 'detached', timeout: 7000 });
+  assert.ok(recargas() > antes, 'la tabla debe recargarse al terminar un trabajo');
+  await context.close();
+});
