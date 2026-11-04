@@ -5,19 +5,17 @@ import pytest
 from app.silabo.modelo import SilaboUTI
 from ciencia_datos.corpus import fragmentos, leer_carpeta
 
-RUTA = "tests/fixtures/silabo_datos.json"
-
 
 @pytest.fixture
 def silabo_datos(silabo) -> SilaboUTI:
     return silabo
 
 
-def _con_texto(silabo: SilaboUTI, texto: str) -> SilaboUTI:
+def _con_texto(silabo: SilaboUTI, texto: str, limpio: str | None = None) -> SilaboUTI:
     d = silabo.model_dump(mode="json")
     for m in d["momentos"]:
         for s in m["sesiones"]:
-            s["contenidos"] = [texto]
+            s["contenidos"] = [texto] + ([limpio] if limpio else [])
             s["docente"]["texto"] = texto
             s["practico"]["texto"] = texto
             s["autonomo"]["texto"] = texto
@@ -40,20 +38,24 @@ def test_fragmentos_sin_repetidos_ni_vacios(silabo_datos):
 
 @pytest.mark.parametrize("dato", ["ana@uti.edu.ec", "0987654321", "0000-0002-1825-0097"])
 def test_descarta_fragmentos_con_datos_personales(silabo_datos, dato):
-    assert dato not in str(fragmentos(_con_texto(silabo_datos, f"Contactar a {dato}")))
+    f = fragmentos(_con_texto(silabo_datos, f"Contactar a {dato}", "Tema académico limpio"))
+    assert dato not in str(f)
+    assert "Tema académico limpio" in [x.texto for x in f]
 
 
 def test_descarta_sin_imprimir_el_texto(silabo_datos):
     assert fragmentos(_con_texto(silabo_datos, "Escribir a ana@uti.edu.ec")) == []
 
 
-def _escribir(carpeta, nombre, datos, codigo=None, aprobado=None):
+def _escribir(carpeta, nombre, datos, codigo=None, aprobado=None, titulo=None):
     d = dict(datos)
     pf = dict(d["proyecto_formativo"])
     if codigo:
         pf["codigo"] = codigo
     if aprobado:
         pf["aprobado"] = aprobado
+    if titulo:
+        pf["nombre"] = titulo
     d["proyecto_formativo"] = pf
     (carpeta / nombre).write_text(json.dumps(d), encoding="utf-8")
 
@@ -71,10 +73,11 @@ def test_leer_carpeta_lee_json_y_rechaza_ilegibles(tmp_path, datos):
 def test_leer_carpeta_conserva_la_version_mas_reciente_por_codigo(tmp_path, datos):
     _escribir(tmp_path, "a.json", datos, codigo="X-1", aprobado="2024-01-01")
     _escribir(tmp_path, "b.json", datos, codigo="X-1", aprobado="2025-01-01")
-    _escribir(tmp_path, "c.json", datos, codigo="Y-2", aprobado="2024-01-01")
-    _escribir(tmp_path, "d.json", datos, codigo="Y-2", aprobado="2024-01-01")
+    _escribir(tmp_path, "c.json", datos, codigo="Y-2", aprobado="2024-01-01", titulo="de c")
+    _escribir(tmp_path, "d.json", datos, codigo="Y-2", aprobado="2024-01-01", titulo="de d")
     silabos, rechazados = leer_carpeta(tmp_path)
     assert rechazados == []
     por_codigo = {s.proyecto_formativo.codigo: s for s in silabos}
     assert set(por_codigo) == {"X-1", "Y-2"}
     assert por_codigo["X-1"].proyecto_formativo.aprobado.year == 2025
+    assert por_codigo["Y-2"].proyecto_formativo.nombre == "de d"

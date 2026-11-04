@@ -36,7 +36,7 @@ ciencia = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["app*", "ciencia_datos*"]
+include = ["app*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
