@@ -185,6 +185,10 @@ def test_lector_de_caso_sin_respuesta_orientativa():
     d = _para_lector({'herramienta': 'estudio_caso', 'contenido': c, 'evidencia': {'x': 1},
                       'presentacion': presentar('estudio_caso', c)})
     assert 'ORIENTATIVA' not in str(d) and 'INTERNO' not in str(d) and 'Por que' in str(d)
+    # Veredictos de un ajuste por chat y cualquier campo futuro quedan fuera por omisión.
+    revisado = _para_lector({'herramienta': 'cuestionario', 'contenido': [], 'evidencia': {}, 'presentacion': [],
+                             'revision_ia': {'veredictos': ['SECRETO']}, 'campo_futuro': 'SECRETO'})
+    assert 'SECRETO' not in str(revisado) and revisado['revision_ia'] is None and 'campo_futuro' not in revisado
     otro = {'herramienta': 'ficha_clase', 'contenido': {'a': 1}, 'evidencia': {'x': 1}, 'presentacion': []}
     assert _para_lector(otro) == otro
     assert _para_lector({**d, 'contenido': {'otra': 'ORIENTATIVA'}})['contenido'] == {}

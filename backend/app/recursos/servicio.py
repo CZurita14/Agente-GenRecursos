@@ -106,12 +106,20 @@ def _sin_clave(contenido):
         return {}  # Forma no prevista: mejor no mostrar nada que arriesgar una respuesta.
 
 
+# Lo único que recibe quien solo lee: un campo nuevo del detalle no se expone por omisión.
+CAMPOS_LECTOR = ("id", "trabajo_id", "asignatura_id", "ambito_id", "herramienta", "version_silabo", "version_esquema",
+                 "estado", "revision", "creado", "actualizado", "validado", "validado_por", "validado_en",
+                 "silabo_actualizado", "evidencia_vigente")
+
+
 def _para_lector(detalle):
     """Quien solo lee recibe lo mismo que el estudiante: sin claves, explicaciones ni alertas sobre ellas."""
     if detalle["herramienta"] not in CON_RESPUESTAS:
         return detalle
-    return {**detalle, "contenido": _sin_clave(detalle["contenido"]), "evidencia": {}, "revision_claves": {},
-            "verificacion_edicion": None, "presentacion": [sin_respuestas(b) for b in detalle["presentacion"]]}
+    return {**{k: detalle[k] for k in CAMPOS_LECTOR if k in detalle},
+            "contenido": _sin_clave(detalle["contenido"]), "evidencia": {}, "revision_claves": {},
+            "verificacion_edicion": None, "revision_ia": None,
+            "presentacion": [sin_respuestas(b) for b in detalle["presentacion"]]}
 
 
 class ServicioRecursos:
