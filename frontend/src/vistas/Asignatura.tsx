@@ -3,7 +3,7 @@ import { CalendarDays } from 'lucide-react';
 import { Alert, Badge, Button } from '../components';
 import { ErrorApi, menu as cargarMenu, recursos as cargarRecursos } from '../api/cliente';
 import type { Ambito, MenuAsignatura } from '../api/tipos';
-import { dia, fechaCorta } from '../api/herramientas';
+import { dia, fechaCorta, nombreAmbito } from '../api/herramientas';
 
 interface AsignaturaProps {
   aid: string;
@@ -62,7 +62,7 @@ export function Asignatura({ aid, nombre, onElegir, onVerRecursos, onSesionVenci
       </h2>
       <div className="grid gap-3 md:grid-cols-2">
         {semana.clases.map(clase => <button key={clase.clase_id} type="button" disabled={!puedeGenerar}
-          onClick={() => onElegir({ tipo: 'clase', id: clase.clase_id }, `Clase ${clase.numero_clase} · ${clase.clase_id}`)}
+          onClick={() => onElegir({ tipo: 'clase', id: clase.clase_id }, `Clase ${clase.numero_clase} · ${nombreAmbito(clase.clase_id)}`)}
           className="text-left bg-surface rounded-xl border border-line p-4 hover:border-highlight focus-visible:border-highlight disabled:cursor-default">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="font-bold">{dia(clase.dia)} {fechaCorta(clase.fecha)} · Clase {clase.numero_clase}</span>

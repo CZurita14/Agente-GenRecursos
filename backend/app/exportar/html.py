@@ -6,7 +6,7 @@ escapados. Lo que el estudiante marca o escribe no se guarda: al recargar vuelve
 """
 from html import escape
 
-from app.exportar.presentacion import NIVELES, SIN_POLITICA, es_quiz, presentar
+from app.exportar.presentacion import NIVELES, SIN_POLITICA, es_quiz, legible, nombre_ambito, presentar
 from app.silabo.contexto import ContextoClase
 
 PIE = "Recurso generado con asistencia de IA y revisado por el docente"
@@ -158,7 +158,7 @@ def _lista_evidencia(c: dict) -> str:
 def _estudio_caso(c: dict) -> str:
     """El estudiante responde primero y luego compara con la respuesta orientativa."""
     caso = c["caso"]
-    partes = [f"<h2>Caso</h2><p>{escape(caso['caso'])}</p><p><strong>Resultado de aprendizaje:</strong> {escape(caso['ra'])}</p>"]
+    partes = [f"<h2>Caso</h2><p>{escape(caso['caso'])}</p><p><strong>Se relaciona con:</strong> {escape(caso['ra'])}</p>"]
     for n, p in enumerate(caso["preguntas"], 1):
         partes.append(
             f"<section><h3>Pregunta {n} · {escape(NIVELES.get(p['nivel'], p['nivel']))}</h3><p>{escape(p['pregunta'])}</p>"
@@ -211,11 +211,11 @@ def _items(items: list[dict]) -> str:
 def exportar_html(recurso: dict, contexto: ContextoClase) -> str:
     herramienta = recurso["herramienta"]
     contenido = recurso["contenido"]
-    cuerpo = IMPRIMIR + _cuerpo(herramienta, contenido)
-    ras = ", ".join(f"{r.id}: {r.texto}" for r in contexto.ra)
-    pie = (f"<p>{escape(contexto.asignatura)} · {escape(contexto.clase_id)} · {contexto.fecha:%d/%m/%Y}</p>"
+    cuerpo = legible(IMPRIMIR + _cuerpo(herramienta, contenido))
+    ras = legible(", ".join(f"{r.id}: {r.texto}" for r in contexto.ra))
+    pie = (f"<p>{escape(contexto.asignatura)} · {escape(nombre_ambito(contexto.clase_id))} · {contexto.fecha:%d/%m/%Y}</p>"
            f"<p><strong>Resultados de aprendizaje:</strong> {escape(ras)}</p>"
-           f"<p><strong>Política de IA:</strong> {escape(contexto.politica_ia or 'No indicada en el sílabo')}</p>"
+           f"<p><strong>Política de IA:</strong> {escape(legible(contexto.politica_ia or SIN_POLITICA))}</p>"
            f"<p><em>{escape(PIE)}</em></p>")
     titulo = NOMBRES.get(herramienta, herramienta)
     # En el ámbito de asignatura el título del momento es la propia asignatura: no repetirlo.

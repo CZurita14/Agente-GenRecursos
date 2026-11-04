@@ -19,11 +19,19 @@ export const SIN_IA = new Set(['hoja_ruta', 'autoevaluacion_rubrica', 'autoevalu
 
 export const nombreHerramienta = (id: string) => NOMBRES[id] ?? id;
 
-/** «M2-S1» → «Clase M2-S1»; «M2» → «Momento 2»; «asignatura» → «Proyecto Formativo». */
+/** Códigos a nombres completos, también dentro de lo que redacta la IA; solo al mostrar. */
+export function legible(texto: string): string {
+  return texto
+    .replace(/\bM([1-9]\d?)-S([1-9]\d?)\b/g, 'Momento $1, sesión $2')
+    .replace(/\bRA([1-9]\d?)\b/g, 'Resultado de aprendizaje $1')
+    .replace(/\bM([1-9]\d?)\b/g, 'Momento $1')
+    .replace(/\b(los|Los|sus|Sus) RA\b/g, '$1 resultados de aprendizaje')
+    .replace(/\bRA\b/g, 'resultado de aprendizaje');
+}
+
+/** «M2-S1» → «Momento 2, sesión 1»; «M2» → «Momento 2»; «asignatura» → «Proyecto Formativo». */
 export function nombreAmbito(id: string): string {
-  if (id === 'asignatura') return 'Proyecto Formativo';
-  const momento = /^M(\d+)$/.exec(id);
-  return momento ? `Momento ${momento[1]}` : `Clase ${id}`;
+  return id === 'asignatura' ? 'Proyecto Formativo' : legible(id);
 }
 
 const DIAS: Record<string, string> = { lun: 'lun', mar: 'mar', mie: 'mié', jue: 'jue', vie: 'vie', sab: 'sáb', dom: 'dom' };

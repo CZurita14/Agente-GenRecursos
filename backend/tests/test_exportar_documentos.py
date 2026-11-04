@@ -25,7 +25,7 @@ def test_documento_preguntas_respuestas_y_formula(silabo, formato):
             assert any(n.startswith('word/media/') for n in z.namelist())
             assert not any(b'TargetMode="External"' in z.read(n) for n in z.namelist() if n.endswith('.rels'))
     assert texto.index('Calcula') < texto.index('Respuestas y justificaciones')
-    assert 'M2-S1' in texto and 'revisado por el docente' in texto
+    assert 'Momento 2' in texto and 'M2-S1' not in texto and 'revisado por el docente' in texto
     assert 'item_id' not in texto
 
 

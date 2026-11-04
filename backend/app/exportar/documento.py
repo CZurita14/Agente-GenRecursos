@@ -6,7 +6,7 @@ from threading import Lock
 from xml.sax.saxutils import escape
 
 from app.exportar.html import NOMBRES, PIE
-from app.exportar.presentacion import es_quiz, presentar
+from app.exportar.presentacion import es_quiz, presentar, legibles, nombre_ambito
 
 
 class FormulaInvalida(ValueError):
@@ -48,6 +48,12 @@ def _fragmentos(texto):
 
 
 def bloques_documento(recurso, contexto):
+    """Los bloques del documento con nombres completos en lugar de códigos."""
+    for bloque in _bloques_documento(recurso, contexto):
+        yield legibles(bloque)
+
+
+def _bloques_documento(recurso, contexto):
     """Proyección explícita: nunca exportar evidencia o razonamiento interno."""
     yield {'tipo': 'texto', 'titulo': NOMBRES.get(recurso['herramienta'], recurso['herramienta']),
            'texto': contexto.asignatura if contexto.momento_titulo == contexto.asignatura
@@ -67,7 +73,7 @@ def bloques_documento(recurso, contexto):
     else:
         yield from presentar(recurso['herramienta'], contenido)
     yield {'tipo': 'texto', 'titulo': 'Datos del recurso', 'texto':
-           f'{contexto.asignatura} · {contexto.clase_id} · {contexto.fecha:%d/%m/%Y}\n'
+           f'{contexto.asignatura} · {nombre_ambito(contexto.clase_id)} · {contexto.fecha:%d/%m/%Y}\n'
            + 'Resultados de aprendizaje: ' + '; '.join(f'{r.id}: {r.texto}' for r in contexto.ra)
            + '\nPolítica de IA: ' + (contexto.politica_ia or 'No indicada en el sílabo') + '\n' + PIE}
 

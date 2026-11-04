@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from app.exportar.presentacion import VISTAS, presentar
+from app.exportar.presentacion import VISTAS, legible, nombre_ambito, presentar
 from app.herramientas.sin_ia import generar_sin_ia
 
 CLAVES_INTERNAS = ("clase_id", "numero_clase", "item_id", "escenario", "referencia_resolutivo", "para_subir")
@@ -74,7 +74,7 @@ def test_sin_ia_desde_el_silabo(silabo, herramienta, ambito):
 
 def test_ficha_en_orden_de_estudio():
     titulos = [b["titulo"] for b in presentar("ficha_clase", _invertido(FICHA))]
-    assert titulos == ["Ideas clave", "Relación con el RA", "Errores frecuentes", "Ejemplo resuelto", "Autocomprobación"]
+    assert titulos == ["Ideas clave", "Relación con el resultado de aprendizaje", "Errores frecuentes", "Ejemplo resuelto", "Autocomprobación"]
     pasos = presentar("ficha_clase", FICHA)[3]["bloques"][1]
     assert pasos == {"tipo": "lista", "titulo": "Pasos", "items": ["P1", "P2"], "numerada": True,
                      "ruta": ["aplicacion", "ejemplo", "pasos"]}
@@ -129,16 +129,35 @@ def test_rutas_resuelven_al_texto_mostrado(herramienta):
     rutas = list(_rutas(presentar(herramienta, CON_IA[herramienta])))
     assert rutas
     for ruta, mostrado in rutas:
-        assert _resolver(CON_IA[herramienta], ruta) == mostrado
+        guardado = _resolver(CON_IA[herramienta], ruta)
+        # Se muestra con nombres completos; lo que se edita y se guarda es el texto original.
+        assert ([legible(x) for x in guardado] if isinstance(guardado, list) else legible(guardado)) == mostrado
 
 
 def test_listas_cerradas_no_son_editables():
     guia = presentar("guia_evidencia", CON_IA["guia_evidencia"])[1]
     assert guia["rutas"] == [[None, ["guia", "como_se_valora", 0, "que_observar"]]]
     caso = presentar("estudio_caso", CON_IA["estudio_caso"])
-    assert caso[1]["titulo"] == "Resultado de aprendizaje" and caso[1]["ruta"] is None
+    assert caso[1]["titulo"] == "Se relaciona con" and caso[1]["ruta"] is None
 
 
 @pytest.mark.parametrize("herramienta,ambito", SIN_IA)
 def test_sin_ia_no_se_edita(silabo, herramienta, ambito):
     assert not list(_rutas(presentar(herramienta, generar_sin_ia(herramienta, silabo, ambito))))
+
+
+@pytest.mark.parametrize("codigo,nombre", [("M1-S2", "Momento 1, sesión 2"), ("M2", "Momento 2"), ("asignatura", "Proyecto Formativo")])
+def test_nombre_ambito(codigo, nombre):
+    assert nombre_ambito(codigo) == nombre
+
+
+def test_legible_no_altera_otras_palabras():
+    texto = "RAM, M2M, MAPA y formato M0 siguen igual"
+    assert legible(texto) == texto
+    assert legible("Con RA3 en M4") == "Con Resultado de aprendizaje 3 en Momento 4"
+
+
+def test_el_contenido_guardado_no_cambia():
+    original = json.dumps(FICHA, sort_keys=True)
+    presentar("ficha_clase", FICHA)
+    assert json.dumps(FICHA, sort_keys=True) == original

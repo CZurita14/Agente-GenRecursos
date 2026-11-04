@@ -4,7 +4,7 @@ import { Alert, Badge, Button, Card, Modal } from '../components';
 import { ErrorApi, editar, recurso as cargarRecurso, urlExportar, validar } from '../api/cliente';
 import { leer, poner } from '../api/edicion';
 import type { Bloque, Recurso as TipoRecurso, Ruta } from '../api/tipos';
-import { SIN_IA, nombreAmbito, nombreHerramienta } from '../api/herramientas';
+import { SIN_IA, legible, nombreAmbito, nombreHerramienta } from '../api/herramientas';
 import { ChatAjustes } from '../components/ChatAjustes';
 
 interface RecursoProps {
@@ -82,11 +82,11 @@ function VistaBloque({ b, nivel = 2, ed }: { b: Bloque; nivel?: number; ed?: Edi
 /** Pregunta en modo lectura, con la clave marcada. */
 function VistaItem({ item }: { item: Item }) {
   return <>
-    {item.contexto && <p className="text-sm text-muted italic mt-1">{item.contexto}</p>}
-    <p className="font-medium mt-1">{item.pregunta}</p>
+    {item.contexto && <p className="text-sm text-muted italic mt-1">{legible(item.contexto)}</p>}
+    <p className="font-medium mt-1">{legible(item.pregunta)}</p>
     <ul className="mt-2 space-y-1 text-sm">{item.opciones.map((o, k) => <li key={k}
       className={k === item.correcta ? 'font-bold text-success' : ''}>
-      {letra(k)}) {o.texto}{k === item.correcta && ' ✓ (clave)'}
+      {letra(k)}) {legible(o.texto)}{k === item.correcta && ' ✓ (clave)'}
     </li>)}</ul>
   </>;
 }
@@ -218,9 +218,9 @@ export function Recurso({ aid, rid, puedeValidar, onVolver, onSesionVencida, onT
             onClick={() => setBorrador(items.filter((_, k) => k !== n))} aria-label={`Quitar la pregunta ${n + 1}`}>Quitar</Button>}
         </div>
         {editando ? <EditorItem item={item} n={n} ed={ed} /> : <VistaItem item={item} />}
-        {avisos[item.item_id]?.map((a, i) => <Alert key={i} tone="warning" className="mt-2">{a}</Alert>)}
+        {avisos[item.item_id]?.map((a, i) => <Alert key={i} tone="warning" className="mt-2">{legible(a)}</Alert>)}
       </li>)}</ol> : <>
-        {Object.entries(avisos).map(([id, lista]) => lista.map((a, i) => <Alert key={`${id}${i}`} tone="warning" className="mb-2">{a}</Alert>))}
+        {Object.entries(avisos).map(([id, lista]) => lista.map((a, i) => <Alert key={`${id}${i}`} tone="warning" className="mb-2">{legible(a)}</Alert>))}
         <div className="space-y-4">{r.presentacion.map((b, i) => <VistaBloque key={i} b={b} ed={editando ? ed : undefined} />)}</div>
       </>}
     </Card>

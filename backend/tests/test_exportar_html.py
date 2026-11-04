@@ -41,8 +41,8 @@ def test_html_pie_y_politica(silabo):
     ctx = contexto_clase(silabo, "M2-S1")
     html = exportar_html(_recurso("cuestionario", [_item(1)]), ctx)
     assert PIE == "Recurso generado con asistencia de IA y revisado por el docente"
-    assert PIE in html and ctx.asignatura in html and "M2-S1" in html
-    assert ctx.politica_ia[:40] in html and ctx.ra[0].id in html
+    assert PIE in html and ctx.asignatura in html and "Momento 2, sesión 1" in html
+    assert ctx.politica_ia[:40] in html and f"Resultado de aprendizaje {ctx.ra[0].id[2:]}" in html
 
 
 def test_html_secciones(silabo):
@@ -140,6 +140,14 @@ def test_marcables_y_resultado_ocultable(silabo):
              "aplicacion": {"ejemplo": {"enunciado": "En", "pasos": ["P"], "resultado": "Res"}, "autocomprobacion": ["Q1", "Q2"]}}
     html = exportar_html(_recurso("ficha_clase", ficha), contexto_clase(silabo, "M2-S1"))
     assert html.count('type="checkbox"') == 2 and "<summary>Ver el resultado</summary><p>Res</p>" in html
+
+
+def test_html_sin_codigos_internos(silabo):
+    item = _item(1, pregunta="Según RA2, ¿qué se aplica en M2-S1 y en M3 para los RA del curso?")
+    html = exportar_html(_recurso("cuestionario", [item]), contexto_clase(silabo, "M2-S1"))
+    assert "Según Resultado de aprendizaje 2" in html and "Momento 2, sesión 1 y en Momento 3" in html
+    assert "los resultados de aprendizaje del curso" in html
+    assert not re.search(r"\\b(M\\d+-S\\d+|M\\d+|RA\\d*)\\b", html.split("<main>")[1].split("<script>")[0])
 
 
 def test_asignatura_no_repite_el_titulo(silabo):

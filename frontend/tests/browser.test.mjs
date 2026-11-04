@@ -205,7 +205,7 @@ test('recorrido: clase → actividad → generar → avance → recurso', async 
   await abrirAsignatura(page);
   await page.getByText('Semana 2 · 12/10 – 18/10').waitFor();
   await page.getByRole('button', { name: /mié 14\/10 · Clase 1/ }).click();
-  await page.getByRole('heading', { name: 'Clase 1 · M2-S1' }).waitFor();
+  await page.getByRole('heading', { name: 'Clase 1 · Momento 2, sesión 1' }).waitFor();
   await page.getByText('Se permite IA como asistente.').waitFor();
   await page.getByLabel('Cuestionario').check();
   await page.getByRole('button', { name: 'Generar' }).click();
@@ -517,8 +517,18 @@ test('Mis recursos solo lista resultados finales: nada de momentos, y de rúbric
   const tabla = page.getByRole('table', { name: 'Recursos del Proyecto Formativo' });
   await tabla.getByText('Rúbrica del producto final').waitFor();
   await tabla.getByText('Ficha de clase').waitFor();
-  for (const oculto of ['Simulacro', 'Rúbrica del momento', 'Guía de la evidencia', 'Momento']) {
+  for (const oculto of ['Simulacro', 'Rúbrica del momento', 'Guía de la evidencia']) {
     assert.equal(await tabla.getByText(oculto).count(), 0, oculto);
   }
+  await context.close();
+});
+
+test('sin códigos: clases y momentos con nombres completos', async () => {
+  const { context, page } = await abrir();
+  const nav = page.getByRole('navigation', { name: 'Navegación principal' });
+  await nav.getByRole('button', { name: 'Mis recursos', exact: true }).click();
+  const tabla = page.getByRole('table', { name: 'Recursos del Proyecto Formativo' });
+  await tabla.getByText('Momento 2, sesión 1').first().waitFor();
+  assert.ok(!/\bM\d+(-S\d+)?\b/.test(await tabla.innerText()));
   await context.close();
 });
