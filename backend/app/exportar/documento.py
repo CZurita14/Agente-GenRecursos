@@ -6,7 +6,7 @@ from threading import Lock
 from xml.sax.saxutils import escape
 
 from app.exportar.html import NOMBRES, PIE
-from app.exportar.presentacion import es_quiz, presentar, legibles, nombre_ambito
+from app.exportar.presentacion import es_quiz, legibles, nombre_ambito, presentar, sin_respuestas
 
 
 class FormulaInvalida(ValueError):
@@ -53,13 +53,6 @@ def bloques_documento(recurso, contexto, docente=False):
         yield legibles(bloque)
 
 
-def _sin_respuestas(b):
-    """Quita las respuestas orientativas de la versión del estudiante."""
-    if b.get("tipo") == "grupo":
-        return {**b, "bloques": [x for x in b["bloques"] if x.get("titulo") != "Respuesta orientativa"]}
-    return b
-
-
 def _bloques_documento(recurso, contexto, docente):
     """Proyección explícita: nunca exportar evidencia o razonamiento interno."""
     nombre = NOMBRES.get(recurso['herramienta'], recurso['herramienta'])
@@ -81,7 +74,7 @@ def _bloques_documento(recurso, contexto, docente):
                 {'tipo': 'lista', 'titulo': '', 'items': [f'{chr(65+k)}) {o["texto"]}' for k, o in enumerate(item['opciones'])]}]}
     else:
         bloques = presentar(recurso['herramienta'], contenido)
-        yield from (bloques if docente else [_sin_respuestas(b) for b in bloques])
+        yield from (bloques if docente else [sin_respuestas(b) for b in bloques])
     yield {'tipo': 'texto', 'titulo': 'Datos del recurso', 'texto':
            f'{contexto.asignatura} · {nombre_ambito(contexto.clase_id)} · {contexto.fecha:%d/%m/%Y}\n'
            + 'Resultados de aprendizaje: ' + '; '.join(f'{r.id}: {r.texto}' for r in contexto.ra)

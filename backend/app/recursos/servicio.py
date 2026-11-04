@@ -14,7 +14,7 @@ from app.asignaturas.servicio import exigir_acceso
 from app.herramientas.sin_ia import HERRAMIENTAS_SIN_IA, generar_sin_ia
 from app.recursos.validacion import EdicionInvalida, validar_contenido
 from app.exportar.html import CON_RESPUESTAS, exportar_html, nombre_archivo
-from app.exportar.presentacion import presentar
+from app.exportar.presentacion import es_quiz, presentar, sin_respuestas
 from app.herramientas.politica import excluye_ia_en_evaluacion
 from app.silabo.contexto import contexto_por_id
 from app.silabo.modelo import SilaboUTI
@@ -91,6 +91,27 @@ def _detalle(recurso, asignatura):
         actualizado = True
     resultado["silabo_actualizado"] = actualizado
     return resultado
+
+
+def _sin_clave(contenido):
+    """Lista de campos permitidos: lo que se agregue al esquema no se filtra por omisión."""
+    if es_quiz(contenido):
+        return [{"item_id": i.get("item_id"), "contexto": i.get("contexto"), "pregunta": i.get("pregunta"),
+                 "opciones": [{"texto": o.get("texto")} for o in i.get("opciones", [])]} for i in contenido]
+    try:
+        caso = contenido["caso"]
+        return {"caso": {"caso": caso["caso"], "ra": caso["ra"],
+                         "preguntas": [{"nivel": p["nivel"], "pregunta": p["pregunta"]} for p in caso["preguntas"]]}}
+    except (KeyError, TypeError):
+        return {}  # Forma no prevista: mejor no mostrar nada que arriesgar una respuesta.
+
+
+def _para_lector(detalle):
+    """Quien solo lee recibe lo mismo que el estudiante: sin claves, explicaciones ni alertas sobre ellas."""
+    if detalle["herramienta"] not in CON_RESPUESTAS:
+        return detalle
+    return {**detalle, "contenido": _sin_clave(detalle["contenido"]), "evidencia": {}, "revision_claves": {},
+            "verificacion_edicion": None, "presentacion": [sin_respuestas(b) for b in detalle["presentacion"]]}
 
 
 class ServicioRecursos:
@@ -233,8 +254,13 @@ class ServicioRecursos:
                                 "order by creado desc,id limit %s offset %s", (aid, limite, desde)).fetchall()
 
     def obtener(self, aid, rid, correo):
-        with self._acceso(aid, correo) as (conn, a):
-            return _detalle(_recurso(conn, aid, rid), a)
+        with closing(self.conexion()) as conn:
+            conn.autocommit = True
+            with conn.transaction():
+                conn.execute("set local lock_timeout to '2s'")
+                a, rol = exigir_acceso(conn, aid, correo)
+                detalle = _detalle(_recurso(conn, aid, rid), a)
+                return _para_lector(detalle) if rol == "lector" else detalle
 
     def editar(self, aid, rid, correo, revision, contenido):
         with self._acceso(aid, correo, editar=True) as (conn, a):

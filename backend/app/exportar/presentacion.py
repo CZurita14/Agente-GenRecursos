@@ -251,6 +251,13 @@ def _generica(valor, titulo: str = "") -> list[dict]:
     return [_texto(titulo, valor)]
 
 
+def sin_respuestas(b: dict) -> dict:
+    """Quita las respuestas orientativas de un bloque, también dentro de grupos anidados."""
+    if b.get("tipo") != "grupo":
+        return b
+    return {**b, "bloques": [sin_respuestas(x) for x in b["bloques"] if x.get("titulo") != "Respuesta orientativa"]}
+
+
 def es_quiz(contenido) -> bool:
     return isinstance(contenido, list) and bool(contenido) and all(isinstance(i, dict) and "opciones" in i for i in contenido)
 

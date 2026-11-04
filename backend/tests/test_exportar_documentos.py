@@ -156,3 +156,35 @@ def test_respuestas_solo_para_quien_edita(entorno):
     assert compartir(d, aid, 'lector@uti.edu.ec', 'lector').status_code == 200
     assert lector.get(base).status_code == 200 and lector.get(base + '&version=docente').status_code == 403
     assert d.get(base + '&version=otra').status_code == 422
+
+
+def test_lector_no_recibe_respuestas_al_abrir_el_recurso(entorno):
+    """La misma regla que la descarga: la API no entrega por otra ruta lo que la descarga protege."""
+    _, clientes, d, aid, producir = entorno
+    recurso = producir()
+    url = f"/asignaturas/{aid}/recursos/{recurso['id']}"
+    lector = clientes('lector@uti.edu.ec')
+    assert compartir(d, aid, 'lector@uti.edu.ec', 'lector').status_code == 200
+    visto = lector.get(url)
+    assert visto.status_code == 200
+    item = visto.json()['contenido'][0]
+    assert 'correcta' not in item and 'razonamiento' not in item and item['pregunta'] == recurso['contenido'][0]['pregunta']
+    assert set(item['opciones'][0]) == {'texto'}
+    assert visto.json()['evidencia'] == {} and visto.json()['revision_claves'] == {}
+    for rastro in ('justificacion', 'error_que_representa', 'correcta'):
+        assert rastro not in visto.text, rastro
+    dueno = d.get(url).json()
+    assert 'correcta' in dueno['contenido'][0] and 'justificacion' in dueno['contenido'][0]['opciones'][0]
+
+
+def test_lector_de_caso_sin_respuesta_orientativa():
+    from app.exportar.presentacion import presentar
+    from app.recursos.servicio import _para_lector
+    c = {'caso': {'escenario': 'INTERNO', 'caso': 'Un caso', 'ra': 'RA2', 'preguntas': [
+        {'nivel': 'critico', 'pregunta': 'Por que', 'respuesta_orientativa': 'ORIENTATIVA'}]}}
+    d = _para_lector({'herramienta': 'estudio_caso', 'contenido': c, 'evidencia': {'x': 1},
+                      'presentacion': presentar('estudio_caso', c)})
+    assert 'ORIENTATIVA' not in str(d) and 'INTERNO' not in str(d) and 'Por que' in str(d)
+    otro = {'herramienta': 'ficha_clase', 'contenido': {'a': 1}, 'evidencia': {'x': 1}, 'presentacion': []}
+    assert _para_lector(otro) == otro
+    assert _para_lector({**d, 'contenido': {'otra': 'ORIENTATIVA'}})['contenido'] == {}
