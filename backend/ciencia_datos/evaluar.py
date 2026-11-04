@@ -5,6 +5,14 @@ ajustado. El umbral se elige solo con el 70 % y se evalúa en el 30 %. Los infor
 contienen cifras y huellas, nunca textos. Las métricas indefinidas se escriben como
 `null` y nunca cumplen un criterio.
 
+Flujo con docentes:
+1. `temas-para-revisar` agrupa los fragmentos de prueba y escribe `huella_temas,grupo,texto`.
+2. Los docentes juzgan cada grupo en `temas.csv` (`huella_temas,grupo,docente,tiene_sentido`).
+3. `evaluar` solo usa las filas con la huella del modelo elegido.
+
+El candado de «una sola vez» es `evaluacion.candado` dentro de la carpeta de cada modelo:
+`--salida` solo decide dónde se escribe el informe.
+
 Los vectores salen del ONNX con `onnxruntime` y `tokenizers` (agrupación media con la
 máscara y normalización L2) en `vectores`, que las pruebas reemplazan por vectores fijos.
 """
@@ -14,7 +22,6 @@ import hashlib
 import json
 import math
 import sys
-from collections import Counter
 from pathlib import Path
 
 import numpy as np
@@ -22,141 +29,54 @@ import numpy as np
 from app.agentes.facultades import cargar_catalogo
 from app.agentes.planificador import _casos_libres
 from ciencia_datos.corpus import fragmentos, leer_carpeta
-from ciencia_datos.entrenar import RAIZ, codigo_a_facultad
+from ciencia_datos.entrenar import RAIZ, codigo_a_facultad, huella
+from ciencia_datos.estadistica import (  # noqa: F401  (se reexportan: siguen importables desde aquí)
+    EXHAUSTIVIDAD_UMBRAL, agrupar, cumple, elegir_umbral, estabilidad, kappa, mcnemar,
+    mcnemar_conteos, metricas, silueta_frente_al_azar, wilson,
+)
+from ciencia_datos.separar import dejar_fuera
 
-EXHAUSTIVIDAD_UMBRAL = 0.90  # al elegir el umbral con el 70 %
 EXHAUSTIVIDAD_MINIMA = 0.85  # exigida en el 30 %
 ALFA = 0.05
 ARI_MINIMO = 0.80
 SENTIDO_MINIMO = 0.80
 KAPPA_MINIMO = 0.60
+MIN_PARES_KAPPA = 100
+MIN_POSITIVOS_PRUEBA = 60
+K_POR_OMISION = 8
+SEMILLA = 42
 LONGITUD_MAXIMA = 128
 SALIDA_POR_DEFECTO = RAIZ / "pruebas" / "ciencia_datos"
+CANDADO = "evaluacion.candado"
+CABECERA_PARES = ("caso", "evidencia", "codigo_pf", "docente", "parecido")
+CABECERA_TEMAS = ("huella_temas", "grupo", "docente", "tiene_sentido")
 _SI = {"1", "si", "sí", "true", "verdadero", "s", "x", "yes"}
 _NO = {"0", "no", "false", "falso", "n"}
 
 
 class YaEvaluada(Exception):
-    """La versión ya tiene informe real: el 30 % no se evalúa dos veces."""
+    """El modelo ya tiene su evaluación real: el 30 % no se evalúa dos veces."""
 
 
-# --- estadística --------------------------------------------------------------------
-
-
-def wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
-    """Intervalo de Wilson al 95 % para una proporción k/n."""
-    if n <= 0:
-        return (math.nan, math.nan)
-    p = k / n
-    d = 1 + z * z / n
-    centro = (p + z * z / (2 * n)) / d
-    mitad = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / d
-    return (centro - mitad, centro + mitad)
-
-
-def _metricas(pred: np.ndarray, y: np.ndarray) -> dict:
-    pred, y = np.asarray(pred, bool), np.asarray(y, bool)
-    tp = int((pred & y).sum())
-    precision = tp / pred.sum() if pred.sum() else math.nan
-    exhaustividad = tp / y.sum() if y.sum() else math.nan
-    if math.isnan(precision) or math.isnan(exhaustividad):
-        f1 = math.nan
-    else:
-        f1 = 2 * precision * exhaustividad / (precision + exhaustividad) if tp else 0.0
-    return {"precision": precision, "exhaustividad": exhaustividad, "f1": f1}
-
-
-def elegir_umbral(sim, etiquetas, exhaustividad_min: float = EXHAUSTIVIDAD_UMBRAL) -> float:
-    """Umbral (predice parecido si sim >= umbral) de máxima precisión con exhaustividad >= mínimo.
-
-    En empate de precisión gana el umbral más bajo. Solo debe recibir el 70 %.
-    """
-    sim, y = np.asarray(sim, float), np.asarray(etiquetas, bool)
-    if not y.any():
-        raise ValueError("sin ejemplos positivos no hay umbral")
-    mejor, mejor_precision = float(sim.min()), -1.0
-    for t in sorted(set(sim.tolist())):
-        pred = sim >= t
-        m = _metricas(pred, y)
-        if m["exhaustividad"] >= exhaustividad_min and m["precision"] > mejor_precision + 1e-12:
-            mejor, mejor_precision = float(t), m["precision"]
-    return mejor
-
-
-def mcnemar(a_ok, b_ok) -> float:
-    """Valor p exacto (bilateral) de McNemar entre dos clasificadores sobre los mismos pares."""
-    a, b = np.asarray(a_ok, bool), np.asarray(b_ok, bool)
-    solo_a, solo_b = int((a & ~b).sum()), int((~a & b).sum())
-    n = solo_a + solo_b
-    if n == 0:
-        return 1.0
-    cola = sum(math.comb(n, i) for i in range(min(solo_a, solo_b) + 1)) / 2**n
-    return min(1.0, 2 * cola)
-
-
-def kappa(a, b) -> float:
-    """Kappa de Cohen entre dos docentes. NaN si no está definido."""
-    a, b = np.asarray(a), np.asarray(b)
-    if len(a) == 0 or len(a) != len(b):
-        return math.nan
-    po = float((a == b).mean())
-    pe = sum(float((a == c).mean()) * float((b == c).mean()) for c in set(a.tolist()) | set(b.tolist()))
-    return math.nan if pe >= 1 else (po - pe) / (1 - pe)
-
-
-def _agrupar(X, k: int, semilla: int) -> np.ndarray:
-    from sklearn.cluster import KMeans
-
-    return KMeans(n_clusters=k, n_init=1, random_state=semilla).fit_predict(X)
-
-
-def _silueta(X, etiquetas) -> float:
-    from sklearn.metrics import silhouette_score
-
-    return float(silhouette_score(X, etiquetas)) if len(set(etiquetas.tolist())) > 1 else math.nan
-
-
-def silueta_frente_al_azar(X, k: int, veces: int = 30, semilla: int = 42) -> dict:
-    """Silueta de k-medias frente a la de datos sin estructura (columnas barajadas, misma forma)."""
-    X = np.asarray(X, float)
-    real = _silueta(X, _agrupar(X, k, semilla))
-    azar = np.random.default_rng(semilla)
-    nulas = []
-    for _ in range(veces):
-        Y = np.column_stack([azar.permutation(X[:, j]) for j in range(X.shape[1])])
-        nulas.append(_silueta(Y, _agrupar(Y, k, semilla)))
-    p95 = float(np.nanpercentile(nulas, 95))
-    return {"real": real, "p95": p95, "media_azar": float(np.nanmean(nulas)), "supera": bool(real > p95)}
-
-
-def estabilidad(X, k: int, semillas: int = 20) -> float:
-    """ARI medio entre las agrupaciones de k-medias con distintas semillas."""
-    from sklearn.metrics import adjusted_rand_score
-
-    X = np.asarray(X, float)
-    etiquetas = [_agrupar(X, k, s) for s in range(semillas)]
-    pares = [adjusted_rand_score(etiquetas[i], etiquetas[j]) for i in range(semillas) for j in range(i + 1, semillas)]
-    return float(np.mean(pares)) if pares else math.nan
-
-
-def _bueno(valor, minimo: float, estricto: bool = False) -> bool:
-    if valor is None or (isinstance(valor, float) and math.isnan(valor)):
-        return False
-    return valor > minimo if estricto else valor >= minimo
+class EntradaInvalida(ValueError):
+    """Argumentos o archivos que impiden evaluar; se detecta antes de tomar candados."""
 
 
 def dictaminar(medidas: dict) -> dict:
     """Aprobado solo si cumple todos los criterios; una medida ausente o NaN nunca cumple."""
     g = medidas.get
+    p, a_favor, en_contra = g("mcnemar_p"), g("solo_modelo"), g("solo_filtro")
+    silueta, p95 = g("silueta"), g("silueta_p95")
     criterios = {
-        "exhaustividad": _bueno(g("exhaustividad"), EXHAUSTIVIDAD_MINIMA),
-        "mcnemar": g("mcnemar_p") is not None and g("mcnemar_p") < ALFA,
-        "silueta": g("silueta") is not None and g("silueta_p95") is not None
-        and not math.isnan(g("silueta") + g("silueta_p95")) and g("silueta") > g("silueta_p95"),
-        "estabilidad": _bueno(g("ari"), ARI_MINIMO),
-        "grupos_con_sentido": _bueno(g("grupos_con_sentido"), SENTIDO_MINIMO),
-        "kappa": _bueno(g("kappa"), KAPPA_MINIMO),
-        "umbral_con_entrenamiento": g("umbral_con_entrenamiento") is True,
+        "exhaustividad": cumple(g("exhaustividad"), EXHAUSTIVIDAD_MINIMA),
+        # Significativo Y a favor del modelo: un modelo peor que el filtro también da p pequeño.
+        "mcnemar": p is not None and p < ALFA and a_favor is not None and en_contra is not None and a_favor > en_contra,
+        "silueta": silueta is not None and p95 is not None and not math.isnan(silueta + p95) and silueta > p95,
+        "estabilidad": cumple(g("ari"), ARI_MINIMO),
+        "grupos_con_sentido": cumple(g("grupos_con_sentido"), SENTIDO_MINIMO),
+        "kappa": cumple(g("kappa"), KAPPA_MINIMO),
+        "muestra_kappa": cumple(g("pares_para_kappa"), MIN_PARES_KAPPA),
+        "muestra_positivos": cumple(g("positivos_prueba"), MIN_POSITIVOS_PRUEBA),
     }
     return {"aprobado": all(criterios.values()), "criterios": criterios}
 
@@ -201,40 +121,52 @@ def _leer_csv(ruta: Path) -> list[dict]:
         return list(csv.DictReader(f))
 
 
-def cargar_pares(ruta: Path, entrenamiento: list[str], prueba: list[str]) -> dict:
-    """Pares únicos (caso, evidencia) con su grupo y etiqueta; solo conteos de lo descartado.
+def _validar_cabecera(ruta: Path, requeridas: tuple[str, ...]) -> None:
+    with open(ruta, encoding="utf-8-sig", newline="") as f:
+        cabecera = next(csv.reader(f), [])
+    falta = [c for c in requeridas if c not in cabecera]
+    if falta:
+        raise EntradaInvalida(f"{ruta.name}: faltan columnas {', '.join(falta)}")
 
-    Un par con docentes en desacuerdo queda fuera de umbral y métricas (se cuenta). El
-    kappa usa los dos docentes con más pares y solo los pares que ambos etiquetaron.
+
+def cargar_pares(ruta: Path, entrenamiento: list[str], prueba: list[str]) -> dict:
+    """Pares únicos (caso, evidencia) con su grupo, código y etiqueta; solo conteos de lo descartado.
+
+    Un par con docentes en desacuerdo (o en grupos distintos) queda fuera de umbral y métricas
+    y se cuenta. El kappa usa los dos docentes con más pares y los pares que ambos etiquetaron.
     """
     grupo_de = {c: "entrenamiento" for c in entrenamiento} | {c: "prueba" for c in prueba}
     filas = _leer_csv(ruta)
-    por_par: dict[tuple[str, str], list[tuple[str, str, int]]] = {}
+    por_par: dict[tuple[str, str], list[tuple[str, str, str, int]]] = {}
     fuera_de_grupo = valor_invalido = 0
     for f in filas:
-        grupo = grupo_de.get((f.get("codigo_pf") or "").strip())
-        valor = _valor(f.get("parecido", ""))
+        codigo = (f.get("codigo_pf") or "").strip()
+        grupo, valor = grupo_de.get(codigo), _valor(f.get("parecido", ""))
         if grupo is None:
             fuera_de_grupo += 1
         elif valor is None:
             valor_invalido += 1
         else:
-            por_par.setdefault((f["caso"], f["evidencia"]), []).append((f["docente"].strip(), grupo, valor))
+            por_par.setdefault((f["caso"], f["evidencia"]), []).append((f["docente"].strip(), grupo, codigo, valor))
     pares, desacuerdos, grupo_ambiguo = [], 0, 0
     for (caso, evidencia), votos in por_par.items():
-        if len({g for _, g, _ in votos}) > 1:
+        if len({g for _, g, _, _ in votos}) > 1:
             grupo_ambiguo += 1
-        elif len({v for _, _, v in votos}) > 1:
+        elif len({v for _, _, _, v in votos}) > 1:
             desacuerdos += 1
         else:
-            pares.append({"caso": caso, "evidencia": evidencia, "grupo": votos[0][1], "etiqueta": votos[0][2]})
-    cuenta = Counter(d for votos in por_par.values() for d in {d for d, _, _ in votos})
+            pares.append({"caso": caso, "evidencia": evidencia, "grupo": votos[0][1],
+                          "codigo": sorted({c for _, _, c, _ in votos})[0], "etiqueta": votos[0][3]})
+    cuenta: dict[str, int] = {}
+    for votos in por_par.values():
+        for d in {d for d, _, _, _ in votos}:
+            cuenta[d] = cuenta.get(d, 0) + 1
     docentes = [d for d, _ in sorted(cuenta.items(), key=lambda x: (-x[1], x[0]))[:2]]
     a, b = [], []
     if len(docentes) == 2:
         for votos in por_par.values():
-            por_docente = {}
-            for d, _, v in votos:
+            por_docente: dict[str, set] = {}
+            for d, _, _, v in votos:
                 por_docente.setdefault(d, set()).add(v)
             if all(len(por_docente.get(d, ())) == 1 for d in docentes):
                 a.append(next(iter(por_docente[docentes[0]])))
@@ -251,15 +183,70 @@ def cargar_pares(ruta: Path, entrenamiento: list[str], prueba: list[str]) -> dic
     }
 
 
-def grupos_con_sentido(ruta: Path) -> dict:
-    """Fracción de grupos que la mayoría estricta de docentes juzga con sentido."""
+def grupos_con_sentido(ruta: Path, huella_temas: str, esperados: set[str]) -> dict:
+    """Fracción de grupos que la mayoría estricta de docentes juzga con sentido.
+
+    Solo cuentan las filas con la huella del modelo. Si falta algún grupo esperado o sobra
+    alguno, la fracción es NaN (y no se aprueba).
+    """
     votos: dict[str, list[int]] = {}
     for f in _leer_csv(ruta):
         v = _valor(f.get("tiene_sentido", ""))
-        if v is not None and (f.get("grupo") or "").strip():
+        if (f.get("huella_temas") or "").strip() == huella_temas and v is not None and (f.get("grupo") or "").strip():
             votos.setdefault(f["grupo"].strip(), []).append(v)
+    if not votos or set(votos) != set(esperados):
+        return {"n_grupos": len(votos), "fraccion": math.nan}
     con = sum(1 for v in votos.values() if sum(v) * 2 > len(v))
-    return {"n_grupos": len(votos), "fraccion": con / len(votos) if votos else math.nan}
+    return {"n_grupos": len(votos), "fraccion": con / len(votos)}
+
+
+# --- temas --------------------------------------------------------------------------
+
+
+def _textos_de_prueba(lista, prueba) -> list[str]:
+    codigos = set(prueba)
+    return sorted({f.texto for s in lista if s.proyecto_formativo.codigo in codigos for f in fragmentos(s)})
+
+
+def asignar_temas(X, k: int, version: str) -> tuple[np.ndarray, int, str] | None:
+    """Etiquetas de k-medias (semilla 42), k usado y huella (SHA-256 de la asignación y la versión)."""
+    k_usado = min(k, len(X) - 1)
+    if k_usado < 2:
+        return None
+    etiquetas = agrupar(np.asarray(X, float), k_usado, SEMILLA)
+    clave = f"{version}|{','.join(str(int(e)) for e in etiquetas)}"
+    return etiquetas, k_usado, hashlib.sha256(clave.encode()).hexdigest()
+
+
+def temas_para_revisar(modelo: Path, silabos: Path, salida: Path, *, k: int = K_POR_OMISION, vectorizar=vectores) -> dict:
+    """Escribe `huella_temas,grupo,texto` para que los docentes juzguen cada grupo.
+
+    No imprime textos, no calcula métricas y no toma el candado.
+    """
+    meta = json.loads((Path(modelo) / "metadatos.json").read_text(encoding="utf-8"))
+    lista, _ = leer_carpeta(Path(silabos))
+    textos = _textos_de_prueba(lista, meta["separacion"]["prueba"])
+    asignacion = asignar_temas(vectorizar(Path(modelo), textos), k, meta["version"]) if len(textos) > 2 else None
+    if asignacion is None:
+        raise EntradaInvalida("muy pocos textos de prueba para agrupar")
+    etiquetas, k_usado, h = asignacion
+    salida = Path(salida)
+    salida.parent.mkdir(parents=True, exist_ok=True)
+    with open(salida, "w", encoding="utf-8", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["huella_temas", "grupo", "texto"])
+        w.writerows((h, int(g), t) for g, t in zip(etiquetas, textos))
+    return {"huella": h, "k": k_usado, "k_reducido": k_usado < k, "n_textos": len(textos)}
+
+
+def _temas(X, k: int, version: str) -> dict:
+    asignacion = asignar_temas(X, k, version) if len(X) > 2 else None
+    if asignacion is None:
+        return {"k": 0, "k_reducido": True, "silueta": math.nan, "silueta_p95": math.nan, "ari": math.nan, "huella_temas": None}
+    _, k_usado, h = asignacion
+    s = silueta_frente_al_azar(X, k_usado)
+    return {"k": k_usado, "k_reducido": k_usado < k, "silueta": s["real"], "silueta_p95": s["p95"],
+            "silueta_media_azar": s["media_azar"], "ari": estabilidad(X, k_usado), "huella_temas": h}
 
 
 # --- medición por modelo --------------------------------------------------------------
@@ -289,29 +276,33 @@ def medir_puntaje(sim_ent, y_ent, sim_pru, y_pru) -> dict:
     except ValueError:
         return {"umbral": None, "precision": None, "exhaustividad": None, "f1": None, "pred": None}
     pred = np.asarray(sim_pru) >= umbral
-    m = _metricas(pred, y_pru)
     lo, hi = wilson(int((pred & y_pru).sum()), int(y_pru.sum()))
-    return {"umbral": float(umbral), **m, "exhaustividad_ic95": [lo, hi], "pred": pred}
+    return {"umbral": float(umbral), **metricas(pred, y_pru), "exhaustividad_ic95": [lo, hi], "pred": pred}
 
 
-def dejar_fuera_pares(sim, y, facultades, exhaustividad_min: float = EXHAUSTIVIDAD_UMBRAL) -> dict:
-    """Por facultad: umbral con las demás, métricas en ella. Informa la peor por F1.
+def dejar_fuera_pares(sim, y, codigos, plan, exhaustividad_min: float = EXHAUSTIVIDAD_UMBRAL) -> dict:
+    """Por pliegue de `separar.dejar_fuera`: umbral con los pares de las otras facultades, métricas en la dejada fuera.
 
-    El codificador no se reentrena en cada vuelta (solo se reelige el umbral).
+    `codigos[i]` es el sílabo del par i. Una facultad sin positivos (en ella o en las demás) se
+    lista en `excluidas`. La peor es la de menor F1; un F1 de 0 cuenta.
     """
-    sim, y, fac = np.asarray(sim, float), np.asarray(y, bool), np.asarray(facultades)
-    por_facultad = {}
-    for f in sorted(set(fac.tolist())):
-        dentro = fac == f
+    sim, y, codigos = np.asarray(sim, float), np.asarray(y, bool), np.asarray(codigos, dtype=object)
+    por_facultad, excluidas = {}, []
+    for facultad, sep in plan.items():
+        dentro = np.isin(codigos, list(sep.prueba))
+        resto = np.isin(codigos, list(sep.entrenamiento))
         try:
-            t = elegir_umbral(sim[~dentro], y[~dentro], exhaustividad_min)
+            t = elegir_umbral(sim[resto], y[resto], exhaustividad_min)
         except ValueError:
-            por_facultad[f] = {"n": int(dentro.sum()), "umbral": None, "precision": None, "exhaustividad": None, "f1": None}
+            t = None
+        m = metricas(sim[dentro] >= t, y[dentro]) if t is not None else None
+        if m is None or math.isnan(m["f1"]):
+            excluidas.append(facultad)
             continue
-        por_facultad[f] = {"n": int(dentro.sum()), "umbral": t, **_metricas(sim[dentro] >= t, y[dentro])}
-    validas = {f: m for f, m in por_facultad.items() if _bueno(m["f1"], -1)}
-    peor = min(validas, key=lambda f: validas[f]["f1"]) if validas else None
-    return {"por_facultad": por_facultad, "peor": peor, "peor_f1": validas[peor]["f1"] if peor else None}
+        por_facultad[facultad] = {"n": int(dentro.sum()), "umbral": t, **m}
+    peor = min(por_facultad, key=lambda f: por_facultad[f]["f1"]) if por_facultad else None
+    return {"por_facultad": por_facultad, "peor": peor,
+            "peor_f1": por_facultad[peor]["f1"] if peor else None, "excluidas": sorted(excluidas)}
 
 
 def _evaluar_modelo(carpeta: Path, ent: list[dict], pru: list[dict], vectorizar) -> dict:
@@ -321,13 +312,13 @@ def _evaluar_modelo(carpeta: Path, ent: list[dict], pru: list[dict], vectorizar)
     return medir_puntaje(_coseno(vec, ent), y_ent, _coseno(vec, pru), y_pru) | {"_vec": vec}
 
 
-# --- informes -----------------------------------------------------------------------
+# --- informes y candado ---------------------------------------------------------------
 
 
 def _limpio(x):
     """Cifras para JSON: floats de Python, NaN o infinito como null."""
     if isinstance(x, dict):
-        return {k: _limpio(v) for k, v in x.items() if not k.startswith("_")}
+        return {k: _limpio(v) for k, v in x.items() if not str(k).startswith("_")}
     if isinstance(x, (list, tuple)):
         return [_limpio(v) for v in x]
     if isinstance(x, (bool, np.bool_)):
@@ -348,40 +339,34 @@ def _sha(ruta: Path) -> str:
 
 
 def escribir_informe(informe: dict, salida: Path, version: str, humo: bool, completo: bool = True) -> Path:
-    """Un informe real por versión: su existencia es el cerrojo. El de humo se sobrescribe."""
+    """`<version>.json`, `<version>-humo.json` o `<version>-incompleta.json`. No es el candado."""
     salida = Path(salida)
     salida.mkdir(parents=True, exist_ok=True)
-    sufijo = "-humo" if humo else "" if completo else "-incompleta"
-    destino = salida / f"{version}{sufijo}.json"
-    texto = json.dumps(_limpio(informe), ensure_ascii=False, indent=2)
-    if sufijo:
-        destino.write_text(texto, encoding="utf-8")
-    else:
-        try:
-            with open(destino, "x", encoding="utf-8") as f:
-                f.write(texto)
-        except FileExistsError:
-            raise YaEvaluada(version) from None
+    destino = salida / f"{version}{'-humo' if humo else '' if completo else '-incompleta'}.json"
+    destino.write_text(json.dumps(_limpio(informe), ensure_ascii=False, indent=2), encoding="utf-8")
     return destino
 
 
-def _reservar(salida: Path, version: str) -> None:
-    """Marca la versión como vista antes de leer el 30 %: un fallo a medias no la libera."""
-    salida.mkdir(parents=True, exist_ok=True)
+def _tomar_candados(carpetas: list[Path]) -> None:
+    """Crea `evaluacion.candado` en cada carpeta (modo exclusivo); si alguno existe, no deja ninguno nuevo."""
+    creados: list[Path] = []
     try:
-        with open(salida / f"{version}.json", "x", encoding="utf-8") as f:
-            json.dump({"version": version, "estado": "en curso", "aprobado": False}, f)
-    except FileExistsError:
-        raise YaEvaluada(version) from None
+        for c in carpetas:
+            ruta = Path(c) / CANDADO
+            try:
+                with open(ruta, "x", encoding="utf-8") as f:
+                    f.write("evaluada\n")
+            except FileExistsError:
+                raise YaEvaluada(str(c)) from None
+            creados.append(ruta)
+    except YaEvaluada:
+        for ruta in creados:
+            ruta.unlink(missing_ok=True)
+        raise
 
 
-def _temas(vec_textos: np.ndarray, k: int) -> dict:
-    k = min(k, len(vec_textos) - 1)
-    if k < 2:
-        return {"k": max(k, 0), "silueta": math.nan, "silueta_p95": math.nan, "ari": math.nan}
-    s = silueta_frente_al_azar(vec_textos, k)
-    return {"k": k, "silueta": s["real"], "silueta_p95": s["p95"], "silueta_media_azar": s["media_azar"],
-            "ari": estabilidad(vec_textos, k)}
+def _meta(carpeta: Path) -> dict:
+    return json.loads((Path(carpeta) / "metadatos.json").read_text(encoding="utf-8"))
 
 
 def ejecutar(
@@ -392,122 +377,168 @@ def ejecutar(
     datos: Path = RAIZ / "datos_cd",
     salida: Path = SALIDA_POR_DEFECTO,
     humo: bool = False,
-    k: int = 8,
+    k: int = K_POR_OMISION,
     vectorizar=vectores,
 ) -> dict:
-    """Evalúa `modelo` y escribe el informe. Lanza `YaEvaluada` si la versión ya se evaluó."""
-    modelo, salida = Path(modelo), Path(salida)
-    ruta_meta = modelo / "metadatos.json"
-    meta = json.loads(ruta_meta.read_text(encoding="utf-8"))
+    """Evalúa `modelo` y escribe el informe. Lanza `YaEvaluada` si el modelo ya se evaluó
+    y `EntradaInvalida` (antes de tomar candados) si los argumentos o archivos no sirven."""
+    modelo, salida, datos = Path(modelo), Path(salida), Path(datos)
+    meta = _meta(modelo)
     version = meta["version"]
-    humo = humo or bool(meta.get("humo"))
+    if humo and not meta.get("humo"):
+        raise EntradaInvalida("--humo solo se acepta sobre un modelo con humo: true")
+    if meta.get("humo") and not humo:
+        raise EntradaInvalida("el modelo tiene humo: true: solo se evalúa con --humo")
     sep = meta["separacion"]
-    if not humo and (salida / f"{version}.json").exists():
-        raise YaEvaluada(version)
-
-    pares_csv, temas_csv = Path(datos) / "pares.csv", Path(datos) / "temas.csv"
-    faltan = [n for n, r in (("pares.csv", pares_csv), ("temas.csv", temas_csv)) if not r.exists()]
-    informe = {
-        "version": version, "humo": humo, "aprobado": False,
-        "huella_separacion": meta.get("huella_separacion"),
-        "huella_modelo": _sha(modelo / "onnx" / "model.onnx"),
-        "n_silabos_prueba": len(sep["prueba"]),
-    }
-    if faltan and not humo:
-        informe |= {"motivo": "faltan archivos de etiquetas: " + ", ".join(faltan)}
-        informe["ruta"] = str(escribir_informe(informe, salida, version, False, completo=False))
-        return informe
-
-    lista, _ = leer_carpeta(Path(silabos))
-    de_prueba = set(sep["prueba"])
-    textos_prueba = sorted({f.texto for s in lista if s.proyecto_formativo.codigo in de_prueba for f in fragmentos(s)})
+    informe = {"version": version, "humo": humo, "aprobado": False,
+               "huella_separacion": meta.get("huella_separacion"), "huella_modelo": _sha(modelo / "onnx" / "model.onnx")}
 
     if humo:
-        # Solo lo que no necesita etiquetas.
-        informe |= {"temas": _temas(vectorizar(modelo, textos_prueba), k) if len(textos_prueba) > 2 else {}}
+        lista, _ = leer_carpeta(Path(silabos))
+        textos = _textos_de_prueba(lista, sep["prueba"])
+        informe |= {"n_silabos_prueba": len({s.proyecto_formativo.codigo for s in lista} & set(sep["prueba"])),
+                    "temas": _temas(vectorizar(modelo, textos), k, version) if len(textos) > 2 else {}}
         informe["ruta"] = str(escribir_informe(informe, salida, version, True))
         return informe
 
-    _reservar(salida, version)
+    if meta.get("ajuste") is False:
+        base_modelo = None  # el modelo ya es el base
+    elif base_modelo is not None:
+        mb = _meta(Path(base_modelo))
+        if mb.get("ajuste") is not False or mb.get("humo") or mb.get("huella_separacion") != meta.get("huella_separacion"):
+            raise EntradaInvalida("--base-modelo no es un base válido: exige ajuste false, humo false y la misma separación")
+        base_modelo = Path(base_modelo)
+
+    pares_csv, temas_csv = datos / "pares.csv", datos / "temas.csv"
+    faltan = [r.name for r in (pares_csv, temas_csv) if not r.exists()]
+    if faltan:
+        informe |= {"motivo": "faltan archivos de etiquetas: " + ", ".join(faltan)}
+        informe["ruta"] = str(escribir_informe(informe, salida, version, False, completo=False))
+        return informe
+    _validar_cabecera(pares_csv, CABECERA_PARES)
+    _validar_cabecera(temas_csv, CABECERA_TEMAS)
+
+    _tomar_candados([modelo] + ([base_modelo] if base_modelo else []))
+
+    lista, _ = leer_carpeta(Path(silabos))
+    leidos = {s.proyecto_formativo.codigo for s in lista}
+    problemas = []
+    n_prueba = len(leidos & set(sep["prueba"]))
+    if n_prueba < len(sep["prueba"]):
+        problemas.append(f"sílabo de prueba ausente: faltan {len(sep['prueba']) - n_prueba}")
+    if huella(sep) != meta.get("huella_separacion"):
+        problemas.append("huella_separacion no coincide con la separación guardada")
+
     cp = cargar_pares(pares_csv, sep["entrenamiento"], sep["prueba"])
     ent = [p for p in cp["pares"] if p["grupo"] == "entrenamiento"]
     pru = [p for p in cp["pares"] if p["grupo"] == "prueba"]
     y_pru = np.array([p["etiqueta"] for p in pru], bool)
 
-    ajustado = _evaluar_modelo(modelo, ent, pru, vectorizar)
-    base = _evaluar_modelo(Path(base_modelo), ent, pru, vectorizar) if base_modelo else None
-    elegido, nombre, nota = ajustado, "ajustado", None
+    propio = _evaluar_modelo(modelo, ent, pru, vectorizar)
+    candidatos, nota = {}, None
     if meta.get("ajuste") is False:
-        nombre = "base"
-    elif base is None:
-        nota = "sin modelo base para comparar: no se puede decidir"
-    elif not _bueno(ajustado["f1"], base["f1"] if base["f1"] is not None else math.inf, estricto=True):
-        elegido, nombre, nota = base, "base", "el ajustado no supera al base en F1: se usa el base"
-    carpeta_elegida = Path(base_modelo) if nombre == "base" and meta.get("ajuste") is not False else modelo
+        candidatos["base"] = propio
+        nombre, carpeta_elegida = "base", modelo
+    else:
+        candidatos["ajustado"] = propio
+        nombre, carpeta_elegida = "ajustado", modelo
+        if base_modelo is None:
+            nota = "sin modelo base para comparar: no se puede decidir"
+        else:
+            candidatos["base"] = _evaluar_modelo(base_modelo, ent, pru, vectorizar)
+            fa, fb = propio["f1"], candidatos["base"]["f1"]
+            if not (fa is not None and not math.isnan(fa) and (fb is None or math.isnan(fb) or fa > fb)):
+                nombre, carpeta_elegida = "base", base_modelo
+                nota = "el ajustado no supera al base en F1: se usa el base"
+    elegido = candidatos[nombre]
 
-    ok = lambda m: (m["pred"] == y_pru) if m["pred"] is not None else None
+    ok = (elegido["pred"] == y_pru) if elegido["pred"] is not None else None
     palabras = np.array([p["caso"] not in _casos_libres([p["caso"]], [p["evidencia"]]) for p in pru], bool)
+    solo_modelo, solo_filtro = mcnemar_conteos(ok, palabras == y_pru) if ok is not None else (None, None)
+    p_mc = mcnemar(ok, palabras == y_pru) if ok is not None and len(pru) else None
     tf_ent, tf_pru = _tfidf(ent, pru) if ent and pru else (np.zeros(0), np.zeros(0))
     tfidf = medir_puntaje(tf_ent, [p["etiqueta"] for p in ent], tf_pru, y_pru) if ent and pru else None
-    p_mc = mcnemar(ok(elegido), palabras == y_pru) if ok(elegido) is not None and len(pru) else None
 
+    # Generalización: siempre con el modelo base, que nunca vio estos sílabos.
     catalogo = cargar_catalogo(RAIZ / "kb" / "catalogo.yaml")
     mapa, _ = codigo_a_facultad(lista, catalogo)
-    codigo_de = {}  # facultad de cada par: por el grupo de sus códigos
-    for f in _leer_csv(pares_csv):
-        codigo_de.setdefault((f["caso"], f["evidencia"]), (f.get("codigo_pf") or "").strip())
     todos = ent + pru
-    vec = elegido["_vec"]
-    fuera = dejar_fuera_pares(
-        _coseno(vec, todos), [p["etiqueta"] for p in todos],
-        [mapa.get(codigo_de.get((p["caso"], p["evidencia"])), "?") for p in todos],
-    ) if todos else {}
+    vec_base = candidatos["base"]["_vec"] if "base" in candidatos else None
+    if vec_base is not None and todos:
+        con_facultad = [p for p in todos if p["codigo"] in mapa]
+        fuera = dejar_fuera_pares(_coseno(vec_base, con_facultad), [p["etiqueta"] for p in con_facultad],
+                                  [p["codigo"] for p in con_facultad], dejar_fuera(mapa))
+        fuera |= {"codificador": "base", "pares_sin_facultad": len(todos) - len(con_facultad)}
+        if nombre == "ajustado":
+            fuera["generalizacion_del_ajustado"] = "no medida"
+    else:
+        fuera = {"codificador": None, "nota": "sin modelo base para medir"}
 
-    temas = _temas(vectorizar(carpeta_elegida, textos_prueba), k) if len(textos_prueba) > 2 else {}
-    sentido = grupos_con_sentido(temas_csv)
+    version_elegida = _meta(carpeta_elegida)["version"]
+    textos = _textos_de_prueba(lista, sep["prueba"])
+    temas = _temas(vectorizar(carpeta_elegida, textos), k, version_elegida) if len(textos) > 2 else {}
+    esperados = {str(i) for i in range(temas.get("k", 0))}
+    sentido = (grupos_con_sentido(temas_csv, temas["huella_temas"], esperados)
+               if temas.get("huella_temas") else {"n_grupos": 0, "fraccion": math.nan})
     medidas = {
-        "exhaustividad": elegido["exhaustividad"], "mcnemar_p": p_mc,
+        "exhaustividad": elegido["exhaustividad"], "mcnemar_p": p_mc, "solo_modelo": solo_modelo, "solo_filtro": solo_filtro,
         "silueta": temas.get("silueta"), "silueta_p95": temas.get("silueta_p95"), "ari": temas.get("ari"),
         "grupos_con_sentido": sentido["fraccion"], "kappa": cp["kappa"],
-        "umbral_con_entrenamiento": elegido["umbral"] is not None,
+        "pares_para_kappa": cp["pares_para_kappa"], "positivos_prueba": int(y_pru.sum()),
     }
-    sin_decision = base is None and meta.get("ajuste") is not False
-    veredicto = {"aprobado": False, "criterios": {}} if sin_decision else dictaminar(medidas)
+    sin_decision = nota is not None and nombre == "ajustado"
+    veredicto = dictaminar(medidas)
+    aprobado = veredicto["aprobado"] and not problemas and not sin_decision
+    quitar = ("pred", "_vec")
     informe |= {
-        "aprobado": veredicto["aprobado"], "criterios": veredicto["criterios"], "medidas": medidas,
+        "aprobado": aprobado, "criterios": veredicto["criterios"], "medidas": medidas, "problemas": problemas,
         "modelo_elegido": nombre, "nota_modelo": nota, "umbral": elegido["umbral"],
+        "huella_modelo_elegido": _sha(carpeta_elegida / "onnx" / "model.onnx"), "n_silabos_prueba": n_prueba,
         "n_pares_entrenamiento": len(ent), "n_pares_prueba": len(pru),
         "conteos": {k_: v for k_, v in cp.items() if k_ not in ("pares", "kappa")},
-        "modelos": {
-            "ajustado": {k_: v for k_, v in ajustado.items() if k_ not in ("pred", "_vec")},
-            "base": {k_: v for k_, v in base.items() if k_ not in ("pred", "_vec")} if base else None,
+        "candidatos": {n: {k_: v for k_, v in c.items() if k_ not in quitar} for n, c in candidatos.items()},
+        "referencias": {
             "tfidf": {k_: v for k_, v in tfidf.items() if k_ != "pred"} if tfidf else None,
-            "filtro_palabras": _metricas(palabras, y_pru) if len(pru) else None,
+            "filtro_palabras": metricas(palabras, y_pru) if len(pru) else None,
         },
-        "temas": temas, "n_grupos_temas": sentido["n_grupos"], "dejar_fuera": fuera,
+        "temas": {k_: v for k_, v in temas.items() if k_ != "huella_temas"} | {"huella_temas": temas.get("huella_temas")},
+        "n_grupos_temas": sentido["n_grupos"], "dejar_fuera": fuera,
     }
-    informe["ruta"] = str(_sobrescribir_reservado(informe, salida, version))
-    if informe["aprobado"]:
-        meta_elegida = json.loads((carpeta_elegida / "metadatos.json").read_text(encoding="utf-8"))
-        meta_elegida |= {"aprobado": True, "umbral": elegido["umbral"]}
-        (carpeta_elegida / "metadatos.json").write_text(json.dumps(meta_elegida, ensure_ascii=False, indent=2), encoding="utf-8")
+    informe["ruta"] = str(escribir_informe(informe, salida, version, False))
+    if aprobado:
+        ruta = carpeta_elegida / "metadatos.json"
+        ruta.write_text(json.dumps(_meta(carpeta_elegida) | {"aprobado": True, "umbral": elegido["umbral"]},
+                                   ensure_ascii=False, indent=2), encoding="utf-8")
     return informe
 
 
-def _sobrescribir_reservado(informe: dict, salida: Path, version: str) -> Path:
-    destino = Path(salida) / f"{version}.json"
-    destino.write_text(json.dumps(_limpio(informe), ensure_ascii=False, indent=2), encoding="utf-8")
-    return destino
+def _main_temas(argv: list[str]) -> int:
+    p = argparse.ArgumentParser(prog="python -m ciencia_datos.evaluar temas-para-revisar")
+    p.add_argument("--modelo", type=Path, required=True)
+    p.add_argument("--silabos", type=Path, required=True)
+    p.add_argument("--salida", type=Path, required=True, help="p. ej. datos_cd/temas-revision-<version>.csv")
+    p.add_argument("--k", type=int, default=K_POR_OMISION)
+    a = p.parse_args(argv)
+    try:
+        r = temas_para_revisar(a.modelo, a.silabos, a.salida, k=a.k)
+    except EntradaInvalida as e:
+        print(f"entrada inválida: {e}")
+        return 2
+    print(f"huella_temas={r['huella']} k={r['k']} k_reducido={r['k_reducido']} textos={r['n_textos']}")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv[:1] == ["temas-para-revisar"]:
+        return _main_temas(argv[1:])
     p = argparse.ArgumentParser(prog="python -m ciencia_datos.evaluar")
     p.add_argument("--modelo", type=Path, required=True)
     p.add_argument("--base-modelo", type=Path, help="carpeta ONNX del modelo base (exportado con --sin-ajuste)")
     p.add_argument("--silabos", type=Path, required=True)
     p.add_argument("--datos", type=Path, default=RAIZ / "datos_cd")
-    p.add_argument("--salida", type=Path, default=SALIDA_POR_DEFECTO)
-    p.add_argument("--k", type=int, default=8, help="número de temas")
+    p.add_argument("--salida", type=Path, default=SALIDA_POR_DEFECTO, help="solo dónde se escribe el informe")
+    p.add_argument("--k", type=int, default=K_POR_OMISION, help="número de temas (el mismo que en temas-para-revisar)")
     p.add_argument("--humo", action="store_true")
     a = p.parse_args(argv)
     try:
@@ -515,6 +546,9 @@ def main(argv: list[str] | None = None) -> int:
     except YaEvaluada as e:
         print(f"ya evaluada: {e}")
         return 1
+    except EntradaInvalida as e:
+        print(f"entrada inválida: {e}")
+        return 2
     print(f"version={r['version']} humo={r['humo']} aprobado={r['aprobado']} informe={r['ruta']}")
     return 0
 
