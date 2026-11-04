@@ -50,8 +50,8 @@ def _restriccion(silabo: SilaboUTI, tipo: str, ambito_id: str | None) -> str | N
         numero = int(m.group(1)) if m else None
     momento = next((x for x in silabo.momentos if x.numero == numero), None)
     if momento is not None and excluye_ia_en_evaluacion(momento.politica_ia):
-        return ("La política de IA de este momento excluye la IA en una evaluación: solo se ofrecen "
-                "herramientas sin IA y el repaso de momentos anteriores (§9.4).")
+        return ("La política de IA de este momento excluye la IA en una evaluación, así que aquí no se "
+                "generan herramientas con IA (§9.4).")
     return None
 
 

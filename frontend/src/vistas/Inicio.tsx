@@ -5,7 +5,7 @@ interface InicioProps {
   onGenerar: () => void;
 }
 
-const PASOS = ['Sube tu sílabo', 'Elige la clase o el momento', 'Genera y revisa'];
+const PASOS = ['Sube tu sílabo', 'Elige la clase', 'Genera y revisa'];
 
 /** Opción B aprobada: dos caminos lado a lado; el perfil docente se ve, pero está en espera. */
 export function Inicio({ onGenerar }: InicioProps) {
@@ -22,8 +22,8 @@ export function Inicio({ onGenerar }: InicioProps) {
           <h2 id="camino-generar" className="text-lg font-bold">Generar herramientas</h2>
         </div>
         <p className="text-muted text-sm">
-          Sube tu sílabo en PDF. La colmena lo lee y prepara fichas, cuestionarios, simulacros, guías y
-          autoevaluaciones por clase y por momento.
+          Sube tu sílabo en PDF. La colmena lo lee y prepara fichas, cuestionarios, guías, rúbricas y
+          autoevaluaciones por clase y para todo el Proyecto Formativo.
         </p>
         <ol className="flex flex-wrap gap-2 text-xs" aria-label="Pasos">
           {PASOS.map((paso, i) => <li key={paso} className="bg-brand-soft text-brand rounded-full px-3 py-1 font-medium">

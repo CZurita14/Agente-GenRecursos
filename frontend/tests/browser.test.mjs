@@ -81,11 +81,11 @@ async function abrir({ sesion = true, viewport, rutas = {} } = {}) {
     // --- P6b: menú, catálogo, generación, avance, recurso, validación ---
     if (ruta === '/asignaturas/a1/menu') return json(200, { id: 'a1', rol: 'dueno', version_silabo: '1.0', menu: MENU_ASIG });
     if (ruta === '/asignaturas/a1/herramientas') {
-      const restringido = url.searchParams.get('id') === 'M3';
+      const restringido = url.searchParams.get('id')?.startsWith('M3');
       return json(200, { ambito: url.searchParams.get('ambito'), restringido, perfil_sugerido: 'fundamentacion',
         motivo: restringido ? 'La política de IA de este momento excluye la IA en una evaluación.' : null,
         politica_ia: 'Se permite IA como asistente.',
-        herramientas: restringido ? [{ id: 'autoevaluacion_rubrica', recomendada: true }]
+        herramientas: restringido ? []
           : [{ id: 'cuestionario', recomendada: true }, { id: 'ficha_clase', recomendada: false }] });
     }
     if (ruta === '/asignaturas/a1/generar') return json(202, { trabajos: [{ id: 't1', herramienta: 'cuestionario', estado: 'en_cola' }] });
@@ -219,14 +219,22 @@ test('recorrido: clase → actividad → generar → avance → recurso', async 
   await context.close();
 });
 
-test('momento restringido muestra el aviso y solo lo permitido', async () => {
+test('clase de un momento restringido muestra el aviso y no ofrece IA', async () => {
   const { context, page } = await abrir();
   await abrirAsignatura(page);
-  await page.getByText('Cierra el Momento 3').waitFor();
-  await page.getByRole('button', { name: 'Herramientas del momento' }).nth(1).click();
+  await page.getByRole('button', { name: /Clase 2/ }).click();
   await page.getByRole('alert').getByText('excluye la IA').waitFor();
-  assert.equal(await page.getByRole('checkbox').count(), 1);
-  assert.equal(await page.getByText('sin IA', { exact: true }).count(), 1);
+  assert.equal(await page.getByRole('checkbox').count(), 0);
+  await page.getByText('No hay herramientas disponibles').waitFor();
+  await context.close();
+});
+
+test('el menú ofrece clases y el Proyecto Formativo, no momentos', async () => {
+  const { context, page } = await abrir();
+  await abrirAsignatura(page);
+  await page.getByRole('button', { name: 'Herramientas del Proyecto Formativo' }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Herramientas del momento' }).count(), 0);
+  assert.equal(await page.getByText(/Cierra el Momento/).count(), 0);
   await context.close();
 });
 
