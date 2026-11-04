@@ -143,8 +143,7 @@ def entrenar(
         "umbral": None,
         "ajuste": ajuste,
         "epocas": epocas if ajuste else 0,
-        "n_fragmentos": len(textos),
-        "n_usados": len(usados) if ajuste else 0,
+        "n_fragmentos": len(usados) if ajuste else 0,
         "dispositivo": dispositivo,
         "n_silabos": 0,
         "huella_separacion": None,
@@ -193,12 +192,29 @@ def main(argv: list[str] | None = None) -> int:
         )
     sep = separar(mapa)
     de_entrenamiento = set(sep.entrenamiento)
-    textos = [
-        f.texto
+    de_prueba = set(sep.prueba)
+
+    def clave(texto: str) -> str:
+        return texto.strip().casefold()
+
+    # Un texto que también está en un sílabo de prueba no entrena: inflaría la evaluación.
+    prohibidos = {
+        clave(f.texto)
+        for s in silabos
+        if s.proyecto_formativo.codigo in de_prueba
+        for f in fragmentos(s)
+    }
+    candidatos = {
+        clave(f.texto): f.texto
         for s in silabos
         if s.proyecto_formativo.codigo in de_entrenamiento
         for f in fragmentos(s)
-    ]
+    }
+    excluidos = sum(1 for k in candidatos if k in prohibidos)
+    textos = [t for k, t in candidatos.items() if k not in prohibidos]
+    if a.humo:
+        textos = textos[:TEXTOS_HUMO]
+    n_entrenados = 0 if a.sin_ajuste else len(textos)
     separacion = {"entrenamiento": sep.entrenamiento, "prueba": sep.prueba}
     entrenar(
         textos,
@@ -209,6 +225,7 @@ def main(argv: list[str] | None = None) -> int:
         ajuste=not a.sin_ajuste,
         metadatos={
             "n_silabos": len(silabos),
+            "n_textos_excluidos_por_prueba": excluidos,
             "n_entrenamiento": len(sep.entrenamiento),
             "n_prueba": len(sep.prueba),
             "separacion": separacion,
@@ -218,7 +235,7 @@ def main(argv: list[str] | None = None) -> int:
     print(
         f"sílabos={len(silabos)} rechazados={len(rechazados)} "
         f"entrenamiento={len(sep.entrenamiento)} prueba={len(sep.prueba)} "
-        f"fragmentos={len(textos)} facultades_sin_sigla={sin_sigla} avisos={len(sep.avisos)}"
+        f"fragmentos={n_entrenados} excluidos_por_prueba={excluidos} facultades_sin_sigla={sin_sigla} avisos={len(sep.avisos)}"
     )
     return 0
 

@@ -75,9 +75,10 @@ def test_solo_entrena_con_el_grupo_de_entrenamiento(tmp_path, monkeypatch, cuatr
     vistos = _capturar_textos(monkeypatch)
     main(["--silabos", str(cuatro_silabos), "--salida", str(tmp_path / "v"), "--humo"])
     entrenamiento, prueba = _grupos(cuatro_silabos)
-    exclusivos_de_prueba = prueba - entrenamiento
-    assert exclusivos_de_prueba and not vistos & exclusivos_de_prueba
-    assert vistos == entrenamiento
+    k = lambda conjunto: {t.strip().casefold() for t in conjunto}
+    assert prueba - entrenamiento and entrenamiento & prueba  # hay textos propios y compartidos
+    assert not k(vistos) & k(prueba)
+    assert k(vistos) == k(entrenamiento) - k(prueba)
 
 
 def test_cli_solo_imprime_conteos_y_pasa_metadatos(tmp_path, monkeypatch, cuatro_silabos, capsys):
@@ -95,6 +96,7 @@ def test_cli_solo_imprime_conteos_y_pasa_metadatos(tmp_path, monkeypatch, cuatro
     assert recibido["ajuste"] is False and recibido["humo"] is True
     assert (meta["n_entrenamiento"], meta["n_prueba"]) == (3, 1)
     assert set(meta["separacion"]) == {"entrenamiento", "prueba"}
+    assert meta["n_textos_excluidos_por_prueba"] > 0 and "excluidos_por_prueba=" in salida
     assert modulo.huella(meta["separacion"]) == meta["huella_separacion"]
 
 
