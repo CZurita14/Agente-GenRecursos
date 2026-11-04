@@ -88,3 +88,9 @@ def test_limites_configurables_en_compose_con_los_valores_de_la_api():
         assert defecto and int(defecto[1]) == Ajustes.model_fields[campo].default, campo
     ejemplo = (RAIZ/'infra/.env.example').read_text(encoding='utf-8')
     assert all(f'{c.upper()}=' in ejemplo for c in campos)
+
+
+def test_despliegue_no_expone_acceso_de_prueba():
+    """El Compose institucional nunca debe poder encender el ingreso sin validar el correo."""
+    assert 'ACCESO_PRUEBA' not in (RAIZ/'infra/compose.yaml').read_text(encoding='utf-8')
+    assert 'ACCESO_PRUEBA' not in (RAIZ/'infra/.env.example').read_text(encoding='utf-8')

@@ -1,10 +1,11 @@
-import { useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { KeyRound, Mail } from 'lucide-react';
 import { Alert, Button, Card, Input } from '../components';
-import { ErrorApi, pedirCodigo } from '../api/cliente';
+import { ErrorApi, modoAcceso, pedirCodigo } from '../api/cliente';
 
 interface IngresoProps {
   onIngresar: (correo: string, codigo: string) => Promise<void>;
+  onIngresarPrueba: (correo?: string) => Promise<void>;
 }
 
 const DOMINIOS = 'Usa tu correo @uti.edu.ec o @indoamerica.edu.ec.';
@@ -19,13 +20,34 @@ function mensaje(e: unknown, paso: 'correo' | 'codigo'): string {
 }
 
 /** Ingreso en dos pasos: correo institucional y código de 6 dígitos enviado al correo (spec §2.1). */
-export function Ingreso({ onIngresar }: IngresoProps) {
+export function Ingreso({ onIngresar, onIngresarPrueba }: IngresoProps) {
   const [paso, setPaso] = useState<'correo' | 'codigo'>('correo');
   const [correo, setCorreo] = useState('');
   const [codigo, setCodigo] = useState('');
   const [error, setError] = useState('');
   const [enviando, setEnviando] = useState(false);
+  const [modoPrueba, setModoPrueba] = useState(false);
   const codigoRef = useRef<HTMLInputElement>(null);
+
+  // Si la consulta falla se muestra el ingreso normal con código.
+  useEffect(() => {
+    let vigente = true;
+    modoAcceso().then(m => { if (vigente) setModoPrueba(m.acceso_prueba); }).catch(() => {});
+    return () => { vigente = false; };
+  }, []);
+
+  async function entrarPrueba(evento?: FormEvent, conCorreo = true) {
+    evento?.preventDefault();
+    setError('');
+    setEnviando(true);
+    try {
+      await onIngresarPrueba(conCorreo ? correo.trim() : undefined);
+    } catch (e) {
+      setError(mensaje(e, 'correo'));
+    } finally {
+      setEnviando(false);
+    }
+  }
 
   async function solicitar(evento?: FormEvent) {
     evento?.preventDefault();
@@ -55,6 +77,21 @@ export function Ingreso({ onIngresar }: IngresoProps) {
       setEnviando(false);
     }
   }
+
+  if (modoPrueba) return <div className="max-w-md mx-auto">
+    <Card title="Ingresa a Recursos de estudio" description="Modo de prueba: entras sin validar el correo." icon={<Mail aria-hidden="true" />}>
+      <form onSubmit={entrarPrueba} className="space-y-4" noValidate>
+        <Alert tone="warning">Modo de prueba: cualquiera puede entrar con cualquier correo institucional. Usa solo datos de prueba.</Alert>
+        <Input label="Correo institucional" name="correo" type="email" autoComplete="email" required
+          value={correo} onChange={e => setCorreo(e.target.value)} hint={DOMINIOS} />
+        {error && <Alert tone="danger" role="alert">{error}</Alert>}
+        <div className="flex flex-wrap gap-3">
+          <Button type="submit" loading={enviando} disabled={!correo.trim()}>Entrar</Button>
+          <Button variant="secondary" onClick={() => entrarPrueba(undefined, false)} disabled={enviando}>Entrar como invitado</Button>
+        </div>
+      </form>
+    </Card>
+  </div>;
 
   return <div className="max-w-md mx-auto">
     <Card title="Ingresa a Recursos de estudio" description="Te enviaremos un código de acceso a tu correo institucional."

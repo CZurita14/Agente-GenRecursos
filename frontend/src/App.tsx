@@ -35,14 +35,15 @@ const pestana = (r: Ruta) => r.vista === 'inicio' || r.vista === 'generar' ? 'in
 
 /** Sin sesión: ingreso. Con sesión: menú principal (opción B) y el recorrido de recursos (P6b). */
 export default function App() {
-  const { usuario, cargando, ingresar, salir, expirar } = useSesion();
+  const { usuario, cargando, ingresar, ingresarPrueba, salir, expirar } = useSesion();
   const [ruta, setRuta] = useState<Ruta>({ vista: 'inicio' });
 
   if (cargando) {
     return <AppLayout><p className="text-muted" role="status">Cargando…</p></AppLayout>;
   }
   if (!usuario) {
-    return <AppLayout><Ingreso onIngresar={async (correo, codigo) => { await ingresar(correo, codigo); setRuta({ vista: 'inicio' }); }} /></AppLayout>;
+    return <AppLayout><Ingreso onIngresar={async (correo, codigo) => { await ingresar(correo, codigo); setRuta({ vista: 'inicio' }); }}
+      onIngresarPrueba={async correo => { await ingresarPrueba(correo); setRuta({ vista: 'inicio' }); }} /></AppLayout>;
   }
 
   const acciones = <div className="flex items-center gap-3 text-sm">

@@ -407,3 +407,39 @@ test('recarga de chat tardía no cambia la revisión base del borrador manual', 
   assert.equal(await campo.inputValue(), '¿Qué procedimiento corresponde a la situación descrita?');
   await context.close();
 });
+
+/** API simulada con el modo de prueba encendido. */
+const CON_MODO_PRUEBA = {
+  '/auth/modo': route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ acceso_prueba: true }) }),
+  '/auth/prueba': (route, estado) => {
+    (estado.pruebas ??= []).push(JSON.parse(route.request().postData()));
+    estado.sesion = true;
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ mensaje: 'Sesión iniciada' }) });
+  },
+};
+
+test('modo de prueba: entrar solo con el correo, sin código', async () => {
+  const { context, page, estado } = await abrir({ sesion: false, rutas: CON_MODO_PRUEBA });
+  await page.getByText('Modo de prueba: cualquiera puede entrar').waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Enviar código' }).count(), 0);
+  await page.getByLabel('Correo institucional').fill('docente@uti.edu.ec');
+  await page.getByRole('button', { name: 'Entrar', exact: true }).click();
+  await page.getByRole('heading', { name: '¿Qué quieres hacer hoy?' }).waitFor();
+  assert.deepEqual(estado.pruebas, [{ correo: 'docente@uti.edu.ec' }]);
+  await context.close();
+});
+
+test('modo de prueba: entrar como invitado sin escribir correo', async () => {
+  const { context, page, estado } = await abrir({ sesion: false, rutas: CON_MODO_PRUEBA });
+  await page.getByRole('button', { name: 'Entrar como invitado' }).click();
+  await page.getByRole('heading', { name: '¿Qué quieres hacer hoy?' }).waitFor();
+  assert.deepEqual(estado.pruebas, [{}]);
+  await context.close();
+});
+
+test('sin modo de prueba el ingreso sigue pidiendo código', async () => {
+  const { context, page } = await abrir({ sesion: false });
+  await page.getByRole('button', { name: 'Enviar código' }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Entrar como invitado' }).count(), 0);
+  await context.close();
+});

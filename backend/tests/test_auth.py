@@ -318,3 +318,47 @@ def test_http_respuesta_uniforme_para_correos_nuevos_y_previos(web, auth):
 def test_http_dominio_invalido_no_envia(web, auth):
     r = web.post("/auth/codigo", json={"correo": "a@mail.uti.edu.ec"}, headers=ORIGEN)
     assert r.status_code == 403 and auth[1] == []
+
+
+# --- Acceso de prueba (sin SMTP institucional): apagado por defecto y prohibido en producción ---
+
+def _app_prueba(nueva_conexion, auth, **extra):
+    config = Ajustes(_env_file=None, database_url="postgresql://no-usar", llm_base_url="http://m/v1", llm_model="m",
+                     api_origen="http://localhost:5173", entorno="desarrollo",
+                     auth_secreto="s" * 16 + "x" * 16, **extra)
+    return TestClient(crear_app(config, auth=auth[0], conexion=nueva_conexion), base_url="https://testserver")
+
+
+ORIGEN_PRUEBA = {"Origin": "http://localhost:5173"}
+
+
+def test_acceso_prueba_prohibido_en_produccion():
+    with pytest.raises(ValueError, match="ACCESO_PRUEBA"):
+        Ajustes(_env_file=None, database_url="postgresql://no-usar", llm_base_url="http://m/v1", llm_model="m",
+                api_origen="https://materiales.example", entorno="produccion", acceso_prueba=True)
+
+
+def test_acceso_prueba_apagado_por_defecto(nueva_conexion, auth):
+    with _app_prueba(nueva_conexion, auth) as c:
+        assert c.get("/auth/modo").json() == {"acceso_prueba": False}
+        r = c.post("/auth/prueba", json={"correo": "docente@uti.edu.ec"}, headers=ORIGEN_PRUEBA)
+        assert r.status_code == 404 and "sesion" not in r.cookies
+
+
+def test_acceso_prueba_con_correo_e_invitado(nueva_conexion, auth):
+    with _app_prueba(nueva_conexion, auth, acceso_prueba=True) as c:
+        assert c.get("/auth/modo").json() == {"acceso_prueba": True}
+        r = c.post("/auth/prueba", json={"correo": "Docente@UTI.edu.ec"}, headers=ORIGEN_PRUEBA)
+        assert r.status_code == 200 and "HttpOnly" in r.headers["set-cookie"]
+        assert c.get("/auth/yo").json()["correo"] == "docente@uti.edu.ec"
+        c.cookies.clear()
+        assert c.get("/auth/yo").status_code == 401
+        assert c.post("/auth/prueba", json={}, headers=ORIGEN_PRUEBA).status_code == 200
+        assert c.get("/auth/yo").json()["correo"] == "invitado@uti.edu.ec"
+
+
+def test_acceso_prueba_mantiene_dominio_y_origen(nueva_conexion, auth):
+    with _app_prueba(nueva_conexion, auth, acceso_prueba=True) as c:
+        assert c.post("/auth/prueba", json={"correo": "alguien@gmail.com"}, headers=ORIGEN_PRUEBA).status_code == 403
+        assert c.post("/auth/prueba", json={"correo": "docente@uti.edu.ec"},
+                      headers={"Origin": "https://malicioso.example"}).status_code == 403

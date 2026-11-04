@@ -60,6 +60,13 @@ const json = (datos: unknown) => JSON.stringify(datos);
 export const pedirCodigo = (correo: string) =>
   pedir<{ mensaje: string }>('/auth/codigo', { method: 'POST', body: json({ correo }) });
 
+/** Si la API ofrece entrar sin validar el correo (solo en desarrollo, mientras no hay SMTP institucional). */
+export const modoAcceso = () => pedir<{ acceso_prueba: boolean }>('/auth/modo');
+
+/** Sesión sin código; sin correo entra como invitado. */
+export const accesoPrueba = (correo?: string) =>
+  pedir<{ mensaje: string }>('/auth/prueba', { method: 'POST', body: json(correo ? { correo } : {}) });
+
 export const verificarCodigo = (correo: string, codigo: string) =>
   pedir<{ mensaje: string }>('/auth/verificar', { method: 'POST', body: json({ correo, codigo }) });
 

@@ -26,6 +26,8 @@ class Ajustes(BaseSettings):
     api_origen: str = "https://localhost:5173"
     auth_secreto: SecretStr | None = Field(default=None, min_length=32)
     entorno: Literal["desarrollo", "produccion"] = "produccion"
+    # Entrar sin validar el correo, mientras no hay SMTP institucional (B4). Solo en desarrollo.
+    acceso_prueba: bool = False
     smtp_modo: Literal["deshabilitado", "consola", "smtp"] = "deshabilitado"
     smtp_host: str = ""
     smtp_port: int = Field(default=587, ge=1, le=65535)
@@ -73,6 +75,8 @@ class Ajustes(BaseSettings):
     def https_en_produccion(self):
         if self.entorno == "produccion" and not self.api_origen.startswith("https://"):
             raise ValueError("API_ORIGEN requiere HTTPS en producción")
+        if self.entorno == "produccion" and self.acceso_prueba:
+            raise ValueError("ACCESO_PRUEBA no se permite en producción")
         return self
 
     @field_validator("api_origen")
