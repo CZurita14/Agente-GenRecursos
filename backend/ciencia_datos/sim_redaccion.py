@@ -21,7 +21,7 @@ from ciencia_datos.corpus import fragmentos, tiene_datos_personales
 from ciencia_datos.sim_esqueleto import N_MOMENTOS, Esqueleto
 from ciencia_datos.sim_plan import Cupo
 
-VERSION_PROMPTS = "1"
+VERSION_PROMPTS = "2"
 TEMPERATURA = 0.7
 SALIDA_MAX = 3500
 MINIMO_FRAGMENTOS = 20
@@ -118,9 +118,15 @@ def _mensajes(instruccion: str) -> list[dict]:
     return [{"role": "system", "content": _REGLAS}, {"role": "user", "content": instruccion}]
 
 
-def _pedir(cliente: ClienteLLM, instruccion: str, modelo: type[BaseModel], rol: str):
+def _fijar(campo: dict, minimo: int, maximo: int | None = None) -> None:
+    """Fija el tamaño de una lista en el esquema (el modelo de validación no cambia)."""
+    campo.update(minItems=minimo, maxItems=minimo if maximo is None else maximo)
+
+
+def _pedir(cliente: ClienteLLM, instruccion: str, modelo: type[BaseModel], rol: str,
+           esquema: dict | None = None):
     salida, _ = pedir_json(
-        cliente, _mensajes(instruccion), modelo, modelo.model_json_schema(),
+        cliente, _mensajes(instruccion), modelo, esquema or modelo.model_json_schema(),
         rol=rol, temperatura=TEMPERATURA, max_tokens=SALIDA_MAX, pensar=False,
     )
     return salida
@@ -168,7 +174,13 @@ def _pedir_general(cliente: ClienteLLM, cupo: Cupo, proyecto: ProyectoPropuesto,
         "competencia del proyecto formativo, la metacompetencia, el problema (descripción, reto y "
         "producto final) y el proyecto integrador (nombre y aporte)."
     )
-    return _pedir(cliente, instruccion, GeneralRedactado, "sim_general")
+    esquema = GeneralRedactado.model_json_schema()
+    campos = esquema["properties"]
+    _fijar(campos["resultados"], esq.n_resultados)
+    _fijar(campos["metodologias"], esq.n_metodologias)
+    _fijar(campos["titulos_momentos"], N_MOMENTOS)
+    _fijar(campos["rubrica_producto_final"], esq.n_filas_rubrica_pf)
+    return _pedir(cliente, instruccion, GeneralRedactado, "sim_general", esquema)
 
 
 def _pedir_momento(cliente: ClienteLLM, cupo: Cupo, proyecto: ProyectoPropuesto, esq: Esqueleto,
@@ -187,7 +199,14 @@ def _pedir_momento(cliente: ClienteLLM, cupo: Cupo, proyecto: ProyectoPropuesto,
         f"{esq.contenidos_por_sesion} contenidos, un texto de actividad docente, uno de actividad "
         "práctica y uno de trabajo autónomo, y sus entregables."
     )
-    return _pedir(cliente, instruccion, MomentoRedactado, "sim_momento")
+    esquema = MomentoRedactado.model_json_schema()
+    campos = esquema["properties"]
+    _fijar(campos["rubrica"], esq.n_filas_rubrica)
+    _fijar(campos["sesiones"], n_sesiones)
+    # Los contenidos por sesión son uniformes en el esqueleto; si variaran, mínimo y máximo del momento.
+    _fijar(esquema["$defs"]["SesionRedactada"]["properties"]["contenidos"],
+           esq.contenidos_por_sesion, esq.contenidos_por_sesion)
+    return _pedir(cliente, instruccion, MomentoRedactado, "sim_momento", esquema)
 
 
 # --- Ensamblado ---------------------------------------------------------------------------

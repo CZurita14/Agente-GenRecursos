@@ -187,7 +187,7 @@ def test_usa_los_roles_de_simulacion_sin_razonamiento():
     assert {l["rol"] for l in cliente.llamadas} == {"sim_general", "sim_momento"}
     assert all(l["pensar"] is False for l in cliente.llamadas)
     assert all(l["max_tokens"] == 3500 and l["temperatura"] == TEMPERATURA for l in cliente.llamadas)
-    assert VERSION_PROMPTS == "1" and TEMPERATURA == 0.7
+    assert VERSION_PROMPTS == "2" and TEMPERATURA == 0.7
 
 
 def test_los_prompts_declaran_ficticio_y_llevan_la_carrera():
@@ -218,3 +218,46 @@ def test_todos_los_cupos_del_catalogo_ensamblan_sin_falsos_positivos():
             "sim_momento": [_momento(e, m) for m in range(4)],
         })
         redactar_silabo(cliente, cupo, PROYECTO, e)
+
+
+def _fijos(esquema, n):
+    """La lista descrita por `esquema` tiene minItems == maxItems == n."""
+    return esquema.get("minItems") == n and esquema.get("maxItems") == n
+
+
+@pytest.mark.parametrize("n_res,n_met,n_rub,n_pf,n_cont", [(None, None, None, None, None), (3, 2, 2, 5, 4)])
+def test_el_esquema_enviado_fija_el_tamano_de_cada_lista(n_res, n_met, n_rub, n_pf, n_cont):
+    from dataclasses import replace
+    e = crear_esqueleto(CUPO)
+    if n_res is not None:
+        e = replace(e, n_resultados=n_res, n_metodologias=n_met, n_filas_rubrica=n_rub,
+                    n_filas_rubrica_pf=n_pf, contenidos_por_sesion=n_cont)
+    cliente = ClienteSimulado({
+        "sim_general": [_general(e)],
+        "sim_momento": [_momento(e, m) for m in range(4)],
+    })
+    redactar_silabo(cliente, CUPO, PROYECTO, e)
+    general = next(c for c in cliente.llamadas if c["rol"] == "sim_general")["esquema"]
+    p = general["properties"]
+    assert _fijos(p["resultados"], e.n_resultados)
+    assert _fijos(p["metodologias"], e.n_metodologias)
+    assert _fijos(p["titulos_momentos"], 4)
+    assert _fijos(p["rubrica_producto_final"], e.n_filas_rubrica_pf)
+    momentos = [c for c in cliente.llamadas if c["rol"] == "sim_momento"]
+    assert len(momentos) == 4
+    for i, c in enumerate(momentos):
+        esq = c["esquema"]
+        assert _fijos(esq["properties"]["rubrica"], e.n_filas_rubrica)
+        assert _fijos(esq["properties"]["sesiones"], len(e.momentos[i].sesiones))
+        assert _fijos(esq["$defs"]["SesionRedactada"]["properties"]["contenidos"],
+                      e.contenidos_por_sesion)
+
+
+def test_el_esquema_estatico_del_modelo_no_se_modifica():
+    from ciencia_datos.sim_redaccion import GeneralRedactado
+    redactar_silabo(_cliente_valido(), CUPO, PROYECTO, crear_esqueleto(CUPO))
+    assert "minItems" not in GeneralRedactado.model_json_schema()["properties"]["resultados"]
+
+
+def test_version_de_prompts_es_2():
+    assert VERSION_PROMPTS == "2"
