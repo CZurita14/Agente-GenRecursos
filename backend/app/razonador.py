@@ -72,6 +72,8 @@ def _validar(ruta: Path, exigir_aprobado: bool) -> tuple[dict, float]:
     ):
         raise RazonadorInvalido("el umbral de metadatos.json no es un coseno válido (finito, entre -1 y 1)")
     if exigir_aprobado:
+        if meta.get("preliminar") is True:
+            raise RazonadorInvalido("el modelo es preliminar (entrenado con sílabos simulados): no se sirve")
         if meta.get("humo") is not False:
             raise RazonadorInvalido("el modelo es de humo o no declara humo: false")
         if meta.get("aprobado") is not True:

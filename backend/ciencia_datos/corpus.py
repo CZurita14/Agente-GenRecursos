@@ -10,6 +10,7 @@ from pathlib import Path
 
 from app.silabo.lector.ensamblar import leer_silabo
 from app.silabo.modelo import SilaboUTI
+from ciencia_datos.origen import es_simulado
 
 _PERSONAL = re.compile(
     r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+"      # correo
@@ -66,8 +67,8 @@ def fragmentos(silabo: SilaboUTI) -> list[Fragmento]:
     return salida
 
 
-def leer_carpeta(carpeta: Path) -> tuple[list[SilaboUTI], list[str]]:
-    """Los sílabos de `leer_con_origen`, sin su ruta."""
+def leer_carpeta(carpeta: Path | list[Path]) -> tuple[list[SilaboUTI], list[str]]:
+    """Los sílabos de `leer_con_origen`, sin su ruta; acepta una carpeta o varias."""
     con_origen, rechazados = leer_con_origen(carpeta)
     return [s for s, _ in con_origen], rechazados
 
@@ -82,8 +83,10 @@ def por_carpeta(rutas: list[Path], raiz: Path) -> dict[str, int]:
     return dict(sorted(cuenta.items()))
 
 
-def leer_con_origen(carpeta: Path) -> tuple[list[tuple[SilaboUTI, Path]], list[str]]:
-    """Lee `*.pdf` y `*.json` (un `SilaboUTI` serializado) de la carpeta y sus subcarpetas.
+def leer_con_origen(carpeta: Path | list[Path]) -> tuple[list[tuple[SilaboUTI, Path]], list[str]]:
+    """Lee `*.pdf` y `*.json` (un `SilaboUTI` serializado) de una carpeta, o de varias, y sus subcarpetas.
+
+    Un PDF con código `SIM-` se rechaza: el prefijo marca lo simulado y un PDF solo puede ser real.
 
     Conserva una versión por código de proyecto formativo: la de `aprobado` más
     reciente y, a igualdad, la de mayor nombre de archivo. Devuelve también los
@@ -91,13 +94,17 @@ def leer_con_origen(carpeta: Path) -> tuple[list[tuple[SilaboUTI, Path]], list[s
     """
     elegidos: dict[str, tuple[tuple, SilaboUTI, Path]] = {}
     rechazados: list[str] = []
-    for ruta in sorted(Path(carpeta).rglob("*")):
+    carpetas = carpeta if isinstance(carpeta, (list, tuple)) else [carpeta]
+    rutas = [r for c in carpetas for r in sorted(Path(c).rglob("*"))]
+    for ruta in rutas:
         if ruta.suffix.lower() not in (".pdf", ".json") or not ruta.is_file():
             continue
         try:
             datos = ruta.read_bytes()
             if ruta.suffix.lower() == ".pdf":
                 silabo = leer_silabo(datos)
+                if es_simulado(silabo.proyecto_formativo.codigo):
+                    raise ValueError("un PDF no puede usar el prefijo simulado")
             else:
                 silabo = SilaboUTI.model_validate_json(datos)
         except Exception:

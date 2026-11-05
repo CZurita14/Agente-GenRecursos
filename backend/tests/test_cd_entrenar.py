@@ -1,11 +1,14 @@
+import hashlib
 import json
 
+import numpy as np
 import pytest
 
 from ciencia_datos import entrenar as modulo
 from ciencia_datos.corpus import fragmentos, leer_carpeta
 from ciencia_datos.entrenar import entrenar, main
-from ciencia_datos.separar import separar
+from ciencia_datos.origen import es_simulado
+from ciencia_datos.separar import separar, separar_preliminar
 
 BASE = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 TEXTOS_SINTETICOS = [
@@ -140,6 +143,126 @@ def test_facultad_fuera_del_catalogo_conserva_su_nombre_normalizado(datos):
     datos["facultad"] = "Facultad Inventada"
     mapa, sin_sigla = modulo.codigo_a_facultad([SilaboUTI.model_validate(datos)], {})
     assert list(mapa.values()) == ["FACULTAD INVENTADA"] and sin_sigla == 1
+
+
+FACULTADES_SIM = [f"FACULTAD SIMULADA {c}" for c in "ABCDE"]
+TEXTO_CONTROL = "Texto exclusivo del control real"
+TEXTO_CASI_IGUAL_AL_CONTROL = TEXTO_CONTROL + " (casi)"
+
+
+def _vectorizar_falso(base, textos):
+    """Un vector por texto; «(casi)» al final no lo cambia, así un texto y su casi repetido coinciden."""
+    def vector(t):
+        semilla = int(hashlib.sha256(t.replace(" (casi)", "").encode()).hexdigest()[:8], 16)
+        return np.random.default_rng(semilla).normal(size=64)
+
+    return np.array([vector(t) for t in textos])
+
+
+def _carpeta_mixta(tmp_path, datos, n_sim=40):
+    pares = [(f"SIM-{i % 5}-{i}", FACULTADES_SIM[i % 5]) for i in range(n_sim)]
+    pares += [("PF-REAL-1", FACULTADES_SIM[0]), ("PF-REAL-2", FACULTADES_SIM[1])]
+    carpeta = _carpeta(tmp_path, datos, pares)
+    ruta = carpeta / "PF-REAL-1.json"
+    d = json.loads(ruta.read_text(encoding="utf-8"))
+    d["resultados_aprendizaje"][0]["texto"] = TEXTO_CONTROL
+    ruta.write_text(json.dumps(d), encoding="utf-8")
+    return carpeta
+
+
+@pytest.fixture
+def corpus_mixto(tmp_path, datos):
+    return _carpeta_mixta(tmp_path, datos)
+
+
+@pytest.fixture
+def corpus_con_casi_repetido(tmp_path, datos):
+    carpeta = _carpeta_mixta(tmp_path, datos)
+    silabos, _ = leer_carpeta(carpeta)
+    mapa = {s.proyecto_formativo.codigo: "X" for s in silabos}
+    sep = separar_preliminar({c: FACULTADES_SIM[int(c.split("-")[1]) % 5] if es_simulado(c) else "R" for c in mapa})
+    ruta = carpeta / f"{sep.entrenamiento[0]}.json"
+    d = json.loads(ruta.read_text(encoding="utf-8"))
+    d["resultados_aprendizaje"][0]["texto"] = TEXTO_CASI_IGUAL_AL_CONTROL
+    ruta.write_text(json.dumps(d), encoding="utf-8")
+    return carpeta
+
+
+def _entrenar_cli(tmp_path, monkeypatch, carpeta, *extra):
+    recibido = {}
+
+    def falso(textos, base, salida, **kw):
+        recibido.update(kw, textos=list(textos))
+        return salida
+
+    monkeypatch.setattr(modulo, "entrenar", falso)
+    monkeypatch.setattr(modulo, "_vectorizar_base", _vectorizar_falso)
+    main(["--silabos", str(carpeta), "--salida", str(tmp_path / "v"), *extra])
+    return recibido["textos"], recibido["metadatos"]
+
+
+def _entrenar_cli_mixto(tmp_path, monkeypatch, carpeta, *extra):
+    textos, meta = _entrenar_cli(tmp_path, monkeypatch, carpeta, *extra)
+    return textos, {"aprobado": False, **meta}  # `entrenar` fija aprobado False; aquí se sustituye
+
+
+def test_sin_simulados_la_separacion_y_la_huella_no_cambian(tmp_path, monkeypatch, cuatro_silabos):
+    _, meta = _entrenar_cli(tmp_path, monkeypatch, cuatro_silabos, "--humo")
+    assert "preliminar" not in meta and "origen" not in meta and "n_casi_repetidos_excluidos" not in meta
+    assert "control_real" not in meta["separacion"]
+    assert meta["huella_separacion"] == modulo.huella(
+        {"entrenamiento": meta["separacion"]["entrenamiento"], "prueba": meta["separacion"]["prueba"]})
+
+
+def test_con_simulados_el_modelo_queda_preliminar_y_sin_textos_reales(tmp_path, monkeypatch, corpus_mixto):
+    textos, meta = _entrenar_cli_mixto(tmp_path, monkeypatch, corpus_mixto)
+    reales = {f.texto.strip().casefold() for s in leer_carpeta(corpus_mixto)[0]
+              if not es_simulado(s.proyecto_formativo.codigo) for f in fragmentos(s)}
+    assert meta["preliminar"] is True and meta["aprobado"] is False
+    assert meta["origen"] == {"simulados": 40, "reales": 2}
+    assert meta["separacion"]["control_real"] == ["PF-REAL-1", "PF-REAL-2"]
+    assert modulo.huella(meta["separacion"]) == meta["huella_separacion"]
+    assert textos and not {t.strip().casefold() for t in textos} & reales
+    assert all(es_simulado(c) for c in meta["separacion"]["entrenamiento"] + meta["separacion"]["prueba"])
+
+
+def test_excluye_casi_repetidos_de_prueba_y_control(tmp_path, monkeypatch, corpus_con_casi_repetido):
+    textos, meta = _entrenar_cli_mixto(tmp_path, monkeypatch, corpus_con_casi_repetido)
+    assert TEXTO_CASI_IGUAL_AL_CONTROL not in textos
+    assert meta["n_casi_repetidos_excluidos"] >= 1
+
+
+def test_sin_ajuste_no_calcula_vectores_ni_excluye_casi_repetidos(tmp_path, monkeypatch, corpus_con_casi_repetido):
+    monkeypatch.setattr(modulo, "_vectorizar_base", lambda *a: pytest.fail("no debió vectorizar"))
+    recibido = {}
+    monkeypatch.setattr(modulo, "entrenar", lambda textos, base, salida, **kw: recibido.update(kw) or salida)
+    main(["--silabos", str(corpus_con_casi_repetido), "--salida", str(tmp_path / "v"), "--sin-ajuste"])
+    assert recibido["metadatos"]["n_casi_repetidos_excluidos"] == 0
+    assert recibido["metadatos"]["preliminar"] is True
+
+
+def test_el_minimo_se_comprueba_solo_sobre_los_simulados(tmp_path, monkeypatch, datos):
+    # 16 simulados en 4 facultades y 4 reales en una quinta: con los reales habría 5 facultades con 4.
+    pares = [(f"SIM-{i % 4}-{i}", FACULTADES_SIM[i % 4]) for i in range(16)]
+    pares += [(f"PF-REAL-{i}", FACULTADES_SIM[4]) for i in range(4)]
+    carpeta = _carpeta(tmp_path, datos, pares)
+    monkeypatch.setattr(modulo, "entrenar", lambda *a, **k: pytest.fail("no debió entrenar"))
+    with pytest.raises(SystemExit, match="mínimo"):
+        main(["--silabos", str(carpeta), "--salida", str(tmp_path / "v")])
+
+
+def test_varias_carpetas_en_silabos_y_recuento_por_raiz(tmp_path, monkeypatch, datos, capsys):
+    a, b = tmp_path / "a", tmp_path / "b"
+    for carpeta, codigos in ((a, ["PF-A", "PF-B"]), (b, ["PF-C", "PF-D"])):
+        carpeta.mkdir()
+        for c in codigos:
+            d = json.loads(json.dumps(datos))
+            d["proyecto_formativo"]["codigo"] = c
+            (carpeta / f"{c}.json").write_text(json.dumps(d), encoding="utf-8")
+    _capturar_textos(monkeypatch)
+    main(["--silabos", str(a), str(b), "--salida", str(tmp_path / "v"), "--humo"])
+    salida = capsys.readouterr().out
+    assert "sílabos=4" in salida and "por_carpeta: .=4" in salida
 
 
 @pytest.fixture(scope="module")

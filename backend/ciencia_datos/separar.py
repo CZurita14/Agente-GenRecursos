@@ -7,6 +7,8 @@ import hashlib
 from collections import defaultdict
 from dataclasses import dataclass, field
 
+from ciencia_datos.origen import es_simulado
+
 MIN_POR_FACULTAD = 4
 MIN_FACULTADES = 5
 
@@ -16,6 +18,7 @@ class Separacion:
     entrenamiento: list[str]
     prueba: list[str]
     avisos: list[str] = field(default_factory=list)
+    control: list[str] = field(default_factory=list)  # reales: solo comparan, nunca entrenan
 
 
 def _por_facultad(codigo_a_facultad: dict[str, str]) -> dict[str, list[str]]:
@@ -46,6 +49,14 @@ def separar(
         prueba += ordenados[:n_prueba]
         entrenamiento += ordenados[n_prueba:]
     return Separacion(sorted(entrenamiento), sorted(prueba), avisos)
+
+
+def separar_preliminar(codigo_a_facultad: dict[str, str], proporcion: float = 0.7, semilla: int = 42) -> Separacion:
+    """Los simulados van 70/30 por facultad; los reales, a `control`, sin entrenar ni probar."""
+    simulados = {c: f for c, f in codigo_a_facultad.items() if es_simulado(c)}
+    s = separar(simulados, proporcion, semilla)
+    control = sorted(c for c in codigo_a_facultad if not es_simulado(c))
+    return Separacion(s.entrenamiento, s.prueba, s.avisos, control)
 
 
 def dejar_fuera(codigo_a_facultad: dict[str, str]) -> dict[str, Separacion]:

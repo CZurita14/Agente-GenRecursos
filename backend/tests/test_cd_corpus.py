@@ -3,7 +3,8 @@ import json
 import pytest
 
 from app.silabo.modelo import SilaboUTI
-from ciencia_datos.corpus import fragmentos, leer_carpeta, tiene_datos_personales
+from ciencia_datos import corpus
+from ciencia_datos.corpus import fragmentos, leer_carpeta, por_carpeta, tiene_datos_personales
 
 
 @pytest.fixture
@@ -112,3 +113,44 @@ def test_leer_carpeta_recorre_subcarpetas_y_conserva_una_version_por_codigo(tmp_
     assert set(por_codigo) == {"X-1", "Z-9"}
     assert por_codigo["X-1"].proyecto_formativo.aprobado.year == 2025
     assert rechazados == ["roto.json"]
+
+
+def _escribir_codigo(carpeta, datos, codigo):
+    carpeta.mkdir(parents=True, exist_ok=True)
+    d = json.loads(json.dumps(datos))
+    d["proyecto_formativo"]["codigo"] = codigo
+    (carpeta / f"{codigo}.json").write_text(json.dumps(d), encoding="utf-8")
+
+
+@pytest.fixture
+def dos_carpetas(tmp_path, datos):
+    a, b = tmp_path / "reales", tmp_path / "simulados"
+    for codigo in ("PF-1", "PF-2"):
+        _escribir_codigo(a, datos, codigo)
+    for codigo in ("SIM-X-1", "SIM-X-2"):
+        _escribir_codigo(b, datos, codigo)
+    return [a, b]
+
+
+def test_varias_carpetas_se_leen_juntas(dos_carpetas):
+    silabos, rechazados = leer_carpeta(dos_carpetas)
+    assert len(silabos) == 4 and rechazados == []
+    assert len(leer_carpeta(dos_carpetas[0])[0]) == 2
+
+
+def test_por_carpeta_con_una_sola_raiz_no_cambia(dos_carpetas):
+    rutas = [r for _, r in corpus.leer_con_origen(dos_carpetas[0])[0]]
+    assert por_carpeta(rutas, dos_carpetas[0]) == {".": 2}
+
+
+def test_un_pdf_no_puede_usar_el_prefijo_simulado(tmp_path, monkeypatch, silabo):
+    d = silabo.model_dump(mode="json")
+    d["proyecto_formativo"]["codigo"] = "SIM-FING-X-001"
+    monkeypatch.setattr(corpus, "leer_silabo", lambda datos: SilaboUTI.model_validate(d))
+    (tmp_path / "a.pdf").write_bytes(b"%PDF")
+    assert leer_carpeta(tmp_path) == ([], ["a.pdf"])
+
+
+def test_un_json_con_prefijo_simulado_si_se_lee(tmp_path, datos):
+    _escribir_codigo(tmp_path, datos, "SIM-FING-X-001")
+    assert len(leer_carpeta(tmp_path)[0]) == 1

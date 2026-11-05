@@ -18,7 +18,9 @@ from pathlib import Path
 from app.agentes.facultades import cargar_catalogo, normalizar
 from ciencia_datos import consola_utf8
 from ciencia_datos.corpus import fragmentos, leer_con_origen, por_carpeta
-from ciencia_datos.separar import MIN_FACULTADES, MIN_POR_FACULTAD, cumple_minimo, separar
+from ciencia_datos.casi_repetidos import filtrar
+from ciencia_datos.origen import es_simulado
+from ciencia_datos.separar import MIN_FACULTADES, MIN_POR_FACULTAD, cumple_minimo, separar, separar_preliminar
 
 BASE_POR_DEFECTO = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 RAIZ = Path(__file__).resolve().parents[2]
@@ -123,6 +125,15 @@ def _versiones(destino: Path) -> dict:
     return {"torch": torch.__version__, "onnxruntime": onnxruntime.__version__, "opset": opset}
 
 
+def _vectorizar_base(base: str, textos: list[str]):
+    """Vectores del modelo base sin ajustar, para el filtro de casi repetidos."""
+    from sentence_transformers import SentenceTransformer
+
+    modelo = SentenceTransformer(base, device=_dispositivo())
+    modelo.max_seq_length = min(modelo.max_seq_length or LONGITUD_MAXIMA, LONGITUD_MAXIMA)
+    return modelo.encode(textos, batch_size=LOTE, show_progress_bar=False)
+
+
 def entrenar(
     textos: list[str],
     base: str,
@@ -190,7 +201,7 @@ def huella(separacion: dict) -> str:
 def main(argv: list[str] | None = None) -> int:
     consola_utf8()
     p = argparse.ArgumentParser(prog="python -m ciencia_datos.entrenar")
-    p.add_argument("--silabos", type=Path, required=True)
+    p.add_argument("--silabos", type=Path, nargs="+", required=True, help="una o varias carpetas")
     p.add_argument("--salida", type=Path, required=True)
     p.add_argument("--base", default=BASE_POR_DEFECTO)
     p.add_argument("--epocas", type=int, default=1)
@@ -204,25 +215,32 @@ def main(argv: list[str] | None = None) -> int:
     silabos = [s for s, _ in con_origen]
     catalogo = cargar_catalogo(RAIZ / "kb" / "catalogo.yaml")
     mapa, sin_sigla = codigo_a_facultad(silabos, catalogo)
-    if not a.humo and not cumple_minimo(mapa):
+    preliminar = any(es_simulado(c) for c in mapa)
+    if not preliminar and not a.humo and not cumple_minimo(mapa):
         raise SystemExit(
             f"Se exige un mínimo de {MIN_FACULTADES} facultades con {MIN_POR_FACULTAD} sílabos "
             "cada una; use --humo para una prueba rápida."
         )
-    sep = separar(mapa)
+    simulados = {c: f for c, f in mapa.items() if es_simulado(c)}
+    if preliminar and not a.humo and not cumple_minimo(simulados):
+        raise SystemExit(
+            f"Se exige un mínimo de {MIN_FACULTADES} facultades con {MIN_POR_FACULTAD} sílabos "
+            "simulados cada una; use --humo para una prueba rápida."
+        )
+    sep = separar_preliminar(mapa) if preliminar else separar(mapa)
     de_entrenamiento = set(sep.entrenamiento)
     de_prueba = set(sep.prueba)
+    de_control = set(sep.control)
 
     def clave(texto: str) -> str:
         return texto.strip().casefold()
 
-    # Un texto que también está en un sílabo de prueba no entrena: inflaría la evaluación.
-    prohibidos = {
-        clave(f.texto)
-        for s in silabos
-        if s.proyecto_formativo.codigo in de_prueba
-        for f in fragmentos(s)
-    }
+    # Un texto que también está en un sílabo de prueba (o de control) no entrena: inflaría la evaluación.
+    de_comparacion = de_prueba | de_control
+    textos_de_comparacion = list(dict.fromkeys(
+        f.texto for s in silabos if s.proyecto_formativo.codigo in de_comparacion for f in fragmentos(s)
+    ))
+    prohibidos = {clave(t) for t in textos_de_comparacion}
     candidatos = {
         clave(f.texto): f.texto
         for s in silabos
@@ -231,10 +249,33 @@ def main(argv: list[str] | None = None) -> int:
     }
     excluidos = sum(1 for k in candidatos if k in prohibidos)
     textos = [t for k, t in candidatos.items() if k not in prohibidos]
+    casi_repetidos = 0
+    if preliminar and not a.sin_ajuste and textos:
+        # Ningún texto de entrenamiento se parece a lo que prueba o controla.
+        vectores = _vectorizar_base(a.base, textos + textos_de_comparacion)
+        textos, casi_repetidos = filtrar(
+            textos, vectores[: len(textos)], contra=vectores[len(textos) :] if textos_de_comparacion else None
+        )
     if a.humo:
         textos = textos[:TEXTOS_HUMO]
     n_entrenados = 0 if a.sin_ajuste else len(textos)
     separacion = {"entrenamiento": sep.entrenamiento, "prueba": sep.prueba}
+    if sep.control:
+        separacion["control_real"] = sep.control
+    metadatos = {
+        "n_silabos": len(silabos),
+        "n_textos_excluidos_por_prueba": excluidos,
+        "n_entrenamiento": len(sep.entrenamiento),
+        "n_prueba": len(sep.prueba),
+        "separacion": separacion,
+        "huella_separacion": huella(separacion),
+    }
+    if preliminar:
+        metadatos |= {
+            "preliminar": True,
+            "origen": {"simulados": len(simulados), "reales": len(mapa) - len(simulados)},
+            "n_casi_repetidos_excluidos": casi_repetidos,
+        }
     entrenar(
         textos,
         a.base,
@@ -242,21 +283,20 @@ def main(argv: list[str] | None = None) -> int:
         epocas=a.epocas,
         humo=a.humo,
         ajuste=not a.sin_ajuste,
-        metadatos={
-            "n_silabos": len(silabos),
-            "n_textos_excluidos_por_prueba": excluidos,
-            "n_entrenamiento": len(sep.entrenamiento),
-            "n_prueba": len(sep.prueba),
-            "separacion": separacion,
-            "huella_separacion": huella(separacion),
-        },
+        metadatos=metadatos,
     )
     print(
         f"sílabos={len(silabos)} rechazados={len(rechazados)} "
         f"entrenamiento={len(sep.entrenamiento)} prueba={len(sep.prueba)} "
         f"fragmentos={n_entrenados} excluidos_por_prueba={excluidos} facultades_sin_sigla={sin_sigla} avisos={len(sep.avisos)}"
+        + (f" preliminar=True control_real={len(sep.control)} casi_repetidos_excluidos={casi_repetidos}" if preliminar else "")
     )
-    recuento = por_carpeta([r for _, r in con_origen], a.silabos)
+    recuento: dict[str, int] = {}
+    for raiz in a.silabos:
+        propias = [r for _, r in con_origen if r.is_relative_to(raiz)]
+        for nombre, n in por_carpeta(propias, raiz).items():
+            recuento[nombre] = recuento.get(nombre, 0) + n
+    recuento = dict(sorted(recuento.items()))
     print("por_carpeta: " + " ".join(f"{nombre}={n}" for nombre, n in recuento.items()))
     return 0
 

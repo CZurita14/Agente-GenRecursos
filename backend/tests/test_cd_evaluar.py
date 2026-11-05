@@ -723,3 +723,28 @@ def test_las_filas_del_azar_de_la_silueta_van_en_l2(monkeypatch):
     assert len(vistos) == 5
     for Y in vistos:
         assert np.allclose(np.linalg.norm(Y, axis=1), 1.0)
+
+
+def _modelo_falso(tmp_path, *, preliminar, humo):
+    modelo = tmp_path / "modelo"
+    (modelo / "onnx").mkdir(parents=True)
+    (modelo / "onnx" / "model.onnx").write_bytes(b"onnx")
+    (tmp_path / "silabos").mkdir(exist_ok=True)
+    (modelo / "metadatos.json").write_text(json.dumps({
+        "version": "v-pre", "base": "modelo-base", "humo": humo, "aprobado": False, "umbral": None, "ajuste": True,
+        "preliminar": preliminar, "separacion": {"entrenamiento": [], "prueba": []},
+    }))
+    return modelo
+
+
+def test_evaluar_rechaza_un_modelo_preliminar_sin_tomar_candado(tmp_path):
+    modelo = _modelo_falso(tmp_path, preliminar=True, humo=False)
+    with pytest.raises(ev.EntradaInvalida, match="preliminar"):
+        ev.ejecutar(modelo, tmp_path / "silabos", datos=tmp_path, salida=tmp_path / "s")
+    assert not (modelo / "evaluacion.candado").exists()
+
+
+def test_evaluar_con_humo_sigue_con_un_modelo_preliminar(tmp_path):
+    modelo = _modelo_falso(tmp_path, preliminar=True, humo=True)
+    r = ev.ejecutar(modelo, tmp_path / "silabos", datos=tmp_path, salida=tmp_path / "s", humo=True)
+    assert r["humo"] is True and r["aprobado"] is False

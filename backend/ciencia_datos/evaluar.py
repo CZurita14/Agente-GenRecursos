@@ -475,6 +475,8 @@ def ejecutar(
     modelo, salida, datos = Path(modelo), Path(salida), Path(datos)
     meta = _meta(modelo)
     version = meta["version"]
+    if meta.get("preliminar") is True and not humo:
+        raise EntradaInvalida("el modelo es preliminar (entrenado con sílabos simulados): solo se evalúa con --humo")
     if humo and not meta.get("humo"):
         raise EntradaInvalida("--humo solo se acepta sobre un modelo con humo: true")
     if meta.get("humo") and not humo:

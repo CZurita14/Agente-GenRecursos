@@ -371,3 +371,15 @@ def test_un_modelo_exportado_de_verdad_planifica_de_punta_a_punta(modelo_humo, s
     assert set(estilo.escenarios) <= permitidos  # El razonador solo descarta: nunca añade ni afloja el filtro.
     assert all(p.caso in estilo.escenarios for p in plan) or not estilo.escenarios
     assert correr() == (estilo, lotes)
+
+
+def test_produccion_rechaza_un_preliminar_aunque_diga_aprobado(carpeta_con):
+    ruta = carpeta_con({"humo": False, "aprobado": True, "umbral": 0.7, "preliminar": True})
+    with pytest.raises(RazonadorInvalido, match="preliminar"):
+        Razonador.cargar(ruta, exigir_aprobado=True)
+
+
+def test_desarrollo_si_carga_un_preliminar(carpeta_con, monkeypatch):
+    monkeypatch.setattr(modulo, "_abrir", lambda ruta, longitud: (lambda t: np.eye(len(t))))
+    ruta = carpeta_con({"humo": False, "aprobado": False, "umbral": None, "preliminar": True})
+    assert Razonador.cargar(ruta, exigir_aprobado=False)
