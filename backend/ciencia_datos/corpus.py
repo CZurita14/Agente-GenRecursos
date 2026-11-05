@@ -15,6 +15,9 @@ _PERSONAL = re.compile(
     r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+"      # correo
     r"|\b\d{4}-\d{4}-\d{4}-\d{3}[\dXx]\b"  # ORCID
     r"|\d{7,}"                           # teléfono, cédula u otra secuencia larga
+    # Título seguido de una palabra con mayúscula inicial: "Dra. Ana", no "Ing. de requisitos".
+    r"|(?<!\w)(?:Dra?|Ing|Mgs|Msc|Lic)\.\s+[A-ZÁÉÍÓÚÑ]"
+    r"|(?<!\w)PhD\.?\s+[A-ZÁÉÍÓÚÑ]"
 )
 
 
@@ -28,9 +31,14 @@ class Fragmento:
     texto: str
 
 
+def tiene_datos_personales(texto: str) -> bool:
+    """Si el texto parece traer correo, ORCID, número largo o un título con nombre propio."""
+    return _PERSONAL.search(" ".join(texto.split())) is not None
+
+
 def _limpio(texto: str) -> str | None:
     t = " ".join(texto.split())
-    return t if t and not _PERSONAL.search(t) else None
+    return t if t and not tiene_datos_personales(t) else None
 
 
 def fragmentos(silabo: SilaboUTI) -> list[Fragmento]:

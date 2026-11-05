@@ -3,7 +3,7 @@ import json
 import pytest
 
 from app.silabo.modelo import SilaboUTI
-from ciencia_datos.corpus import fragmentos, leer_carpeta
+from ciencia_datos.corpus import fragmentos, leer_carpeta, tiene_datos_personales
 
 
 @pytest.fixture
@@ -41,6 +41,23 @@ def test_descarta_fragmentos_con_datos_personales(silabo_datos, dato):
     f = fragmentos(_con_texto(silabo_datos, f"Contactar a {dato}", "Tema académico limpio"))
     assert dato not in str(f)
     assert "Tema académico limpio" in [x.texto for x in f]
+
+
+def test_descarta_titulos_con_nombre_propio_y_conserva_texto_academico(silabo_datos):
+    f = fragmentos(_con_texto(silabo_datos, "Dra. Ana Ruiz", "Ing. de requisitos"))
+    textos = [x.texto for x in f]
+    assert "Ing. de requisitos" in textos
+    assert not any("Ruiz" in t for t in textos)
+    f = fragmentos(_con_texto(silabo_datos, "Ingeniería Civil"))
+    assert "Ingeniería Civil" in [x.texto for x in f]
+
+
+def test_tiene_datos_personales():
+    assert tiene_datos_personales("Mgs. María López")
+    assert tiene_datos_personales("PhD Carlos Mora")
+    assert tiene_datos_personales("ana@uti.edu.ec")
+    assert not tiene_datos_personales("Ing. de requisitos")
+    assert not tiene_datos_personales("Ingeniería Civil")
 
 
 def test_descarta_sin_imprimir_el_texto(silabo_datos):
