@@ -19,6 +19,7 @@ from app.db.conexion import conectar
 from app.db.migrar import aplicar_migraciones, migraciones_preparadas
 from app.llm.cliente import ClienteVLLM
 from app.operacion import LatidoWorker, cargar_razonador, plazo_latido, ruta_latido, validar_configuracion
+from app.razonador import RazonadorInvalido
 
 registro = logging.getLogger(__name__)
 
@@ -90,10 +91,8 @@ def main():
     perfiles = cargar_perfiles(directorio)
     try:
         razonador = cargar_razonador(config)  # Una sola vez; un modelo inválido detiene el arranque.
-    except Exception as error:
-        from app.razonador import RazonadorInvalido
-        if isinstance(error, RazonadorInvalido):
-            registro.error('razonador inválido: %s', error)  # El mensaje nombra la causa, nunca un texto.
+    except RazonadorInvalido as error:
+        registro.error('razonador inválido: %s', error)  # El mensaje nombra la causa, nunca un texto.
         raise
     if razonador is not None:
         registro.info('razonador cargado: version=%s', razonador.version)

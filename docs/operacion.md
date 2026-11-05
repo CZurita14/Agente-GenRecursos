@@ -71,7 +71,7 @@ Una imagen anterior no garantiza rollback tras cambiar el esquema. Si hay incomp
 
 Apagado por omisión: `RAZONADOR_RUTA` vacía en el archivo de entorno. El Compose solo se la entrega al servicio `worker`, junto con el volumen `modelos` en `/modelos` de solo lectura; la API y los demás servicios no la reciben. Guía completa, criterios y etiquetado en [ciencia-datos.md](ciencia-datos.md).
 
-Para instalar un modelo aprobado (solo con la decisión del usuario), copiar su carpeta al volumen con un contenedor auxiliar, porque dentro del `worker` el volumen es de solo lectura (usar una imagen mínima ya aprobada por TI en lugar de `alpine` si corresponde):
+El nombre del volumen `genrecursos-app_modelos` del comando siguiente supone el nombre de proyecto por omisión (`genrecursos-app`); con otro proyecto es `<proyecto>_modelos`. Para instalar un modelo aprobado (solo con la decisión del usuario), copiar su carpeta al volumen con un contenedor auxiliar, porque dentro del `worker` el volumen es de solo lectura (usar una imagen mínima ya aprobada por TI en lugar de `alpine` si corresponde):
 
 ```text
 docker run --rm -v genrecursos-app_modelos:/modelos -v /ruta/del/modelo/v1:/origen:ro alpine cp -r /origen /modelos/v1

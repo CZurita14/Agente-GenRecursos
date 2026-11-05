@@ -24,4 +24,6 @@ frontend/dist/
 # Ciencia de datos: modelos, datos derivados y entorno de entrenamiento
 modelos/
 datos_cd/
+# Informes de la prueba de humo: no son un resultado que se versione
+pruebas/ciencia_datos/*-humo.json
 .venv-ciencia/

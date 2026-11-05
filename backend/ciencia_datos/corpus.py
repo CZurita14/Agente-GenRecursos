@@ -59,7 +59,7 @@ def fragmentos(silabo: SilaboUTI) -> list[Fragmento]:
 
 
 def leer_carpeta(carpeta: Path) -> tuple[list[SilaboUTI], list[str]]:
-    """Lee `*.pdf` y `*.json` (un `SilaboUTI` serializado).
+    """Lee `*.pdf` y `*.json` (un `SilaboUTI` serializado) de la carpeta y sus subcarpetas.
 
     Conserva una versión por código de proyecto formativo: la de `aprobado` más
     reciente y, a igualdad, la de mayor nombre de archivo. Devuelve también los
@@ -67,7 +67,7 @@ def leer_carpeta(carpeta: Path) -> tuple[list[SilaboUTI], list[str]]:
     """
     elegidos: dict[str, tuple[tuple, SilaboUTI]] = {}
     rechazados: list[str] = []
-    for ruta in sorted(Path(carpeta).iterdir()):
+    for ruta in sorted(Path(carpeta).rglob("*")):
         if ruta.suffix.lower() not in (".pdf", ".json") or not ruta.is_file():
             continue
         try:

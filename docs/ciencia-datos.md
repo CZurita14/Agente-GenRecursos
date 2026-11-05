@@ -46,13 +46,15 @@ Dos archivos CSV en `datos_cd/` (carpeta fuera del repositorio). Los llenan doce
 
 ### 3.1 `pares.csv`: ¿este caso se parece al entregable?
 
+**Este archivo todavía no se puede generar con ninguna herramienta.** El equipo técnico debe prepararlo a mano (o con un programa que aún no existe) a partir de los casos de cada carrera y de los entregables de los sílabos; la ficha de etiquetado se entrega a los docentes ya con esas columnas llenas. Hasta entonces la evaluación real no puede correr (ver sección 8).
+
 Cada fila es un par: un **caso** (la situación que se propondría en una pregunta) y una **evidencia** (el texto de un entregable del sílabo). El docente responde una sola cosa: ¿el caso es **lo mismo o casi lo mismo** que la evidencia, de modo que la pregunta le regalaría la respuesta al estudiante?
 
 | Columna | Qué poner |
 |---|---|
-| `caso` | Texto del caso. Ya viene escrito. |
-| `evidencia` | Texto del entregable. Ya viene escrito. |
-| `codigo_pf` | Código del proyecto formativo de donde sale la evidencia. Ya viene escrito. |
+| `caso` | Texto del caso. Lo escribe el equipo técnico al preparar el archivo. |
+| `evidencia` | Texto del entregable. Lo escribe el equipo técnico al preparar el archivo. |
+| `codigo_pf` | Código del proyecto formativo de donde sale la evidencia. Lo escribe el equipo técnico. |
 | `docente` | Un código o iniciales acordadas (por ejemplo `D1`, `D2`). **No escribir nombres ni correos.** |
 | `parecido` | `sí` si se parecen; `no` si son situaciones distintas. También se aceptan `1`/`0`, `si`/`no`. |
 
@@ -87,11 +89,16 @@ cd backend
 # 1. Candidato ajustado y candidato base (sin ajuste), con los sílabos reales
 HF_HUB_OFFLINE=1 ../.venv-ciencia/Scripts/python.exe -m ciencia_datos.entrenar --silabos ../Silabos --salida ../modelos/v1
 HF_HUB_OFFLINE=1 ../.venv-ciencia/Scripts/python.exe -m ciencia_datos.entrenar --silabos ../Silabos --salida ../modelos/base --sin-ajuste
-# 2. Listas de temas para los docentes (una por candidato)
+# 2. Listas de temas para los docentes: una por candidato, con el mismo --k (8 por omisión)
 ... -m ciencia_datos.evaluar temas-para-revisar --modelo ../modelos/v1 --silabos ../Silabos --salida ../datos_cd/temas-revision-v1.csv
+... -m ciencia_datos.evaluar temas-para-revisar --modelo ../modelos/base --silabos ../Silabos --salida ../datos_cd/temas-revision-base.csv
 # 3. Con pares.csv y temas.csv completos, una sola evaluación
 ... -m ciencia_datos.evaluar --modelo ../modelos/v1 --base-modelo ../modelos/base --silabos ../Silabos
 ```
+
+El valor de `--k` debe ser **el mismo** en `temas-para-revisar` y en `evaluar` (si se cambia en uno, se indica igual en el otro): la huella de los temas depende de él, y las filas de `temas.csv` solo valen para la agrupación con la que se juzgaron. Los sílabos pueden estar en subcarpetas de `Silabos/`; se conserva una versión por código de proyecto formativo.
+
+Los informes de la prueba de humo (`pruebas/ciencia_datos/*-humo.json`) no se versionan: están en `.gitignore`.
 
 La evaluación se hace **una sola vez por versión**: deja un candado en la carpeta del modelo y una segunda corrida se rechaza. Si todo aprueba, marca el modelo como aprobado y fija su umbral; si no, queda sin aprobar y no se puede cargar en producción.
 

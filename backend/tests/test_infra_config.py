@@ -129,6 +129,7 @@ def test_el_worker_conserva_todo_el_entorno_comun_y_monta_modelos_de_solo_lectur
 
 def test_la_imagen_de_produccion_no_lleva_torch_y_el_lock_es_completo():
     """El lock se instala con --no-deps: debe traer las dependencias del razonador y cerrar sus requisitos."""
+    import re
     from importlib import metadata
     from packaging.markers import default_environment
     from packaging.requirements import Requirement
@@ -138,12 +139,10 @@ def test_la_imagen_de_produccion_no_lleva_torch_y_el_lock_es_completo():
     assert {'numpy', 'scikit-learn', 'onnxruntime', 'tokenizers'} <= set(fijados)
     entorno = {**default_environment(), 'sys_platform': 'linux', 'platform_system': 'Linux', 'os_name': 'posix',
                'extra': ''}
-    for nombre in ('onnxruntime', 'tokenizers', 'scikit-learn', 'huggingface-hub', 'scipy'):
-        try:
-            requisitos = metadata.requires(nombre) or []
-        except metadata.PackageNotFoundError:
-            continue
+    for nombre in sorted(fijados):
+        # Un paquete del lock que no está instalado impediría comprobar sus requisitos: falla.
+        requisitos = metadata.requires(nombre) or []
         for texto in requisitos:
             r = Requirement(texto)
             if r.marker is None or r.marker.evaluate(entorno):
-                assert r.name.lower().replace('_', '-') in fijados, (nombre, r.name)
+                assert re.sub(r'[-_.]+', '-', r.name).lower() in fijados, (nombre, r.name)

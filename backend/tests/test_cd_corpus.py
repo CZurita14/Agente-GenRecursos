@@ -81,3 +81,17 @@ def test_leer_carpeta_conserva_la_version_mas_reciente_por_codigo(tmp_path, dato
     assert set(por_codigo) == {"X-1", "Y-2"}
     assert por_codigo["X-1"].proyecto_formativo.aprobado.year == 2025
     assert por_codigo["Y-2"].proyecto_formativo.nombre == "de d"
+
+
+def test_leer_carpeta_recorre_subcarpetas_y_conserva_una_version_por_codigo(tmp_path, datos):
+    (tmp_path / "a" / "b").mkdir(parents=True)
+    (tmp_path / "c").mkdir()
+    _escribir(tmp_path / "a" / "b", "x.json", datos, codigo="X-1", aprobado="2024-01-01")
+    _escribir(tmp_path / "c", "y.json", datos, codigo="X-1", aprobado="2025-01-01")
+    _escribir(tmp_path / "a", "z.json", datos, codigo="Z-9", aprobado="2024-01-01")
+    (tmp_path / "c" / "roto.json").write_text("{no es json", encoding="utf-8")
+    silabos, rechazados = leer_carpeta(tmp_path)
+    por_codigo = {s.proyecto_formativo.codigo: s for s in silabos}
+    assert set(por_codigo) == {"X-1", "Z-9"}
+    assert por_codigo["X-1"].proyecto_formativo.aprobado.year == 2025
+    assert rechazados == ["roto.json"]
