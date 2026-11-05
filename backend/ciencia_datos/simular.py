@@ -16,6 +16,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+import openai
 from pydantic import ValidationError
 
 from app.agentes.facultades import normalizar
@@ -35,7 +36,22 @@ CATALOGO = RAIZ / "kb" / "catalogo.yaml"
 CARPETA_SILABOS = "silabos_simulados"
 CARPETA_TRABAJO = "simulacion"
 # Fallos de una sola respuesta: el cupo se descarta y la corrida sigue.
-_DESCARTABLES = (JsonInvalido, SimulacionInvalida, ValidationError, ContextoExcedido, ErrorDelServidor)
+_DESCARTABLES = (JsonInvalido, SimulacionInvalida, ValidationError, ContextoExcedido)
+CAIDO, RECHAZO, INESPERADO = "caido", "rechazo", "inesperado"
+MENSAJES = {
+    CAIDO: "el servidor de IA no está disponible",
+    RECHAZO: "el servidor de IA rechazó el pedido: revisa el modelo, la clave y la URL configurados",
+    INESPERADO: "error inesperado durante la simulación",
+}
+
+
+def _motivo(error: Exception) -> str:
+    """Por qué una excepción detiene la corrida. Nunca se usa su texto."""
+    if isinstance(error, ServidorNoDisponible):
+        return CAIDO
+    if isinstance(error, (ErrorDelServidor, openai.APIStatusError)):
+        return RECHAZO
+    return INESPERADO
 
 
 @dataclass(frozen=True)
@@ -47,11 +63,15 @@ class Resumen:
 
 
 class ServidorCaido(ServidorNoDisponible):
-    """El servidor dejó de responder. Lleva el resumen de lo que alcanzó a terminar."""
+    """La corrida se detuvo (servidor caído, pedido rechazado o fallo inesperado).
 
-    def __init__(self, resumen: Resumen):
-        super().__init__("el servidor de IA no está disponible")
+    Lleva el resumen de lo terminado y el motivo; su mensaje es fijo.
+    """
+
+    def __init__(self, resumen: Resumen, motivo: str = CAIDO):
+        super().__init__(MENSAJES[motivo])
         self.resumen = resumen
+        self.motivo = motivo
 
 
 def _crear_cliente(ajustes: Ajustes) -> ClienteVLLM:
@@ -155,6 +175,13 @@ def generar(cliente: ClienteLLM, cupos_a_generar: list[Cupo], carpeta_silabos: P
     contadores = {"generados": 0, "existentes": 0, "descartados": 0}
     candado = threading.Lock()
     detener = threading.Event()
+    motivo_fatal: list[str] = []
+
+    def parar(error: Exception) -> None:
+        with candado:
+            if not motivo_fatal:
+                motivo_fatal.append(_motivo(error))
+        detener.set()
 
     def contar(que: str, n: int = 1) -> None:
         with candado:
@@ -185,8 +212,8 @@ def generar(cliente: ClienteLLM, cupos_a_generar: list[Cupo], carpeta_silabos: P
                     asignados.append((c, lista[c.indice - 1]))
                 else:
                     contar("descartados")
-    except ServidorNoDisponible:
-        detener.set()
+    except Exception as error:  # noqa: BLE001 - se clasifica por tipo, sin leer su texto
+        parar(error)
 
     def redactar(par: tuple[Cupo, ProyectoPropuesto]) -> None:
         if detener.is_set():
@@ -196,10 +223,10 @@ def generar(cliente: ClienteLLM, cupos_a_generar: list[Cupo], carpeta_silabos: P
             silabo = redactar_silabo(cliente, cupo, proyecto, crear_esqueleto(cupo, semilla))
             _escribir_atomico(ruta_silabo(carpeta_silabos, cupo),
                               silabo.model_dump_json(indent=2))
-        except ServidorNoDisponible:
-            detener.set()
         except _DESCARTABLES:
             contar("descartados")
+        except Exception as error:  # noqa: BLE001 - fatal: no se envían cupos nuevos
+            parar(error)
         else:
             contar("generados")
 
@@ -210,7 +237,7 @@ def generar(cliente: ClienteLLM, cupos_a_generar: list[Cupo], carpeta_silabos: P
     resumen = Resumen(**contadores, segundos=round(time.monotonic() - inicio, 1))
     _manifiesto(carpeta_trabajo, modelo, semilla, resumen)
     if detener.is_set():
-        raise ServidorCaido(resumen)
+        raise ServidorCaido(resumen, motivo_fatal[0])
     return resumen
 
 
@@ -238,7 +265,10 @@ def main(argv: list[str] | None = None) -> int:
                     hilos=a.hilos, cupos_totales=todos, modelo=ajustes.llm_model)
     except ServidorCaido as caido:
         _imprimir(caido.resumen)
-        print("el servidor de IA no está disponible; lo ya guardado se conserva", file=sys.stderr)
+        print(f"{MENSAJES[caido.motivo]}; lo ya guardado se conserva", file=sys.stderr)
+        return 2
+    except Exception:  # noqa: BLE001 - sin str() ni traceback: podrían traer texto simulado
+        print(f"{MENSAJES[INESPERADO]}; lo ya guardado se conserva", file=sys.stderr)
         return 2
     finally:
         cierre = getattr(cliente, "close", None)

@@ -4,7 +4,11 @@ import json
 import threading
 from pathlib import Path
 
-from app.llm.cliente import ClienteSimulado, ServidorNoDisponible
+import httpx
+import openai
+import pytest
+
+from app.llm.cliente import ClienteSimulado, ErrorDelServidor, ServidorNoDisponible
 from app.silabo.modelo import SilaboUTI
 from ciencia_datos import simular
 from ciencia_datos.corpus import leer_carpeta
@@ -221,3 +225,41 @@ def _entorno(monkeypatch):
     monkeypatch.setenv("LLM_BASE_URL", "http://localhost:1/v1")
     monkeypatch.setenv("LLM_MODEL", "modelo-prueba")
     monkeypatch.setattr(simular, "Ajustes", _ajustes_sin_env)
+
+
+def _estado_4xx():
+    resp = httpx.Response(401, request=httpx.Request("POST", "http://x/v1/chat/completions"))
+    return openai.AuthenticationError("TEXTO-ERROR", response=resp, body=None)
+
+
+def _lanza(error):
+    def f(_m):
+        raise error
+    return f
+
+
+@pytest.mark.parametrize("rol,error", [
+    ("sim_proyectos", _estado_4xx),            # 4xx del chat en la fase de proyectos
+    ("sim_general", _estado_4xx),              # 4xx del chat en el pool
+    ("sim_general", lambda: ErrorDelServidor("TEXTO-ERROR")),
+    ("sim_general", lambda: RuntimeError("TEXTO-ERROR")),  # excepción inesperada
+])
+def test_errores_fatales_salen_con_2_con_manifiesto_y_sin_texto(tmp_path, monkeypatch, capsys, rol, error):
+    _entorno(monkeypatch)
+    respuestas = _respuestas()
+    respuestas[rol] = _lanza(error())
+    monkeypatch.setattr(simular, "_crear_cliente", lambda a: ClienteSimulado(respuestas))
+    assert simular.main(["--salida", str(tmp_path), "--limite", "3", "--hilos", "1"]) == 2
+    salida = capsys.readouterr()
+    assert "TEXTO-ERROR" not in salida.out + salida.err
+    assert "Traceback" not in salida.err
+    m = json.loads((tmp_path / "simulacion" / "manifiesto.json").read_text(encoding="utf-8"))
+    assert (m["generados"], m["descartados"]) == (0, 0)
+
+
+def test_un_error_fatal_no_envia_cupos_nuevos(tmp_path):
+    cliente = ClienteSimulado({**_respuestas(), "sim_general": _lanza(_estado_4xx())})
+    with pytest.raises(simular.ServidorCaido) as e:
+        generar(cliente, CUPOS, tmp_path / "s", tmp_path / "t", hilos=1)
+    assert e.value.motivo == simular.RECHAZO
+    assert sum(1 for x in cliente.llamadas if x["rol"] == "sim_general") == 1
