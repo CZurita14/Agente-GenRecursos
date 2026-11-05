@@ -28,7 +28,7 @@ def _seleccion(conn, p):
     return a, r
 
 
-def procesar_chat(conn, trabajo, cliente, perfiles, worker_id, lease_s, razonador=None):
+def procesar_chat(conn, trabajo, cliente, perfiles, worker_id, lease_s):
     from app.chat.interprete import interpretar, limpiar_texto
     from app.chat.acciones import validar_accion
     from app.chat.ajustes import regenerar, rutas_editables
@@ -125,8 +125,7 @@ def procesar_chat(conn, trabajo, cliente, perfiles, worker_id, lease_s, razonado
         if (not datos['items'] and not datos['rutas']) or any(tuple(x) not in permitidas for x in datos['rutas']):
             raise HTTPException(422, 'Selecciona preguntas o textos editables del recurso')
         contenido, verificaciones, revision_ia = regenerar(cliente, recurso=r, contexto=_contexto(r,a),
-                       perfil=perfiles[trabajo.agente], accion=datos, trabajo_id=trabajo.id, asignatura_id=trabajo.asignatura_id,
-                       razonador=razonador)
+                       perfil=perfiles[trabajo.agente], accion=datos, trabajo_id=trabajo.id, asignatura_id=trabajo.asignatura_id)
         with conn.transaction():
             cercar()
             _, actual = _seleccion(conn, p)
