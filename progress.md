@@ -163,6 +163,9 @@ P1–P6 implementados técnicamente, incluido chat privado de ajustes y exportac
   - Tarea 5 ✅ (`fff9414`): filtro de casi repetidos (coseno ≥ 0,95) y `revisar_lote`, con informe solo de cifras, criterios propuestos para el piloto y muestra CSV para revisión humana. 16 pruebas; revisión aprobada.
   - Tarea 6 ✅ (`c7f59c3`): un corpus con códigos `SIM-` entrena solo con simulados, deja los 2 reales como control y marca el modelo `preliminar`. Producción y `evaluar` lo rechazan aunque se edite `aprobado`. Un corpus sin simulados no cambia. Revisión aprobada.
   - Tarea 7 ✅ (`d78a306`, `c9df250`): informe `preliminar`, que compara el ajustado con el base usando precisión a 5 vecinos y silueta sobre la prueba simulada, más el control con los 2 reales. Nunca aprueba, y la guía `docs/ciencia-datos.md` ya tiene los comandos. Una ronda de corrección.
+  - Revisión final de rama ✅ (`45387e2`): el detector de datos personales reconoce más títulos (MSc., Mg., Ph.D., Abg., Arq., Prof., Lcda.); `evaluar` y producción rechazan separaciones con códigos `SIM-` aunque se borre la marca `preliminar`; `revisar_lote` compara contra las facultades esperadas, neutraliza fórmulas en el CSV y no muestrea reales.
+  - Pruebas: suite completa 1235 pasan (14 excluidas); pruebas con modelo 10/10. Docker se reparó borrando sockets AF_UNIX dañados desde WSL.
+  - Pendiente: piloto de 20 sílabos con Qwen (Tarea 8) y revisión humana de la muestra antes de la corrida completa.
 
 ### 2026-11-04
 - **Razonador entrenado (rama `p9/razonador`):** tarea final de despliegue y documentación. Volumen `modelos` de solo lectura y `RAZONADOR_RUTA` vacía solo en el `worker`; `requirements.lock` con `numpy`, `scikit-learn`, `onnxruntime`, `tokenizers` y sus dependencias, sin PyTorch. Guía para el área académica en [docs/ciencia-datos.md](docs/ciencia-datos.md), con los criterios de aprobación marcados como **propuestos, pendientes de confirmación del usuario**.
