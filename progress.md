@@ -159,6 +159,7 @@ P1–P6 implementados técnicamente, incluido chat privado de ajustes y exportac
   - Tarea 1 ✅ (`76deace`): marca `SIM-` y 198 cupos para las 29 carreras de grado. 6 pruebas nuevas; revisión aprobada.
   - Tarea 2 ✅ (`af54066`): esqueleto determinista (fechas, horas y sesiones) dentro del perfil medido en los 2 reales. 5 pruebas nuevas; revisión aprobada.
   - Tarea 3 ✅ (`740da13`): redacción con Qwen en 5 llamadas por sílabo, ensamblado validado contra `SilaboUTI` y descarte por datos personales; el patrón de `corpus.py` ahora también detecta títulos seguidos de nombre. Revisión aprobada.
+  - Tarea 4 ✅ (`14aeb3c`, `2932d32`): comando `simular` reanudable, con escritura atómica y manifiesto. Un servidor caído, un rechazo 4xx o un error inesperado detienen la corrida con salida 2 y sin texto en consola. 19 pruebas; una ronda de corrección.
 
 ### 2026-11-04
 - **Razonador entrenado (rama `p9/razonador`):** tarea final de despliegue y documentación. Volumen `modelos` de solo lectura y `RAZONADOR_RUTA` vacía solo en el `worker`; `requirements.lock` con `numpy`, `scikit-learn`, `onnxruntime`, `tokenizers` y sus dependencias, sin PyTorch. Guía para el área académica en [docs/ciencia-datos.md](docs/ciencia-datos.md), con los criterios de aprobación marcados como **propuestos, pendientes de confirmación del usuario**.
