@@ -154,6 +154,10 @@ P1–P6 implementados técnicamente, incluido chat privado de ajustes y exportac
 
 ## Bitácora (lo ya hecho)
 
+### 2026-11-05
+- **Simulación de sílabos (rama `p10/simulacion`, plan [2026-11-05-simulacion-silabos.md](docs/superpowers/plans/2026-11-05-simulacion-silabos.md)):**
+  - Tarea 1 ✅ (`76deace`): marca `SIM-` y 198 cupos para las 29 carreras de grado. 6 pruebas nuevas; revisión aprobada.
+
 ### 2026-11-04
 - **Razonador entrenado (rama `p9/razonador`):** tarea final de despliegue y documentación. Volumen `modelos` de solo lectura y `RAZONADOR_RUTA` vacía solo en el `worker`; `requirements.lock` con `numpy`, `scikit-learn`, `onnxruntime`, `tokenizers` y sus dependencias, sin PyTorch. Guía para el área académica en [docs/ciencia-datos.md](docs/ciencia-datos.md), con los criterios de aprobación marcados como **propuestos, pendientes de confirmación del usuario**.
 - **Prueba de humo** con los 2 sílabos locales (1 entrenamiento, 1 evaluación, 27 fragmentos): entrenamiento, exportación e informe corren de punta a punta con `humo: true` y `aprobado: false`. **No es una evaluación de calidad.** Ni los modelos ni los datos derivados se versionan.
