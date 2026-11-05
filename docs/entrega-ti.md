@@ -171,4 +171,4 @@ No ejecutar `docker compose config` sin filtrar: imprime los secretos.
 
 ## 9. Lo que no se ha probado
 
-La instalación se probó completa en un equipo de desarrollo con un proyecto aislado, datos sintéticos, certificado autofirmado y la IA caída a propósito. **No** se ha probado: certificado institucional, SMTP real, Qwen real dentro de este Compose ni el servidor de TI. Tampoco se ha construido la imagen con las dependencias del razonador ni se ha activado un modelo real: solo existe una prueba de humo con 2 sílabos, que no mide calidad. Esa verificación es la del §6 en el servidor de TI.
+La instalación se probó completa en un equipo de desarrollo con un proyecto aislado, datos sintéticos, certificado autofirmado y la IA caída a propósito. **No** se ha probado: certificado institucional, SMTP real, Qwen real dentro de este Compose ni el servidor de TI. La imagen con las dependencias del razonador se construyó una vez durante esta rama con `pip check` limpio, pero no se ha corrido con un modelo aprobado en un `worker` real: solo existe una prueba de humo con 2 sílabos, que no mide calidad. Esa verificación es la del §6 en el servidor de TI.
