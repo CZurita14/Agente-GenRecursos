@@ -100,6 +100,40 @@ def test_cli_solo_imprime_conteos_y_pasa_metadatos(tmp_path, monkeypatch, cuatro
     assert modulo.huella(meta["separacion"]) == meta["huella_separacion"]
 
 
+@pytest.mark.parametrize("archivo", ["metadatos.json", "evaluacion.candado"])
+def test_cli_rechaza_una_salida_con_modelo_antes_de_entrenar(tmp_path, monkeypatch, cuatro_silabos, archivo):
+    salida = tmp_path / "v"
+    salida.mkdir()
+    (salida / archivo).write_text("original")
+    monkeypatch.setattr(modulo, "entrenar", lambda *a, **k: pytest.fail("no debió entrenar"))
+    with pytest.raises(SystemExit, match="otra carpeta"):
+        main(["--silabos", str(cuatro_silabos), "--salida", str(salida), "--humo"])
+    assert (salida / archivo).read_text() == "original"
+
+
+def test_cli_acepta_una_salida_sin_modelo(tmp_path, monkeypatch, cuatro_silabos):
+    vistos = _capturar_textos(monkeypatch)
+    salida = tmp_path / "v"
+    salida.mkdir()
+    (salida / "otra-cosa.txt").write_text("x")
+    assert main(["--silabos", str(cuatro_silabos), "--salida", str(salida), "--humo"]) == 0
+    assert vistos
+
+
+def test_cli_imprime_el_recuento_por_carpeta_sin_nombres_de_archivo(tmp_path, monkeypatch, cuatro_silabos, capsys):
+    raiz = cuatro_silabos
+    (raiz / "2026A" / "fing").mkdir(parents=True)
+    (raiz / "2026B").mkdir()
+    (raiz / "PF-A.json").rename(raiz / "2026A" / "fing" / "archivo-secreto-a.json")
+    (raiz / "PF-B.json").rename(raiz / "2026A" / "archivo-secreto-b.json")
+    (raiz / "PF-C.json").rename(raiz / "2026B" / "archivo-secreto-c.json")
+    _capturar_textos(monkeypatch)
+    main(["--silabos", str(raiz), "--salida", str(tmp_path / "v"), "--humo"])
+    salida = capsys.readouterr().out
+    assert "por_carpeta: .=1 2026A=2 2026B=1" in salida
+    assert "archivo-secreto" not in salida and "PF-D" not in salida
+
+
 def test_facultad_fuera_del_catalogo_conserva_su_nombre_normalizado(datos):
     from app.silabo.modelo import SilaboUTI
 
@@ -120,6 +154,18 @@ def test_entrena_con_humo_y_deja_metadatos(modelo_humo):
     assert m["ajuste"] is True and m["version"] == "v0" and m["base"] == BASE
     assert (modelo_humo / "onnx" / "model.onnx").exists()
     assert (modelo_humo / "tokenizer.json").exists()
+
+
+@pytest.mark.modelo
+def test_los_metadatos_guardan_las_versiones_de_la_exportacion(modelo_humo):
+    import onnx
+    import onnxruntime
+    import torch
+
+    v = json.loads((modelo_humo / "metadatos.json").read_text(encoding="utf-8"))["versiones"]
+    assert v["torch"] == torch.__version__ and v["onnxruntime"] == onnxruntime.__version__
+    grafo = onnx.load(str(modelo_humo / "onnx" / "model.onnx"), load_external_data=False)
+    assert v["opset"] == next(o.version for o in grafo.opset_import if o.domain in ("", "ai.onnx"))
 
 
 @pytest.mark.modelo
@@ -153,7 +199,7 @@ def test_sin_ajuste_exporta_el_modelo_base(tmp_path):
 
 
 @pytest.mark.parametrize("modulo_cli, parche", [
-    ("entrenar", "e.leer_carpeta = lambda ruta: (print('\u2705 listo'), sys.exit(0))"),
+    ("entrenar", "e.leer_con_origen = lambda ruta: (print('\u2705 listo'), sys.exit(0))"),
     ("evaluar", "e._main_temas = lambda argv: (print('\u2705 listo'), 0)[1]"),
 ])
 def test_la_consola_cp1252_no_rompe_la_cli(modulo_cli, parche):

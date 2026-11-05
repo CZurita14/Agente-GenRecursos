@@ -3,10 +3,12 @@ import hashlib
 import json
 import math
 import re
+import shutil
 
 import numpy as np
 import pytest
 
+from app.razonador import RazonadorInvalido, huella_pesos
 from ciencia_datos import evaluar as ev
 from ciencia_datos.entrenar import huella
 from ciencia_datos.evaluar import (
@@ -225,7 +227,7 @@ def _carpeta_modelo(ruta, version, ajuste, sep, huella_sep=None, humo=False):
     (ruta / "onnx" / "model.onnx").write_bytes(f"onnx {version}".encode())
     separacion = {"entrenamiento": sep.entrenamiento, "prueba": sep.prueba}
     (ruta / "metadatos.json").write_text(json.dumps({
-        "version": version, "humo": humo, "aprobado": False, "umbral": None, "ajuste": ajuste,
+        "version": version, "base": "modelo-base", "humo": humo, "aprobado": False, "umbral": None, "ajuste": ajuste,
         "huella_separacion": huella_sep or huella(separacion), "separacion": separacion,
     }))
 
@@ -263,15 +265,18 @@ def entorno(tmp_path, datos):
 
 def _correr(e, modelo="ajustado", base="base", bueno="ajustado", **kw):
     return ev.ejecutar(e[modelo], e["silabos"], base_modelo=e[base] if base else None, datos=e["datos"],
-                       salida=kw.pop("salida", e["salida"]), vectorizar=_vector_falso(bueno), k=3, **kw)
+                       salida=kw.pop("salida", e["salida"]), vectorizar=_vector_falso(bueno), k=3,
+                       abrir_modelo=kw.pop("abrir_modelo", lambda carpeta: None), **kw)
 
 
-def _juzgar_temas(e, modelo, sentido="si", bueno="ajustado"):
-    """Paso 1 (temas-para-revisar) y los docentes lo juzgan (paso 2 los lee evaluar)."""
-    r = ev.temas_para_revisar(e[modelo], e["silabos"], e["datos"] / f"temas-revision-{modelo}.csv",
-                              k=3, vectorizar=_vector_falso(bueno))
-    _temas(e["datos"] / "temas.csv", [(r["huella"], str(g), d, sentido) for g in range(r["k"]) for d in ("ana", "luis")])
-    return r
+def _juzgar_temas(e, modelos=("ajustado", "base"), sentido="si"):
+    """Paso 1 (temas-para-revisar) sobre cada candidato y los docentes los juzgan (paso 2 los lee evaluar)."""
+    filas = []
+    for modelo in modelos:
+        r = ev.temas_para_revisar(e[modelo], e["silabos"], e["datos"] / f"temas-revision-{modelo}.csv",
+                                  k=3, vectorizar=_vector_falso("ajustado"))
+        filas += [(r["huella"], str(g), d, sentido) for g in range(r["k"]) for d in ("ana", "luis")]
+    _temas(e["datos"] / "temas.csv", filas)
 
 
 def _meta(e, modelo):
@@ -279,54 +284,49 @@ def _meta(e, modelo):
 
 
 def test_aprueba_y_escribe_aprobado_y_umbral_solo_en_la_carpeta_elegida(entorno):
-    _juzgar_temas(entorno, "ajustado")
+    _juzgar_temas(entorno)
     r = _correr(entorno)
     assert r["aprobado"] is True, r
     assert r["modelo_elegido"] == "ajustado" and r["candidatos"].keys() == {"ajustado", "base"}
     assert r["huella_modelo_elegido"] == r["huella_modelo"]
     aj, base = _meta(entorno, "ajustado"), _meta(entorno, "base")
     assert aj["aprobado"] is True and aj["umbral"] is not None
-    assert base["aprobado"] is False and base["umbral"] is None
+    assert aj["huella_pesos"] == huella_pesos(entorno["ajustado"])
+    assert base["aprobado"] is False and base["umbral"] is None and "huella_pesos" not in base
 
 
 def test_gana_el_base_cuando_el_ajustado_no_lo_supera(entorno):
-    _juzgar_temas(entorno, "base", bueno="base")
+    _juzgar_temas(entorno)
     r = _correr(entorno, bueno="base")
     assert r["modelo_elegido"] == "base" and "no supera" in r["nota_modelo"]
     assert r["huella_modelo_elegido"] != r["huella_modelo"]
     assert r["aprobado"] is True, r
     assert _meta(entorno, "base")["aprobado"] is True and _meta(entorno, "ajustado")["aprobado"] is False
     assert r["dejar_fuera"]["codificador"] == "base" and "generalizacion_del_ajustado" not in r["dejar_fuera"]
-
-
-def test_sin_temas_juzgados_de_la_huella_elegida_no_aprueba(entorno):
-    _juzgar_temas(entorno, "base", bueno="base")  # juzgaron los temas del otro modelo
-    r = _correr(entorno)
-    assert r["aprobado"] is False
-    escrito = json.loads((entorno["salida"] / "v-aj.json").read_text())
-    assert escrito["medidas"]["grupos_con_sentido"] is None and escrito["criterios"]["grupos_con_sentido"] is False
-    assert _meta(entorno, "ajustado")["umbral"] is None
+    assert r["carpeta_elegida"] == str(entorno["base"]) and r["version_elegida"] == "v-base"
+    assert _meta(entorno, "base")["huella_pesos"] == huella_pesos(entorno["base"])
 
 
 def test_el_ajustado_que_gana_informa_que_su_generalizacion_no_se_midio(entorno):
-    _juzgar_temas(entorno, "ajustado")
+    _juzgar_temas(entorno)
     r = _correr(entorno)
     assert r["dejar_fuera"]["codificador"] == "base"
     assert r["dejar_fuera"]["generalizacion_del_ajustado"] == "no medida"
 
 
 def test_informe_real_sin_textos_y_con_conteos(entorno):
-    _juzgar_temas(entorno, "ajustado")
+    _juzgar_temas(entorno)
     r = _correr(entorno)
     contenido = (entorno["salida"] / "v-aj.json").read_text(encoding="utf-8")
     assert "secret" not in contenido and "propio del sílabo" not in contenido
     assert r["humo"] is False and r["conteos"]["pares_en_desacuerdo"] == 0
     assert r["temas"]["k_reducido"] is False and r["n_silabos_prueba"] == 2
-    assert "umbral_con_entrenamiento" not in r["medidas"]
+    assert "umbral_con_entrenamiento" not in r["medidas"] and "problemas" not in r
+    assert str(entorno["tmp"]) not in contenido  # la carpeta elegida solo sale por consola
 
 
 def test_segunda_evaluacion_se_rechaza_tambien_con_otra_salida(entorno):
-    _juzgar_temas(entorno, "ajustado")
+    _juzgar_temas(entorno)
     _correr(entorno)
     with pytest.raises(YaEvaluada):
         _correr(entorno)
@@ -337,7 +337,7 @@ def test_segunda_evaluacion_se_rechaza_tambien_con_otra_salida(entorno):
 
 
 def test_el_candado_del_base_tambien_cuenta(entorno):
-    _juzgar_temas(entorno, "base")
+    _juzgar_temas(entorno, ("base",))
     _correr(entorno, modelo="base", base=None)  # el base evaluado solo
     with pytest.raises(YaEvaluada):
         _correr(entorno)
@@ -367,7 +367,7 @@ def test_humo_nunca_aprueba_no_usa_etiquetas_y_se_repite(entorno):
 
 
 def test_base_invalido_se_rechaza_antes_de_tomar_candados(entorno):
-    for cambio in ({"ajuste": True}, {"humo": True}, {"huella_separacion": "otra"}):
+    for cambio in ({"ajuste": True}, {"humo": True}, {"huella_separacion": "otra"}, {"base": "otro-modelo"}):
         meta = _meta(entorno, "base")
         (entorno["base"] / "metadatos.json").write_text(json.dumps({**meta, **cambio}))
         with pytest.raises(ValueError, match="base"):
@@ -390,27 +390,10 @@ def test_encabezados_invalidos_se_rechazan_antes_del_candado(entorno):
     assert not (entorno["ajustado"] / "evaluacion.candado").exists()
 
 
-def test_huella_de_separacion_que_no_coincide_no_aprueba(entorno):
-    sep = _meta(entorno, "ajustado")["separacion"]
-    for nombre in ("ajustado", "base"):
-        (entorno[nombre] / "metadatos.json").write_text(json.dumps({**_meta(entorno, nombre), "huella_separacion": "x"}))
-    _juzgar_temas(entorno, "ajustado")
-    r = _correr(entorno)
-    assert r["aprobado"] is False and any("huella" in p for p in r["problemas"])
-
-
-def test_silabo_de_prueba_ausente_no_aprueba(entorno):
-    _juzgar_temas(entorno, "ajustado")
-    prueba = _meta(entorno, "ajustado")["separacion"]["prueba"][0]
-    (entorno["silabos"] / f"{prueba}.json").unlink()
-    r = _correr(entorno)
-    assert r["aprobado"] is False and r["n_silabos_prueba"] == 1 and any("ausente" in p for p in r["problemas"])
-
-
 def test_temas_para_revisar_escribe_huella_grupo_texto_sin_candado(entorno):
     destino = entorno["datos"] / "rev.csv"
     r = ev.temas_para_revisar(entorno["ajustado"], entorno["silabos"], destino, k=3, vectorizar=_vector_falso("ajustado"))
-    filas = list(csv.DictReader(open(destino, encoding="utf-8")))
+    filas = list(csv.DictReader(open(destino, encoding="utf-8-sig")))
     assert filas and set(filas[0]) == {"huella_temas", "grupo", "texto"}
     assert {f["huella_temas"] for f in filas} == {r["huella"]}
     assert {f["grupo"] for f in filas} == {"0", "1", "2"} and r["k_reducido"] is False
@@ -451,7 +434,7 @@ def _csv_truncado(ruta):
 ])
 def test_argumento_malo_sale_con_2_sin_quemar_el_candado(entorno, caso):
     e = entorno
-    _juzgar_temas(e, "ajustado")
+    _juzgar_temas(e)
     restaurar = None
     cambios = {}
     if caso == "silabos_inexistente":
@@ -491,13 +474,219 @@ def test_argumento_malo_sale_con_2_sin_quemar_el_candado(entorno, caso):
     assert r["version"] == "v-aj" and (e["ajustado"] / "evaluacion.candado").exists()
 
 
+# --- errores recuperables: salen antes del candado y sin métricas -------------------------
+
+
+def _reescribir_pares(e, valor):
+    """Reescribe pares.csv con `valor(i, codigo, docente)` en lugar de la etiqueta."""
+    ruta = e["datos"] / "pares.csv"
+    original = ruta.read_bytes()
+    filas = list(csv.DictReader(open(ruta, encoding="utf-8")))
+    _csv(ruta, [(f["caso"], f["evidencia"], f["codigo_pf"], f["docente"],
+                 valor(int(f["caso"].split()[-1]), f["codigo_pf"], f["docente"])) for f in filas])
+    return ruta, original
+
+
+def _quitar(ruta):
+    original = ruta.read_bytes()
+    ruta.unlink()
+    return ruta, original
+
+
+def _cambiar_meta(e, cambio):
+    ruta = e["ajustado"] / "metadatos.json"
+    original = ruta.read_bytes()
+    ruta.write_text(json.dumps({**_meta(e, "ajustado"), **cambio}))
+    return ruta, original
+
+
+def _cambiar_temas(e, transformar):
+    ruta = e["datos"] / "temas.csv"
+    original = ruta.read_bytes()
+    filas = list(csv.reader(open(ruta, encoding="utf-8")))
+    _temas(ruta, transformar(filas[1:]))
+    return ruta, original
+
+
+def _huellas(e):
+    return [ev.temas_para_revisar(e[m], e["silabos"], e["tmp"] / "aux.csv", k=3, vectorizar=_vector_falso("ajustado"))["huella"]
+            for m in ("ajustado", "base")]
+
+
+def _romper(e, caso):
+    prueba = _meta(e, "ajustado")["separacion"]["prueba"]
+    aj, base = _huellas(e)
+    return {
+        "silabo_de_prueba_ausente": lambda: _quitar(e["silabos"] / f"{prueba[0]}.json"),
+        "huella_de_separacion": lambda: _cambiar_meta(e, {"huella_separacion": "x"}),
+        "pocos_positivos": lambda: _reescribir_pares(e, lambda i, c, d: "0" if c in prueba else str(i % 2)),
+        "positivos_en_desacuerdo": lambda: _reescribir_pares(
+            e, lambda i, c, d: str(i % 2) if c not in prueba else ("1" if d == "ana" else "0") if i % 2 else "0"),
+        "pocos_pares_para_kappa": lambda: _reescribir_pares(
+            e, lambda i, c, d: str(i % 2) if d == "ana" or i < 99 else "tal vez"),
+        "temas_sin_el_base": lambda: _cambiar_temas(e, lambda fs: [f for f in fs if f[0] != base]),
+        "temas_sin_el_ajustado": lambda: _cambiar_temas(e, lambda fs: [f for f in fs if f[0] != aj]),
+        "temas_sin_un_grupo": lambda: _cambiar_temas(e, lambda fs: [f for f in fs if not (f[0] == base and f[1] == "2")]),
+        "temas_con_un_grupo_de_mas": lambda: _cambiar_temas(e, lambda fs: fs + [[aj, "7", "ana", "si"]]),
+        "temas_sin_docente": lambda: _cambiar_temas(e, lambda fs: [[f[0], f[1], "", f[3]] if i == 0 else f for i, f in enumerate(fs)]),
+        "temas_sin_respuesta": lambda: _cambiar_temas(e, lambda fs: [[f[0], f[1], f[2], " "] if i == 0 else f for i, f in enumerate(fs)]),
+        "temas_vacios_de_otra_huella": lambda: _cambiar_temas(e, lambda fs: fs + [["otra", "0", "", ""]]),
+    }[caso]()
+
+
+@pytest.mark.parametrize("caso", [
+    "silabo_de_prueba_ausente", "huella_de_separacion", "pocos_positivos", "positivos_en_desacuerdo",
+    "pocos_pares_para_kappa", "temas_sin_el_base", "temas_sin_el_ajustado", "temas_sin_un_grupo",
+    "temas_con_un_grupo_de_mas", "temas_sin_docente", "temas_sin_respuesta", "temas_vacios_de_otra_huella",
+])
+def test_error_recuperable_no_quema_el_candado_y_la_corrida_siguiente_funciona(entorno, caso):
+    e = entorno
+    _juzgar_temas(e)
+    ruta, original = _romper(e, caso)
+    with pytest.raises(ev.EntradaInvalida):
+        _correr(e)
+    assert _sin_candados(e) and not (e["salida"] / "v-aj.json").exists()
+    ruta.write_bytes(original)
+    r = _correr(e)
+    assert r["aprobado"] is True, r
+    assert (e["ajustado"] / "evaluacion.candado").exists()
+
+
+def test_huella_de_separacion_falsa_en_ambos_no_quema_el_candado(entorno):
+    _juzgar_temas(entorno)
+    for nombre in ("ajustado", "base"):
+        (entorno[nombre] / "metadatos.json").write_text(json.dumps({**_meta(entorno, nombre), "huella_separacion": "x"}))
+    with pytest.raises(ev.EntradaInvalida, match="huella_separacion"):
+        _correr(entorno)
+    assert _sin_candados(entorno)
+
+
+def test_el_base_que_no_abre_no_quema_el_candado_y_se_abren_ambos(entorno):
+    _juzgar_temas(entorno)
+    abiertos = []
+
+    def abrir(carpeta):
+        abiertos.append(carpeta)
+        if carpeta == entorno["base"]:
+            raise RazonadorInvalido("falta tokenizer.json")
+
+    with pytest.raises(RazonadorInvalido):
+        _correr(entorno, abrir_modelo=abrir)
+    assert abiertos == [entorno["ajustado"], entorno["base"]] and _sin_candados(entorno)
+    assert _correr(entorno)["aprobado"] is True
+
+
+def test_main_convierte_un_modelo_que_no_abre_en_salida_2_sin_traza(entorno, capsys):
+    _juzgar_temas(entorno)  # las carpetas de prueba traen un ONNX de mentira: el real no abre
+    assert ev.main(_argv(entorno)) == 2
+    assert "entrada inválida" in capsys.readouterr().out
+    assert _sin_candados(entorno) and not (entorno["salida"] / "v-aj.json").exists()
+
+
+def test_metadatos_ausentes_salen_con_2_sin_traza(entorno, capsys):
+    (entorno["ajustado"] / "metadatos.json").unlink()
+    assert ev.main(_argv(entorno)) == 2
+    assert "metadatos" in capsys.readouterr().out
+
+
+def test_otra_carpeta_con_la_misma_version_se_rechaza(entorno):
+    _juzgar_temas(entorno)
+    _correr(entorno)
+    entorno["copia"], entorno["copia_base"] = entorno["tmp"] / "copia", entorno["tmp"] / "copia_base"
+    for origen, destino in (("ajustado", "copia"), ("base", "copia_base")):
+        shutil.copytree(entorno[origen], entorno[destino], ignore=shutil.ignore_patterns("evaluacion.candado"))
+    with pytest.raises(YaEvaluada):
+        _correr(entorno, modelo="copia", base="copia_base")
+    assert not (entorno["copia"] / "evaluacion.candado").exists()
+    assert not (entorno["copia_base"] / "evaluacion.candado").exists()
+
+
+def test_un_base_ya_evaluado_copiado_a_otra_carpeta_se_rechaza(entorno):
+    _juzgar_temas(entorno)
+    _correr(entorno, modelo="base", base=None)
+    entorno["copia_base"] = entorno["tmp"] / "copia_base"
+    shutil.copytree(entorno["base"], entorno["copia_base"], ignore=shutil.ignore_patterns("evaluacion.candado"))
+    with pytest.raises(YaEvaluada):
+        _correr(entorno, base="copia_base")
+    assert _sin_candados({"ajustado": entorno["ajustado"], "base": entorno["copia_base"]})
+
+
+def test_un_informe_en_la_salida_de_omision_cuenta_aunque_se_cambie_salida(entorno, monkeypatch):
+    _juzgar_temas(entorno)
+    omision = entorno["tmp"] / "omision"
+    omision.mkdir()
+    (omision / "v-aj.json").write_text("{}")
+    monkeypatch.setattr(ev, "SALIDA_POR_DEFECTO", omision)
+    with pytest.raises(YaEvaluada):
+        _correr(entorno)
+    assert _sin_candados(entorno)
+
+
+def test_la_consola_nombra_el_modelo_elegido_y_su_carpeta(entorno, monkeypatch, capsys):
+    monkeypatch.setattr(ev, "ejecutar", lambda *a, **k: {
+        "version": "v-aj", "humo": False, "aprobado": True, "ruta": "informe.json",
+        "modelo_elegido": "base", "carpeta_elegida": str(entorno["base"])})
+    assert ev.main(_argv(entorno)) == 0
+    salida = capsys.readouterr().out
+    assert "modelo_elegido=base" in salida and f"carpeta={entorno['base']}" in salida
+
+
+# --- CSV de docentes: Excel, BOM, separador y plantilla ------------------------------------
+
+
+@pytest.mark.parametrize("codificacion", ["utf-8", "utf-8-sig"])
+@pytest.mark.parametrize("separador", [",", ";"])
+def test_los_csv_aceptan_bom_y_ambos_separadores(tmp_path, codificacion, separador):
+    ruta = tmp_path / "pares.csv"
+    with open(ruta, "w", encoding=codificacion, newline="") as f:
+        w = csv.writer(f, delimiter=separador)
+        w.writerow(("caso", "evidencia", "codigo_pf", "docente", "parecido"))
+        w.writerows([("c1, con coma", "e1; con punto y coma", "PF-A", d, "sí") for d in ("ana", "luis")])
+    r = cargar_pares(ruta, ["PF-A"], [])
+    assert [(p["caso"], p["evidencia"], p["etiqueta"]) for p in r["pares"]] == [("c1, con coma", "e1; con punto y coma", 1)]
+    assert r["filas_valor_invalido"] == 0
+
+
+def test_csv_que_no_es_utf8_se_rechaza_con_entrada_invalida(tmp_path):
+    ruta = tmp_path / "temas.csv"
+    ruta.write_bytes("huella_temas,grupo,docente,tiene_sentido\nH,0,ana,sí\n".encode("cp1252"))
+    with pytest.raises(ev.EntradaInvalida, match="temas.csv"):
+        grupos_con_sentido(ruta, "H", {"0"})
+
+
+def test_temas_para_revisar_escribe_la_plantilla_y_los_archivos_llevan_bom(entorno):
+    destino = entorno["datos"] / "rev.csv"
+    r = ev.temas_para_revisar(entorno["ajustado"], entorno["silabos"], destino, k=3, vectorizar=_vector_falso("ajustado"))
+    plantilla = entorno["datos"] / "temas-plantilla-v-aj.csv"
+    assert r["plantilla"] == str(plantilla)
+    assert destino.read_bytes().startswith(b"\xef\xbb\xbf") and plantilla.read_bytes().startswith(b"\xef\xbb\xbf")
+    filas = list(csv.reader(open(plantilla, encoding="utf-8-sig", newline="")))
+    assert filas[0] == ["huella_temas", "grupo", "docente", "tiene_sentido"]
+    assert filas[1:] == [[r["huella"], str(g), "", ""] for g in range(3)]
+
+
+def test_las_plantillas_de_ambos_pegadas_en_un_solo_csv_de_excel_aprueban(entorno):
+    """El camino de la guía: cada docente llena su copia y se pegan en un solo temas.csv con `;` y BOM."""
+    filas = []
+    for modelo, version in (("ajustado", "v-aj"), ("base", "v-base")):
+        ev.temas_para_revisar(entorno[modelo], entorno["silabos"], entorno["datos"] / f"rev-{modelo}.csv", k=3,
+                              vectorizar=_vector_falso("ajustado"))
+        lector = csv.DictReader(open(entorno["datos"] / f"temas-plantilla-{version}.csv", encoding="utf-8-sig", newline=""))
+        filas += [(f["huella_temas"], f["grupo"], d, "sí") for f in lector for d in ("D1", "D2")]
+    with open(entorno["datos"] / "temas.csv", "w", encoding="utf-8-sig", newline="") as f:
+        w = csv.writer(f, delimiter=";")
+        w.writerow(ev.CABECERA_TEMAS)
+        w.writerows(filas)
+    assert _correr(entorno)["aprobado"] is True
+
+
 def test_invertir_las_etiquetas_de_prueba_no_mueve_el_umbral_de_ningun_candidato(tmp_path, datos):
     (tmp_path / "a").mkdir()
     (tmp_path / "b").mkdir()
     a = _construir(tmp_path / "a", datos)
     b = _construir(tmp_path / "b", datos, invertir_prueba=True)
     for e in (a, b):
-        _juzgar_temas(e, "ajustado")
+        _juzgar_temas(e)
     ra, rb = _correr(a), _correr(b)
     assert set(ra["candidatos"]) == set(rb["candidatos"]) == {"ajustado", "base"}
     for nombre in ra["candidatos"]:
@@ -507,14 +696,14 @@ def test_invertir_las_etiquetas_de_prueba_no_mueve_el_umbral_de_ningun_candidato
 
 
 def test_dejar_fuera_mide_con_el_base_aunque_gane_el_ajustado(entorno):
-    _juzgar_temas(entorno, "ajustado")
+    _juzgar_temas(entorno)
     r = _correr(entorno)  # el ajustado es bueno; el base, débil
     assert r["modelo_elegido"] == "ajustado"
     assert r["dejar_fuera"]["peor_f1"] < 0.9  # con el ajustado sería ~1,0
 
 
 def test_pares_de_silabos_desconocidos_se_cuentan_y_no_entran_a_dejar_fuera(entorno):
-    _juzgar_temas(entorno, "ajustado")
+    _juzgar_temas(entorno)
     perdido = entorno["sep"].entrenamiento[0]
     (entorno["silabos"] / f"{perdido}.json").unlink()
     esperados = sum(1 for f in csv.DictReader(open(entorno["datos"] / "pares.csv", encoding="utf-8"))

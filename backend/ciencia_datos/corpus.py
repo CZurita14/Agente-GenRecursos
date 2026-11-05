@@ -59,13 +59,29 @@ def fragmentos(silabo: SilaboUTI) -> list[Fragmento]:
 
 
 def leer_carpeta(carpeta: Path) -> tuple[list[SilaboUTI], list[str]]:
+    """Los sílabos de `leer_con_origen`, sin su ruta."""
+    con_origen, rechazados = leer_con_origen(carpeta)
+    return [s for s, _ in con_origen], rechazados
+
+
+def por_carpeta(rutas: list[Path], raiz: Path) -> dict[str, int]:
+    """Cuántas rutas hay por carpeta de primer nivel bajo `raiz` (`.` si están en ella), sin nombres de archivo."""
+    cuenta: dict[str, int] = {}
+    for ruta in rutas:
+        partes = ruta.relative_to(raiz).parts
+        nombre = partes[0] if len(partes) > 1 else "."
+        cuenta[nombre] = cuenta.get(nombre, 0) + 1
+    return dict(sorted(cuenta.items()))
+
+
+def leer_con_origen(carpeta: Path) -> tuple[list[tuple[SilaboUTI, Path]], list[str]]:
     """Lee `*.pdf` y `*.json` (un `SilaboUTI` serializado) de la carpeta y sus subcarpetas.
 
     Conserva una versión por código de proyecto formativo: la de `aprobado` más
     reciente y, a igualdad, la de mayor nombre de archivo. Devuelve también los
     nombres de archivo rechazados, sin el motivo, que podría contener texto.
     """
-    elegidos: dict[str, tuple[tuple, SilaboUTI]] = {}
+    elegidos: dict[str, tuple[tuple, SilaboUTI, Path]] = {}
     rechazados: list[str] = []
     for ruta in sorted(Path(carpeta).rglob("*")):
         if ruta.suffix.lower() not in (".pdf", ".json") or not ruta.is_file():
@@ -82,5 +98,5 @@ def leer_carpeta(carpeta: Path) -> tuple[list[SilaboUTI], list[str]]:
         clave = (silabo.proyecto_formativo.aprobado, ruta.name)
         codigo = silabo.proyecto_formativo.codigo
         if codigo not in elegidos or clave > elegidos[codigo][0]:
-            elegidos[codigo] = (clave, silabo)
-    return [s for _, s in elegidos.values()], rechazados
+            elegidos[codigo] = (clave, silabo, ruta)
+    return [(s, r) for _, s, r in elegidos.values()], rechazados

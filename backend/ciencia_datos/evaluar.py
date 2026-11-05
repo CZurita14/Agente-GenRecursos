@@ -6,15 +6,17 @@ contienen cifras y huellas, nunca textos. Las métricas indefinidas se escriben 
 `null` y nunca cumplen un criterio.
 
 Flujo con docentes:
-1. `temas-para-revisar` agrupa los fragmentos de prueba y escribe `huella_temas,grupo,texto`.
+1. `temas-para-revisar` agrupa los fragmentos de prueba y escribe `huella_temas,grupo,texto`,
+   más una plantilla por grupo para llenar.
 2. Los docentes juzgan cada grupo en `temas.csv` (`huella_temas,grupo,docente,tiene_sentido`).
-3. `evaluar` solo usa las filas con la huella del modelo elegido.
+3. `evaluar` solo puntúa las filas con la huella del modelo elegido.
 Hasta correr la evaluación no se sabe cuál de los dos candidatos (ajustado o base) gana: los
 docentes deben juzgar los temas de AMBOS, ejecutando `temas-para-revisar` sobre cada carpeta.
-Si faltan los de quien gana, la fracción de grupos con sentido es null y no se aprueba.
+Si faltan grupos de alguno, la evaluación no empieza.
 
-El candado de «una sola vez» es `evaluacion.candado` dentro de la carpeta de cada modelo:
-`--salida` solo decide dónde se escribe el informe.
+El candado de «una sola vez» es `evaluacion.candado` dentro de la carpeta de cada modelo, y
+también cuenta un informe `<version>.json` ya escrito. `--salida` solo decide dónde se escribe
+el informe. Todo error recuperable sale antes del candado y sin calcular ninguna métrica.
 
 Los vectores salen de `app.razonador` (el mismo código que sirve en producción) mediante
 `vectores`, que las pruebas reemplazan por vectores fijos.
@@ -31,10 +33,10 @@ import numpy as np
 
 from app.agentes.facultades import cargar_catalogo
 from app.agentes.planificador import _casos_libres
-from app.razonador import Razonador
+from app.razonador import Razonador, RazonadorInvalido, _leer_metadatos, huella_pesos
 from ciencia_datos import consola_utf8
 from ciencia_datos.corpus import fragmentos, leer_carpeta
-from ciencia_datos.entrenar import RAIZ, codigo_a_facultad, huella
+from ciencia_datos.entrenar import CANDADO, RAIZ, codigo_a_facultad, huella
 from ciencia_datos.estadistica import (  # noqa: F401  (se reexportan: siguen importables desde aquí)
     EXHAUSTIVIDAD_UMBRAL, agrupar, cumple, elegir_umbral, estabilidad, kappa, mcnemar,
     mcnemar_conteos, metricas, silueta_frente_al_azar, wilson,
@@ -51,7 +53,6 @@ MIN_POSITIVOS_PRUEBA = 60
 K_POR_OMISION = 8
 SEMILLA = 42
 SALIDA_POR_DEFECTO = RAIZ / "pruebas" / "ciencia_datos"
-CANDADO = "evaluacion.candado"
 CABECERA_PARES = ("caso", "evidencia", "codigo_pf", "docente", "parecido")
 CABECERA_TEMAS = ("huella_temas", "grupo", "docente", "tiene_sentido")
 _SI = {"1", "si", "sí", "true", "verdadero", "s", "x", "yes"}
@@ -102,13 +103,21 @@ def _valor(texto: str) -> int | None:
 
 
 def _leer_csv(ruta: Path, requeridas: tuple[str, ...] = ()) -> list[dict]:
-    """Filas del CSV; con `requeridas`, exige las columnas y rechaza filas cortas o con sobrantes."""
-    with open(ruta, encoding="utf-8-sig", newline="") as f:
-        lector = csv.DictReader(f)
-        falta = [c for c in requeridas if c not in (lector.fieldnames or [])]
-        if falta:
-            raise EntradaInvalida(f"{ruta.name}: faltan columnas {', '.join(falta)}")
-        filas = list(lector)
+    """Filas del CSV, con o sin BOM y con `,` o `;` (Excel según la región).
+
+    Con `requeridas`, exige las columnas y rechaza filas cortas o con sobrantes.
+    """
+    try:
+        with open(ruta, encoding="utf-8-sig", newline="") as f:
+            cabecera = f.readline()
+            f.seek(0)
+            lector = csv.DictReader(f, delimiter=";" if cabecera.count(";") > cabecera.count(",") else ",")
+            falta = [c for c in requeridas if c not in (lector.fieldnames or [])]
+            if falta:
+                raise EntradaInvalida(f"{ruta.name}: faltan columnas {', '.join(falta)}")
+            filas = list(lector)
+    except (UnicodeDecodeError, csv.Error):
+        raise EntradaInvalida(f"{ruta.name}: no se puede leer; guárdelo como CSV UTF-8") from None
     for n, fila in enumerate(filas, start=2):
         if None in fila or any(fila.get(c) is None for c in requeridas):
             raise EntradaInvalida(f"{ruta.name}: la fila {n} está incompleta o tiene columnas de más")
@@ -207,22 +216,29 @@ def asignar_temas(X, k: int, version: str) -> tuple[np.ndarray, int, str] | None
 def temas_para_revisar(modelo: Path, silabos: Path, salida: Path, *, k: int = K_POR_OMISION, vectorizar=vectores) -> dict:
     """Escribe `huella_temas,grupo,texto` para que los docentes juzguen cada grupo.
 
-    No imprime textos, no calcula métricas y no toma el candado.
+    Junto a `salida` deja `temas-plantilla-<version>.csv`, una fila por grupo con las columnas
+    de `temas.csv` y `docente` y `tiene_sentido` vacías. Los dos archivos van en `utf-8-sig`
+    para que Excel lea los acentos. No imprime textos, no calcula métricas y no toma el candado.
     """
-    meta = json.loads((Path(modelo) / "metadatos.json").read_text(encoding="utf-8"))
+    meta = _meta(modelo)
     lista, _ = leer_carpeta(Path(silabos))
-    textos = _textos_de_prueba(lista, meta["separacion"]["prueba"])
+    textos = _textos_de_prueba(lista, _separacion(meta)["prueba"])
     asignacion = asignar_temas(vectorizar(Path(modelo), textos), k, meta["version"]) if len(textos) > 2 else None
     if asignacion is None:
         raise EntradaInvalida("muy pocos textos de prueba para agrupar")
     etiquetas, k_usado, h = asignacion
     salida = Path(salida)
     salida.parent.mkdir(parents=True, exist_ok=True)
-    with open(salida, "w", encoding="utf-8", newline="") as f:
+    with open(salida, "w", encoding="utf-8-sig", newline="") as f:
         w = csv.writer(f)
         w.writerow(["huella_temas", "grupo", "texto"])
         w.writerows((h, int(g), t) for g, t in zip(etiquetas, textos))
-    return {"huella": h, "k": k_usado, "k_reducido": k_usado < k, "n_textos": len(textos)}
+    plantilla = salida.parent / f"temas-plantilla-{meta['version']}.csv"
+    with open(plantilla, "w", encoding="utf-8-sig", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(CABECERA_TEMAS)
+        w.writerows((h, g, "", "") for g in range(k_usado))
+    return {"huella": h, "k": k_usado, "k_reducido": k_usado < k, "n_textos": len(textos), "plantilla": str(plantilla)}
 
 
 def _temas(X, k: int, version: str) -> dict:
@@ -316,14 +332,6 @@ def _limpio(x):
     return x
 
 
-def _sha(ruta: Path) -> str:
-    h = hashlib.sha256()
-    with open(ruta, "rb") as f:
-        for bloque in iter(lambda: f.read(1 << 20), b""):
-            h.update(bloque)
-    return h.hexdigest()
-
-
 def escribir_informe(informe: dict, salida: Path, version: str, humo: bool, completo: bool = True) -> Path:
     """`<version>.json`, `<version>-humo.json` o `<version>-incompleta.json`. No es el candado."""
     salida = Path(salida)
@@ -352,7 +360,14 @@ def _tomar_candados(carpetas: list[Path]) -> None:
 
 
 def _meta(carpeta: Path) -> dict:
-    return json.loads((Path(carpeta) / "metadatos.json").read_text(encoding="utf-8"))
+    return _leer_metadatos(Path(carpeta))
+
+
+def _separacion(meta: dict) -> dict:
+    sep = meta.get("separacion")
+    if not isinstance(sep, dict) or "prueba" not in sep or "entrenamiento" not in sep:
+        raise EntradaInvalida("metadatos.json no trae la separación")
+    return sep
 
 
 def _validar_entradas(modelo: Path, base_modelo: Path | None, meta: dict, silabos: Path, salida: Path, k: int) -> None:
@@ -381,8 +396,66 @@ def _validar_entradas(modelo: Path, base_modelo: Path | None, meta: dict, silabo
     if not (base_modelo / "onnx" / "model.onnx").is_file():
         raise EntradaInvalida("el base no tiene onnx/model.onnx")
     mb = _meta(base_modelo)
-    if mb.get("ajuste") is not False or mb.get("humo") or mb.get("huella_separacion") != meta.get("huella_separacion"):
-        raise EntradaInvalida("--base-modelo no es un base válido: exige ajuste false, humo false y la misma separación")
+    if (mb.get("ajuste") is not False or mb.get("humo") or mb.get("huella_separacion") != meta.get("huella_separacion")
+            or mb.get("base") != meta.get("base")):
+        raise EntradaInvalida("--base-modelo no es un base válido: exige ajuste false, humo false, "
+                              "la misma separación y el mismo modelo base que el ajustado")
+
+
+def _rechazar_si_ya_evaluada(carpetas: list[Path], salida: Path) -> None:
+    """Una versión se evalúa una vez: cuenta el candado y también el informe de otra carpeta con su nombre."""
+    for c in carpetas:
+        if (c / CANDADO).exists():
+            raise YaEvaluada(str(c))
+        version = _meta(c)["version"]
+        if any((d / f"{version}.json").exists() for d in (salida, SALIDA_POR_DEFECTO)):
+            raise YaEvaluada(f"ya existe el informe de la versión {version}")
+
+
+def _comprobar_temas(temas_csv: Path, carpetas: list[Path], textos: list[str], k: int, vectorizar) -> None:
+    """`temas.csv` trae, para cada candidato, su huella y exactamente sus grupos, sin celdas vacías."""
+    filas = _leer_csv(temas_csv, CABECERA_TEMAS)
+    for n, f in enumerate(filas, start=2):
+        if not f["docente"].strip() or not f["tiene_sentido"].strip():
+            raise EntradaInvalida(f"{temas_csv.name}: la fila {n} tiene docente o tiene_sentido vacíos")
+    for c in carpetas:
+        asignacion = asignar_temas(vectorizar(c, textos), k, _meta(c)["version"]) if len(textos) > 2 else None
+        if asignacion is None:
+            raise EntradaInvalida("muy pocos textos de prueba para agrupar")
+        _, k_usado, h = asignacion
+        juzgados = {f["grupo"].strip() for f in filas
+                    if f["huella_temas"].strip() == h and _valor(f["tiene_sentido"]) is not None}
+        if juzgados != {str(i) for i in range(k_usado)}:
+            raise EntradaInvalida(f"{temas_csv.name}: faltan o sobran grupos de {c.name} ({len(juzgados)} de {k_usado}); "
+                                  "revise que venga su plantilla y que --k sea el de temas-para-revisar")
+
+
+def _comprobar_antes_del_candado(carpetas: list[Path], meta: dict, silabos: Path, pares_csv: Path, temas_csv: Path,
+                                 k: int, vectorizar, abrir_modelo) -> tuple[list, dict]:
+    """Todo error recuperable sale aquí, sin calcular métricas. Devuelve los sílabos y las etiquetas leídas."""
+    for c in carpetas:
+        abrir_modelo(c)
+    sep = _separacion(meta)
+    if huella(sep) != meta.get("huella_separacion"):
+        raise EntradaInvalida("huella_separacion no coincide con la separación guardada")
+    lista, _ = leer_carpeta(silabos)
+    faltan = len(set(sep["prueba"]) - {s.proyecto_formativo.codigo for s in lista})
+    if faltan:
+        raise EntradaInvalida(f"sílabo de prueba ausente: faltan {faltan}")
+    cp = cargar_pares(pares_csv, sep["entrenamiento"], sep["prueba"])
+    positivos = sum(p["etiqueta"] for p in cp["pares"] if p["grupo"] == "prueba")
+    if positivos < MIN_POSITIVOS_PRUEBA:
+        raise EntradaInvalida(f"{pares_csv.name}: {positivos} positivos en el grupo de prueba tras quitar desacuerdos; "
+                              f"se exigen {MIN_POSITIVOS_PRUEBA}")
+    if cp["pares_para_kappa"] < MIN_PARES_KAPPA:
+        raise EntradaInvalida(f"{pares_csv.name}: {cp['pares_para_kappa']} pares comunes entre dos docentes; "
+                              f"se exigen {MIN_PARES_KAPPA}")
+    _comprobar_temas(temas_csv, carpetas, _textos_de_prueba(lista, sep["prueba"]), k, vectorizar)
+    return lista, cp
+
+
+def _abrir_modelo(carpeta: Path) -> None:
+    Razonador.cargar(Path(carpeta), exigir_aprobado=False)
 
 
 def ejecutar(
@@ -395,9 +468,10 @@ def ejecutar(
     humo: bool = False,
     k: int = K_POR_OMISION,
     vectorizar=vectores,
+    abrir_modelo=_abrir_modelo,
 ) -> dict:
-    """Evalúa `modelo` y escribe el informe. Lanza `YaEvaluada` si el modelo ya se evaluó
-    y `EntradaInvalida` (antes de tomar candados) si los argumentos o archivos no sirven."""
+    """Evalúa `modelo` y escribe el informe. Lanza `YaEvaluada` si el modelo ya se evaluó, y
+    `EntradaInvalida` o `RazonadorInvalido` (antes de tomar candados) si la evaluación no puede salir bien."""
     modelo, salida, datos = Path(modelo), Path(salida), Path(datos)
     meta = _meta(modelo)
     version = meta["version"]
@@ -407,9 +481,9 @@ def ejecutar(
         raise EntradaInvalida("el modelo tiene humo: true: solo se evalúa con --humo")
     _validar_entradas(modelo, base_modelo, meta, Path(silabos), salida, k)
     base_modelo = Path(base_modelo) if base_modelo is not None else None
-    sep = meta["separacion"]
+    sep = _separacion(meta)
     informe = {"version": version, "humo": humo, "aprobado": False,
-               "huella_separacion": meta.get("huella_separacion"), "huella_modelo": _sha(modelo / "onnx" / "model.onnx")}
+               "huella_separacion": meta.get("huella_separacion"), "huella_modelo": huella_pesos(modelo)}
 
     if humo:
         lista, _ = leer_carpeta(Path(silabos))
@@ -419,6 +493,8 @@ def ejecutar(
         informe["ruta"] = str(escribir_informe(informe, salida, version, True))
         return informe
 
+    carpetas = [modelo] + ([base_modelo] if base_modelo else [])
+    _rechazar_si_ya_evaluada(carpetas, salida)
     pares_csv, temas_csv = datos / "pares.csv", datos / "temas.csv"
     for r, cab in ((pares_csv, CABECERA_PARES), (temas_csv, CABECERA_TEMAS)):
         if r.exists():
@@ -429,18 +505,11 @@ def ejecutar(
         informe["ruta"] = str(escribir_informe(informe, salida, version, False, completo=False))
         return informe
 
-    _tomar_candados([modelo] + ([base_modelo] if base_modelo else []))
+    lista, cp = _comprobar_antes_del_candado(carpetas, meta, Path(silabos), pares_csv, temas_csv, k, vectorizar, abrir_modelo)
 
-    lista, _ = leer_carpeta(Path(silabos))
-    leidos = {s.proyecto_formativo.codigo for s in lista}
-    problemas = []
-    n_prueba = len(leidos & set(sep["prueba"]))
-    if n_prueba < len(sep["prueba"]):
-        problemas.append(f"sílabo de prueba ausente: faltan {len(sep['prueba']) - n_prueba}")
-    if huella(sep) != meta.get("huella_separacion"):
-        problemas.append("huella_separacion no coincide con la separación guardada")
+    _tomar_candados(carpetas)
 
-    cp = cargar_pares(pares_csv, sep["entrenamiento"], sep["prueba"])
+    n_prueba = len({s.proyecto_formativo.codigo for s in lista} & set(sep["prueba"]))
     ent = [p for p in cp["pares"] if p["grupo"] == "entrenamiento"]
     pru = [p for p in cp["pares"] if p["grupo"] == "prueba"]
     y_pru = np.array([p["etiqueta"] for p in pru], bool)
@@ -499,12 +568,12 @@ def ejecutar(
     }
     sin_decision = nota is not None and nombre == "ajustado"
     veredicto = dictaminar(medidas)
-    aprobado = veredicto["aprobado"] and not problemas and not sin_decision
+    aprobado = veredicto["aprobado"] and not sin_decision
     quitar = ("pred", "_vec")
     informe |= {
-        "aprobado": aprobado, "criterios": veredicto["criterios"], "medidas": medidas, "problemas": problemas,
-        "modelo_elegido": nombre, "nota_modelo": nota, "umbral": elegido["umbral"],
-        "huella_modelo_elegido": _sha(carpeta_elegida / "onnx" / "model.onnx"), "n_silabos_prueba": n_prueba,
+        "aprobado": aprobado, "criterios": veredicto["criterios"], "medidas": medidas,
+        "modelo_elegido": nombre, "version_elegida": version_elegida, "nota_modelo": nota, "umbral": elegido["umbral"],
+        "huella_modelo_elegido": huella_pesos(carpeta_elegida), "n_silabos_prueba": n_prueba,
         "n_pares_entrenamiento": len(ent), "n_pares_prueba": len(pru),
         "conteos": {k_: v for k_, v in cp.items() if k_ not in ("pares", "kappa")},
         "candidatos": {n: {k_: v for k_, v in c.items() if k_ not in quitar} for n, c in candidatos.items()},
@@ -516,9 +585,11 @@ def ejecutar(
         "n_grupos_temas": sentido["n_grupos"], "dejar_fuera": fuera,
     }
     informe["ruta"] = str(escribir_informe(informe, salida, version, False))
+    informe["carpeta_elegida"] = str(carpeta_elegida)  # Solo para la consola: el informe no lleva rutas.
     if aprobado:
         ruta = carpeta_elegida / "metadatos.json"
-        ruta.write_text(json.dumps(_meta(carpeta_elegida) | {"aprobado": True, "umbral": elegido["umbral"]},
+        ruta.write_text(json.dumps(_meta(carpeta_elegida) | {"aprobado": True, "umbral": elegido["umbral"],
+                                                             "huella_pesos": huella_pesos(carpeta_elegida)},
                                    ensure_ascii=False, indent=2), encoding="utf-8")
     return informe
 
@@ -536,10 +607,10 @@ def _main_temas(argv: list[str]) -> int:
     a = p.parse_args(argv)
     try:
         r = temas_para_revisar(a.modelo, a.silabos, a.salida, k=a.k)
-    except EntradaInvalida as e:
+    except (EntradaInvalida, RazonadorInvalido) as e:
         print(f"entrada inválida: {e}")
         return 2
-    print(f"huella_temas={r['huella']} k={r['k']} k_reducido={r['k_reducido']} textos={r['n_textos']}")
+    print(f"huella_temas={r['huella']} k={r['k']} k_reducido={r['k_reducido']} textos={r['n_textos']} plantilla={r['plantilla']}")
     return 0
 
 
@@ -562,10 +633,12 @@ def main(argv: list[str] | None = None) -> int:
     except YaEvaluada as e:
         print(f"ya evaluada: {e}")
         return 1
-    except EntradaInvalida as e:
+    except (EntradaInvalida, RazonadorInvalido) as e:
         print(f"entrada inválida: {e}")
         return 2
     print(f"version={r['version']} humo={r['humo']} aprobado={r['aprobado']} informe={r['ruta']}")
+    if r.get("modelo_elegido"):
+        print(f"modelo_elegido={r['modelo_elegido']} carpeta={r['carpeta_elegida']}")
     return 0
 
 

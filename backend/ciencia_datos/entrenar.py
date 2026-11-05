@@ -17,7 +17,7 @@ from pathlib import Path
 
 from app.agentes.facultades import cargar_catalogo, normalizar
 from ciencia_datos import consola_utf8
-from ciencia_datos.corpus import fragmentos, leer_carpeta
+from ciencia_datos.corpus import fragmentos, leer_con_origen, por_carpeta
 from ciencia_datos.separar import MIN_FACULTADES, MIN_POR_FACULTAD, cumple_minimo, separar
 
 BASE_POR_DEFECTO = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
@@ -29,6 +29,7 @@ TASA = 2e-5
 LONGITUD_MAXIMA = 128
 TEXTOS_HUMO = 64
 SEMILLA = 42
+CANDADO = "evaluacion.candado"
 _ENTRADAS = ("input_ids", "attention_mask", "token_type_ids")
 
 
@@ -111,6 +112,17 @@ def _exportar_onnx(modelo, destino: Path) -> None:
         )
 
 
+def _versiones(destino: Path) -> dict:
+    """Con qué se exportó, para poder repetirlo: torch, onnxruntime y el opset del grafo."""
+    import onnx
+    import onnxruntime
+    import torch
+
+    grafo = onnx.load(str(destino), load_external_data=False)
+    opset = next(o.version for o in grafo.opset_import if o.domain in ("", "ai.onnx"))
+    return {"torch": torch.__version__, "onnxruntime": onnxruntime.__version__, "opset": opset}
+
+
 def entrenar(
     textos: list[str],
     base: str,
@@ -147,6 +159,7 @@ def entrenar(
         "epocas": epocas if ajuste else 0,
         "n_fragmentos": len(usados) if ajuste else 0,
         "dispositivo": dispositivo,
+        "versiones": _versiones(salida / "onnx" / "model.onnx"),
         "n_silabos": 0,
         "huella_separacion": None,
     }
@@ -185,7 +198,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--sin-ajuste", action="store_true", help="exporta el modelo base sin entrenar")
     a = p.parse_args(argv)
 
-    silabos, rechazados = leer_carpeta(a.silabos)
+    if (a.salida / "metadatos.json").exists() or (a.salida / CANDADO).exists():
+        raise SystemExit("--salida ya contiene un modelo y no se sobrescribe; use otra carpeta (una versión nueva).")
+    con_origen, rechazados = leer_con_origen(a.silabos)
+    silabos = [s for s, _ in con_origen]
     catalogo = cargar_catalogo(RAIZ / "kb" / "catalogo.yaml")
     mapa, sin_sigla = codigo_a_facultad(silabos, catalogo)
     if not a.humo and not cumple_minimo(mapa):
@@ -240,6 +256,8 @@ def main(argv: list[str] | None = None) -> int:
         f"entrenamiento={len(sep.entrenamiento)} prueba={len(sep.prueba)} "
         f"fragmentos={n_entrenados} excluidos_por_prueba={excluidos} facultades_sin_sigla={sin_sigla} avisos={len(sep.avisos)}"
     )
+    recuento = por_carpeta([r for _, r in con_origen], a.silabos)
+    print("por_carpeta: " + " ".join(f"{nombre}={n}" for nombre, n in recuento.items()))
     return 0
 
 
