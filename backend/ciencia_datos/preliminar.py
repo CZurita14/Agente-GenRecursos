@@ -88,9 +88,12 @@ def _control_real(Xr, fac_real, Xp, fac_prueba, k: int = K) -> dict:
 
 
 def _medir(X, textos_marca: dict, k: int = K) -> dict:
-    """Todas las medidas de un modelo; `textos_marca` trae etiquetas por fragmento (sin texto)."""
+    """Todas las medidas de un modelo; `textos_marca` trae etiquetas por fragmento (sin texto), prueba primero."""
     n_p = textos_marca["n_prueba"]
-    carrera, facultad, silabo = textos_marca["carrera"], np.asarray(textos_marca["facultad"]), textos_marca["silabo"]
+    todas = np.asarray(textos_marca["facultad"])
+    # Las cifras globales usan solo la prueba simulada; los reales entran únicamente en `control_real`.
+    Xr, X = X[n_p:], X[:n_p]
+    carrera, facultad, silabo = textos_marca["carrera"][:n_p], todas[:n_p], textos_marca["silabo"][:n_p]
     prec_fac = _precisiones(X, facultad, silabo, k)
     prec_car = _precisiones(X, carrera, silabo, k)
     por_facultad = {}
@@ -109,7 +112,7 @@ def _medir(X, textos_marca: dict, k: int = K) -> dict:
         "silueta_facultad_barajada": _silueta_o_none(X, barajada),
         "por_facultad": por_facultad,
         "control_real": _control_real(
-            X[n_p:], textos_marca["facultad"][n_p:], X[:n_p], textos_marca["facultad"][:n_p], k
+            Xr, todas[n_p:], X, facultad, k
         ),
     }
 

@@ -167,3 +167,23 @@ def test_cli_entrada_invalida_sale_con_2(tmp_path, entorno, capsys):
                    "--silabos", str(entorno["silabos"]), "--salida", str(entorno["salida"])])
     assert codigo == 2
     assert not entorno["salida"].exists()
+
+
+def test_los_reales_no_cambian_la_cifra_global(tmp_path, entorno):
+    con = _correr(entorno)["candidatos"]
+    (tmp_path / "otro").mkdir()
+    sin = ejecutar_preliminar(
+        _modelo(tmp_path / "otro", "v1", control=()), _modelo(tmp_path / "otro", "base", ajuste=False, control=()),
+        [entorno["silabos"]], tmp_path / "otro" / "informes", vectorizar=_vectores_falsos,
+    )["candidatos"]
+    for nombre in ("ajustado", "base"):
+        for clave in ("precision_5_carrera", "precision_5_facultad", "silueta_facultad",
+                      "silueta_facultad_barajada", "por_facultad"):
+            assert con[nombre][clave] == sin[nombre][clave]
+    assert sin["ajustado"]["control_real"]["precision_5_facultad"] is None
+
+
+def test_k_mayor_que_los_vecinos_disponibles():
+    X = np.array([[1, 0], [0.9, 0.1], [0.95, 0.05]], dtype=float)
+    # Cada fragmento solo tiene 2 vecinos de otros sílabos; k=10 usa los disponibles.
+    assert precision_k(X, ["A", "A", "B"], ["s1", "s2", "s3"], k=10) == pytest.approx(1 / 3)
