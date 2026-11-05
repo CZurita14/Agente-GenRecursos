@@ -42,6 +42,15 @@ def test_copia_imagen_no_incluye_entorno_o_silabos_reales():
     assert 'USER 10001:10001' in backend
 
 
+def test_la_etapa_de_pruebas_no_pide_lo_que_no_esta_en_la_imagen():
+    """`ciencia_datos` y PyTorch no entran en la imagen: ni sus pruebas ni la marca `modelo` pueden correr allí."""
+    backend = (RAIZ/'infra/Dockerfile.backend').read_text(encoding='utf-8')
+    assert 'COPY backend/ciencia_datos' not in backend
+    pruebas = backend.split(' AS pruebas', 1)[1]
+    assert 'rm -f /app/backend/tests/test_cd_' in pruebas
+    assert '"-m", "not servidor and not modelo"' in pruebas
+
+
 def test_tmpfs_es_una_sola_entrada_por_servicio():
     """En estilo de flujo YAML la coma de «size=…,mode=…» parte la entrada en dos y Docker la rechaza."""
     compose = yaml.safe_load((RAIZ/'infra/compose.yaml').read_text(encoding='utf-8'))
