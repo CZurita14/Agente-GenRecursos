@@ -1,4 +1,5 @@
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -104,6 +105,8 @@ def _carpeta(tmp_path, meta, *, onnx=True, tokenizer=True):
     if tokenizer:
         (c / "tokenizer.json").write_text("{}", encoding="utf-8")
     if meta is not None:
+        if meta.get("aprobado") is True:  # Un aprobado de verdad siempre lleva la huella de sus pesos.
+            meta = {"huella_pesos": modulo.huella_pesos(c), **meta}
         (c / "metadatos.json").write_text(json.dumps(meta), encoding="utf-8")
     return c
 
@@ -181,6 +184,75 @@ def test_sin_umbral_en_desarrollo_usa_el_de_desarrollo(carpeta_con, monkeypatch)
     assert r.umbral == UMBRAL_DESARROLLO == 0.6
 
 
+APROBADO = {"version": "v1", "humo": False, "aprobado": True, "umbral": 0.7}
+
+
+def _sin_abrir(monkeypatch):
+    monkeypatch.setattr(modulo, "_abrir", lambda ruta, longitud: lambda t: np.eye(len(t), 3))
+
+
+def _con_pesos(carpeta_con, pesos: bytes = b"pesos originales"):
+    c = carpeta_con(None)
+    (c / "onnx" / "model.onnx.data").write_bytes(pesos)
+    (c / "metadatos.json").write_text(json.dumps({**APROBADO, "huella_pesos": modulo.huella_pesos(c)}), encoding="utf-8")
+    return c
+
+
+def test_cambiar_un_byte_de_los_pesos_impide_cargar_una_carpeta_aprobada(carpeta_con, monkeypatch):
+    _sin_abrir(monkeypatch)
+    c = _con_pesos(carpeta_con)
+    assert Razonador.cargar(c, exigir_aprobado=True).version == "v1"
+    (c / "onnx" / "model.onnx.data").write_bytes(b"pesos 0riginales")
+    with pytest.raises(RazonadorInvalido, match="huella"):
+        Razonador.cargar(c, exigir_aprobado=True)
+    assert Razonador.cargar(c, exigir_aprobado=False).version == "v1"  # Solo el aprobado la exige.
+
+
+def test_cambiar_el_grafo_o_quitar_los_pesos_tambien_impide_cargar(carpeta_con, monkeypatch):
+    _sin_abrir(monkeypatch)
+    grafo, sin_pesos = _con_pesos(carpeta_con), _con_pesos(carpeta_con)
+    (grafo / "onnx" / "model.onnx").write_bytes(b"y")
+    (sin_pesos / "onnx" / "model.onnx.data").unlink()
+    for c in (grafo, sin_pesos):
+        with pytest.raises(RazonadorInvalido, match="huella"):
+            Razonador.cargar(c, exigir_aprobado=True)
+
+
+def test_un_aprobado_sin_huella_no_carga(carpeta_con, monkeypatch):
+    _sin_abrir(monkeypatch)
+    c = _con_pesos(carpeta_con)
+    (c / "metadatos.json").write_text(json.dumps(APROBADO), encoding="utf-8")
+    with pytest.raises(RazonadorInvalido, match="huella"):
+        Razonador.cargar(c, exigir_aprobado=True)
+
+
+def test_igual_grafo_y_distintos_pesos_tienen_huellas_distintas(carpeta_con):
+    a, b, sin = _con_pesos(carpeta_con, b"pesos a"), _con_pesos(carpeta_con, b"pesos b"), carpeta_con(None)
+    assert (a / "onnx" / "model.onnx").read_bytes() == (b / "onnx" / "model.onnx").read_bytes()
+    assert len({modulo.huella_pesos(a), modulo.huella_pesos(b), modulo.huella_pesos(sin)}) == 3
+    assert modulo.huella_pesos(a) == modulo.huella_pesos(_con_pesos(carpeta_con, b"pesos a"))
+
+
+@pytest.mark.parametrize("exigir", [True, False])
+def test_inferencia_de_prueba_que_falla_invalida_la_carga(carpeta_con, monkeypatch, exigir):
+    pedidos = []
+
+    def roto(textos):
+        pedidos.append(textos)
+        raise RuntimeError("dimensiones del texto secreto")
+
+    monkeypatch.setattr(modulo, "_abrir", lambda ruta, longitud: roto)
+    with pytest.raises(RazonadorInvalido, match="inferencia de prueba") as error:
+        Razonador.cargar(carpeta_con(APROBADO), exigir_aprobado=exigir)
+    assert pedidos == [["prueba"]] and "secreto" not in str(error.value)
+
+
+def test_inferencia_de_prueba_con_valores_no_finitos_invalida_la_carga(carpeta_con, monkeypatch):
+    monkeypatch.setattr(modulo, "_abrir", lambda ruta, longitud: lambda t: np.full((len(t), 3), np.nan))
+    with pytest.raises(RazonadorInvalido, match="inferencia de prueba"):
+        Razonador.cargar(carpeta_con(APROBADO), exigir_aprobado=True)
+
+
 def test_importar_el_razonador_no_trae_pytorch():
     codigo = "import sys, app.razonador; print(any(m.split('.')[0] in ('torch', 'sentence_transformers') for m in sys.modules))"
     r = subprocess.run([sys.executable, "-c", codigo], cwd=BACKEND, capture_output=True, text=True, check=True)
@@ -198,6 +270,47 @@ def modelo_humo(tmp_path_factory):
 
     return entrenar(["Identificar requisitos de un sistema.", "Analizar datos de ventas."] * 4, BASE,
                     tmp_path_factory.mktemp("m") / "v0", humo=True, ajuste=False)
+
+
+def _aprobar_copia(modelo_humo, destino) -> Path:
+    """Copia real del modelo exportado, con los metadatos que deja `evaluar` al aprobar."""
+    shutil.copytree(modelo_humo, destino)
+    ruta = destino / "metadatos.json"
+    meta = json.loads(ruta.read_text(encoding="utf-8"))
+    ruta.write_text(json.dumps({**meta, "humo": False, "aprobado": True, "umbral": 0.7,
+                                "huella_pesos": modulo.huella_pesos(destino)}), encoding="utf-8")
+    return destino
+
+
+@pytest.mark.modelo
+def test_pesos_reales_con_un_byte_cambiado_no_cargan_aunque_el_grafo_sea_igual(modelo_humo, tmp_path):
+    c = _aprobar_copia(modelo_humo, tmp_path / "aprobado")
+    pesos = c / "onnx" / "model.onnx.data"
+    assert pesos.stat().st_size > 1_000_000  # Los pesos van de verdad en el archivo externo.
+    assert (c / "onnx" / "model.onnx").stat().st_size < pesos.stat().st_size
+    huella_original = modulo.huella_pesos(c)
+    assert np.isfinite(Razonador.cargar(c, exigir_aprobado=True).vectores(["texto"])).all()
+    with open(pesos, "r+b") as f:
+        f.seek(pesos.stat().st_size // 2)
+        byte = f.read(1)
+        f.seek(-1, 1)
+        f.write(bytes([byte[0] ^ 0xFF]))
+    assert modulo.huella_pesos(c) != huella_original
+    with pytest.raises(RazonadorInvalido, match="huella"):
+        Razonador.cargar(c, exigir_aprobado=True)
+
+
+@pytest.mark.modelo
+def test_modelo_real_con_tokenizador_ajeno_falla_en_la_inferencia_de_prueba(modelo_humo, tmp_path):
+    """La sesión abre, pero los identificadores no caben en el modelo: antes solo fallaba el primer trabajo."""
+    c = tmp_path / "ajeno"
+    shutil.copytree(modelo_humo, c)
+    tok = json.loads((c / "tokenizer.json").read_text(encoding="utf-8"))
+    for especial in tok["post_processor"]["special_tokens"].values():
+        especial["ids"] = [i + 10_000_000 for i in especial["ids"]]
+    (c / "tokenizer.json").write_text(json.dumps(tok), encoding="utf-8")
+    with pytest.raises(RazonadorInvalido, match="inferencia de prueba"):
+        Razonador.cargar(c, exigir_aprobado=False)
 
 
 @pytest.mark.modelo

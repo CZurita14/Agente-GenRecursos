@@ -10,6 +10,7 @@ descarta los casos que se parecen a algún entregable aunque no compartan palabr
 `ciencia_datos.evaluar` calcula sus vectores con este mismo código, para que el modelo que se
 evalúa y el que se sirve no puedan diferir. Este módulo no importa `torch` ni `ciencia_datos`.
 """
+import hashlib
 import json
 import math
 from collections.abc import Callable
@@ -27,6 +28,19 @@ SEMILLA = 42
 
 class RazonadorInvalido(Exception):
     """La carpeta del modelo no sirve para responder; el mensaje nombra la causa, nunca un texto."""
+
+
+def huella_pesos(ruta: Path) -> str:
+    """SHA-256 de lo que define al modelo: `onnx/model.onnx` y, si existe, `onnx/model.onnx.data`."""
+    h = hashlib.sha256()
+    for nombre in ("model.onnx", "model.onnx.data"):
+        archivo = Path(ruta) / "onnx" / nombre
+        if archivo.is_file():
+            h.update(f"{nombre}:{archivo.stat().st_size};".encode())
+            with open(archivo, "rb") as f:
+                for bloque in iter(lambda: f.read(1 << 20), b""):
+                    h.update(bloque)
+    return h.hexdigest()
 
 
 def _leer_metadatos(ruta: Path) -> dict:
@@ -64,6 +78,14 @@ def _validar(ruta: Path, exigir_aprobado: bool) -> tuple[dict, float]:
             raise RazonadorInvalido("el modelo no está aprobado")
         if umbral is None:
             raise RazonadorInvalido("el modelo aprobado no tiene umbral")
+        if not meta.get("huella_pesos"):
+            raise RazonadorInvalido("el modelo aprobado no tiene huella_pesos")
+        try:
+            coincide = huella_pesos(ruta) == meta["huella_pesos"]
+        except OSError:
+            raise RazonadorInvalido("los pesos del modelo no se pueden leer") from None
+        if not coincide:
+            raise RazonadorInvalido("los pesos no coinciden con huella_pesos: la carpeta no es la que se aprobó")
     return meta, float(UMBRAL_DESARROLLO if umbral is None else umbral)
 
 
@@ -109,7 +131,15 @@ class Razonador:
         longitud = meta.get("longitud_maxima", LONGITUD_POR_OMISION)
         if isinstance(longitud, bool) or not isinstance(longitud, int) or not 1 <= longitud <= LONGITUD_TOPE:
             raise RazonadorInvalido(f"longitud_maxima de metadatos.json debe ser un entero de 1 a {LONGITUD_TOPE}")
-        return cls(_abrir(ruta, longitud), version=str(meta.get("version", ruta.name)), umbral=umbral)
+        codificar = _abrir(ruta, longitud)
+        # Un modelo que abre pero no responde debe fallar aquí, no en el primer trabajo.
+        try:
+            valido = np.isfinite(codificar(["prueba"])).all()
+        except Exception:
+            valido = False
+        if not valido:
+            raise RazonadorInvalido("el modelo no superó la inferencia de prueba")
+        return cls(codificar, version=str(meta.get("version", ruta.name)), umbral=umbral)
 
     def vectores(self, textos: list[str]) -> np.ndarray:
         """Una fila por texto, de norma 1. Sin textos, una matriz de cero filas."""
