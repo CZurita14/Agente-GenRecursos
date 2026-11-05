@@ -185,6 +185,31 @@ Garantías:
 
 ---
 
+## 7 bis. Simulación y modelo preliminar
+
+Mientras no haya sílabos reales suficientes, se puede entrenar un modelo **preliminar** con sílabos simulados (códigos `SIM-`) que Qwen redacta fuera de línea a partir de la carrera. Los 2 sílabos reales no entrenan: quedan como `control_real`.
+
+```text
+cd backend
+# Tarea 8: simular los sílabos (solo textos de simulación; sin servidor de IA en las pruebas)
+../.venv-ciencia/Scripts/python.exe -m ciencia_datos.simular --salida ../datos_cd
+# Tarea 9: candidato ajustado y base, con la misma separación
+HF_HUB_OFFLINE=1 ../.venv-ciencia/Scripts/python.exe -m ciencia_datos.entrenar --silabos ../Silabos ../datos_cd/<simulados> --salida ../modelos/prelim-v1
+HF_HUB_OFFLINE=1 ../.venv-ciencia/Scripts/python.exe -m ciencia_datos.entrenar --silabos ../Silabos ../datos_cd/<simulados> --salida ../modelos/prelim-base --sin-ajuste
+# Informe que compara ambos, sobre los mismos sílabos
+HF_HUB_OFFLINE=1 ../.venv-ciencia/Scripts/python.exe -m ciencia_datos.preliminar --modelo ../modelos/prelim-v1 --base-modelo ../modelos/prelim-base --silabos ../Silabos ../datos_cd/<simulados> --salida ../pruebas/ciencia_datos
+```
+
+`preliminar` escribe `<version>-preliminar.json` (no se versiona) y se puede repetir: no toma candado, no ajusta, no fija umbral y nunca escribe `aprobado`. Antes de medir comprueba que ambos modelos sean preliminares, que el base sea `--sin-ajuste`, que compartan la huella de separación y que los códigos de prueba y control estén entre los sílabos; si no, sale con código 2 sin escribir nada. Mide solo los fragmentos de los sílabos de prueba (simulados) y de control real, nunca los de entrenamiento:
+
+- `precision_5_carrera` y `precision_5_facultad`: de los 5 vecinos más cercanos (coseno) de otros sílabos, la parte con la misma carrera o facultad; globales y por facultad.
+- `silueta_facultad` y la misma silueta con etiquetas barajadas (semilla 42): la primera debe superar claramente a la segunda.
+- `control_real`: cada fragmento real busca sus 5 vecinos entre los simulados de prueba y se mide la parte de su misma facultad; es `null` si la facultad no tiene simulados. `n_control_real` recuerda que son solo 2 sílabos.
+
+**Qué demuestra:** que el codificador ajustado agrupa por carrera y facultad mejor o peor que el base, sobre textos con estructura coherente. **Qué no demuestra:** calidad ni utilidad docente. Los textos los redactó Qwen, así que el informe lleva `apto_produccion: false` y su advertencia; la aprobación exige sílabos reales y etiquetas docentes (secciones 2 y 3).
+
+---
+
 ## 8. Lo que falta y lo que no se sabe
 
 Corrida real (depende de personas, no de código):
