@@ -105,6 +105,16 @@ def test_worker_se_detiene_antes_de_lanzar_consumidores(monkeypatch, tmp_path):
         worker.main()
 
 
+def test_worker_registra_la_causa_de_una_carpeta_ausente_sin_imprimir_la_ruta(monkeypatch, tmp_path, caplog):
+    import worker
+    ausente = tmp_path / "no-existe"
+    monkeypatch.setattr(worker, "ajustes", lambda: Ajustes(razonador_ruta=ausente, **DESARROLLO))
+    monkeypatch.setattr(worker, "preparar_esquema", lambda config: pytest.fail("no debió llegar al esquema"))
+    with caplog.at_level("ERROR"), pytest.raises(ValueError):
+        worker.main()
+    assert "RAZONADOR_RUTA no es una carpeta" in caplog.text and str(ausente) not in caplog.text
+
+
 def test_worker_registra_la_causa_de_un_modelo_invalido(monkeypatch, tmp_path, caplog):
     import worker
     from app.razonador import RazonadorInvalido

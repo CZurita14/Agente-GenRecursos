@@ -82,7 +82,11 @@ def cerrar_consumidores(pool, cliente, gracia, *, forzar=os._exit):
 
 def main():
     config = ajustes()
-    validar_configuracion(config)
+    try:
+        validar_configuracion(config)
+    except ValueError as error:
+        registro.error('configuración inválida: %s', error)  # Mensajes fijos, sin rutas ni valores.
+        raise
     plazo_latido(config)  # Rechaza timeouts sin límite antes de lanzar consumidores.
     gracia = float(os.environ.get('WORKER_GRACIA_S', '570'))
     if not 0 < gracia <= 590 or config.llm_max_concurrencia < 1:
