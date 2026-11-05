@@ -15,7 +15,7 @@ from pathlib import Path
 
 import numpy as np
 
-from app.agentes.facultades import cargar_catalogo
+from app.agentes.facultades import cargar_catalogo, normalizar
 from app.razonador import RazonadorInvalido
 from ciencia_datos import consola_utf8
 from ciencia_datos.corpus import fragmentos, leer_carpeta
@@ -163,6 +163,8 @@ def ejecutar_preliminar(
     mapa, _ = codigo_a_facultad(leidos, catalogo)
     sep = meta["separacion"]
     prueba, control = sep["prueba"], sep.get("control_real", [])
+    if sum(normalizar(por_codigo[c].facultad) not in catalogo for c in [*prueba, *control]):
+        raise EntradaInvalida("hay sílabos de prueba o de control cuya facultad no está en el catálogo")
 
     textos: list[str] = []
     marca = {"carrera": [], "facultad": [], "silabo": []}

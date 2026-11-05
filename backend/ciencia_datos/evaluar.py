@@ -41,6 +41,7 @@ from ciencia_datos.estadistica import (  # noqa: F401  (se reexportan: siguen im
     EXHAUSTIVIDAD_UMBRAL, agrupar, cumple, elegir_umbral, estabilidad, kappa, mcnemar,
     mcnemar_conteos, metricas, silueta_frente_al_azar, wilson,
 )
+from ciencia_datos.origen import es_simulado
 from ciencia_datos.separar import dejar_fuera
 
 EXHAUSTIVIDAD_MINIMA = 0.85  # exigida en el 30 %
@@ -477,6 +478,14 @@ def ejecutar(
     version = meta["version"]
     if meta.get("preliminar") is True and not humo:
         raise EntradaInvalida("el modelo es preliminar (entrenado con sílabos simulados): solo se evalúa con --humo")
+    if not humo:
+        sep_meta = meta.get("separacion")
+        codigos = [c for clave in ("entrenamiento", "prueba") if isinstance(sep_meta, dict)
+                   and isinstance(sep_meta.get(clave), list) for c in sep_meta[clave] if isinstance(c, str)]
+        origen = meta.get("origen")
+        n_sim = origen.get("simulados") if isinstance(origen, dict) else 0
+        if any(es_simulado(c) for c in codigos) or (isinstance(n_sim, int) and n_sim > 0):
+            raise EntradaInvalida("el modelo usa sílabos simulados: solo se evalúa con --humo")
     if humo and not meta.get("humo"):
         raise EntradaInvalida("--humo solo se acepta sobre un modelo con humo: true")
     if meta.get("humo") and not humo:

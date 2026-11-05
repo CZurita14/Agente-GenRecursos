@@ -748,3 +748,27 @@ def test_evaluar_con_humo_sigue_con_un_modelo_preliminar(tmp_path):
     modelo = _modelo_falso(tmp_path, preliminar=True, humo=True)
     r = ev.ejecutar(modelo, tmp_path / "silabos", datos=tmp_path, salida=tmp_path / "s", humo=True)
     assert r["humo"] is True and r["aprobado"] is False
+
+
+def _modelo_con_sep(tmp_path, sep, origen=None, preliminar=False):
+    modelo = _modelo_falso(tmp_path, preliminar=preliminar, humo=False)
+    p = modelo / "metadatos.json"
+    meta = json.loads(p.read_text())
+    meta.pop("preliminar", None)
+    meta["separacion"] = sep
+    if origen:
+        meta["origen"] = origen
+    p.write_text(json.dumps(meta))
+    return modelo
+
+
+@pytest.mark.parametrize("sep,origen", [
+    ({"entrenamiento": ["SIM-1"], "prueba": []}, None),
+    ({"entrenamiento": [], "prueba": ["SIM-2"]}, None),
+    ({"entrenamiento": ["PF-1"], "prueba": ["PF-2"]}, {"simulados": 3, "reales": 2}),
+])
+def test_evaluar_rechaza_simulados_sin_la_marca_preliminar(tmp_path, sep, origen):
+    modelo = _modelo_con_sep(tmp_path, sep, origen)
+    with pytest.raises(ev.EntradaInvalida, match="simulados"):
+        ev.ejecutar(modelo, tmp_path / "silabos", datos=tmp_path, salida=tmp_path / "s")
+    assert not (modelo / "evaluacion.candado").exists()

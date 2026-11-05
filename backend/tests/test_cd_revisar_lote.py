@@ -145,6 +145,8 @@ def test_muestra_toma_de_todas_las_facultades_y_es_reproducible(silabo):
 
 
 def test_cli_escribe_revision_y_muestra(silabo, tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(revisar_lote, "RAIZ", tmp_path)
+    monkeypatch.setattr(revisar_lote, "_esperadas", lambda codigos: {"FACULTAD A", "FACULTAD B"})
     carpeta = tmp_path / "silabos"
     carpeta.mkdir()
     for s in _lote_variado(silabo):
@@ -164,3 +166,60 @@ def test_cli_escribe_revision_y_muestra(silabo, tmp_path, monkeypatch, capsys):
     assert all(r["parece_real"] == "" for r in filas)
     consola = capsys.readouterr().out
     assert "palabra" not in consola
+
+
+def test_cobertura_compara_contra_las_facultades_esperadas(silabo):
+    lote = _lote_variado(silabo)
+    informe = revisar(lote, _vectorizar_falso, esperadas={"FACULTAD A", "FACULTAD B", "FACULTAD C"})
+    assert any("cobertura_facultades" in c for c in dictaminar_lote(informe))
+    informe = revisar(lote, _vectorizar_falso, esperadas={"FACULTAD A", "FACULTAD B"})
+    assert dictaminar_lote(informe) == []
+
+
+def test_muestra_neutraliza_formulas_en_el_csv(tmp_path):
+    from ciencia_datos.corpus import Fragmento
+    muestra = [Fragmento("SIM-1", "F", "=CARRERA", 1, "actividad", t) for t in ("=1+1", "+x", "-x", "@x", "normal")]
+    revisar_lote._escribir_muestra(tmp_path / "m.csv", muestra)
+    with open(tmp_path / "m.csv", encoding="utf-8-sig", newline="") as f:
+        filas = list(csv.DictReader(f))
+    assert [r["texto"] for r in filas] == ["'=1+1", "'+x", "'-x", "'@x", "normal"]
+    assert filas[0]["carrera"] == "'=CARRERA"
+
+
+def _carpeta_de(silabos, destino):
+    destino.mkdir(exist_ok=True)
+    for s in silabos:
+        (destino / f"{s.proyecto_formativo.codigo}.json").write_text(s.model_dump_json(), encoding="utf-8")
+    return destino
+
+
+def test_lote_con_un_real_sale_con_2_sin_escribir(silabo, tmp_path, monkeypatch):
+    lote = _lote_variado(silabo)
+    lote.append(_reescribir(silabo, "PF-REAL", "FACULTAD A", "CARRERA X", lambda t, i: f"otro {t} {i}"))
+    carpeta = _carpeta_de(lote, tmp_path / "silabos")
+    monkeypatch.setattr(revisar_lote, "_vectorizar_real", lambda base=None: _vectorizar_falso)
+    salida = tmp_path / "datos_cd"
+    assert revisar_lote.main(["--silabos", str(carpeta), "--salida", str(salida)]) == 2
+    assert not salida.exists()
+
+
+def test_salida_fuera_de_datos_cd_sale_con_2(silabo, tmp_path, monkeypatch):
+    carpeta = _carpeta_de(_lote_variado(silabo), tmp_path / "silabos")
+    monkeypatch.setattr(revisar_lote, "_vectorizar_real", lambda base=None: _vectorizar_falso)
+    monkeypatch.setattr(revisar_lote, "RAIZ", tmp_path)
+    monkeypatch.setattr(revisar_lote, "_esperadas", lambda codigos: {"FACULTAD A", "FACULTAD B"})
+    fuera = tmp_path / "otra"
+    assert revisar_lote.main(["--silabos", str(carpeta), "--salida", str(fuera)]) == 2
+    assert not fuera.exists()
+    dentro = tmp_path / "datos_cd"
+    assert revisar_lote.main(["--silabos", str(carpeta), "--salida", str(dentro), "--muestra", "4"]) in (0, 1)
+    assert (dentro / "simulacion" / "muestra-revision.csv").exists()
+
+
+def test_esperadas_son_las_facultades_de_los_codigos_leidos_o_todas():
+    from ciencia_datos.sim_plan import cupos
+    todos = cupos(revisar_lote.CATALOGO)
+    uno = todos[0]
+    assert revisar_lote._esperadas({uno.codigo}) == {uno.facultad}
+    assert revisar_lote._esperadas({"SIM-NO-EXISTE"}) == {c.facultad for c in todos}
+    assert len({c.facultad for c in todos}) > 1

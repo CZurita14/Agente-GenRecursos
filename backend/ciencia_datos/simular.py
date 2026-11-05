@@ -246,11 +246,20 @@ def _imprimir(r: Resumen) -> None:
           f"segundos={r.segundos}")
 
 
+def _entero_desde(minimo: int):
+    def convertir(texto: str) -> int:
+        valor = int(texto)
+        if valor < minimo:
+            raise argparse.ArgumentTypeError(f"debe ser al menos {minimo}")
+        return valor
+    return convertir
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="python -m ciencia_datos.simular", description=__doc__)
     p.add_argument("--salida", type=Path, required=True, help="carpeta de datos (p. ej. datos_cd)")
-    p.add_argument("--limite", type=int, default=None, help="solo los primeros N cupos (piloto)")
-    p.add_argument("--hilos", type=int, default=2)
+    p.add_argument("--limite", type=_entero_desde(0), default=None, help="solo los primeros N cupos (piloto)")
+    p.add_argument("--hilos", type=_entero_desde(1), default=2)
     a = p.parse_args(argv)
     try:
         ajustes = Ajustes().model_copy(update={"llm_max_concurrencia": a.hilos})

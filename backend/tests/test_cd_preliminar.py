@@ -187,3 +187,17 @@ def test_k_mayor_que_los_vecinos_disponibles():
     X = np.array([[1, 0], [0.9, 0.1], [0.95, 0.05]], dtype=float)
     # Cada fragmento solo tiene 2 vecinos de otros sílabos; k=10 usa los disponibles.
     assert precision_k(X, ["A", "A", "B"], ["s1", "s2", "s3"], k=10) == pytest.approx(1 / 3)
+
+
+@pytest.mark.parametrize("sospechoso", ["SIM-C", "REAL-2"])
+def test_facultad_sin_sigla_en_prueba_o_control_es_entrada_invalida(tmp_path, datos, sospechoso):
+    lista = [("SIM-A", FING, "SOFTWARE"), ("SIM-B", FING, "INDUSTRIAL"), ("SIM-C", FADA, "ARQUITECTURA"),
+             ("REAL-1", FING, "SOFTWARE"), ("REAL-2", FADA, "ARQUITECTURA")]
+    lista = [(c, "FACULTAD INVENTADA" if c == sospechoso else f, ca) for c, f, ca in lista]
+    e = {"silabos": _silabos(tmp_path, datos, lista), "modelo": _modelo(tmp_path, "v1"),
+         "base": _modelo(tmp_path, "base", ajuste=False), "salida": tmp_path / "informes"}
+    with pytest.raises(EntradaInvalida, match="facultad"):
+        _correr(e)
+    assert not e["salida"].exists()
+    assert main(["--modelo", str(e["modelo"]), "--base-modelo", str(e["base"]),
+                 "--silabos", str(e["silabos"]), "--salida", str(e["salida"])]) == 2

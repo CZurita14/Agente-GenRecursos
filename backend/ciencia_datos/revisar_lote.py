@@ -8,6 +8,7 @@ import argparse
 import csv
 import json
 import random
+import sys
 from collections import Counter
 from pathlib import Path
 from typing import Callable
@@ -15,10 +16,15 @@ from typing import Callable
 import numpy as np
 
 from app.silabo.modelo import SilaboUTI
+from app.agentes.facultades import normalizar
 from ciencia_datos import consola_utf8
 from ciencia_datos.casi_repetidos import UMBRAL_CASI_REPETIDO, normalizar_l2
 from ciencia_datos.corpus import Fragmento, fragmentos, leer_carpeta, tiene_datos_personales
+from ciencia_datos.origen import es_simulado
+from ciencia_datos.sim_plan import cupos
 
+RAIZ = Path(__file__).resolve().parents[2]
+CATALOGO = RAIZ / "kb" / "catalogo.yaml"
 BASE_POR_DEFECTO = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 PALABRAS_INICIO = 5
 PROPORCION_INICIO = 0.05
@@ -96,8 +102,10 @@ def _fraccion_inicio_repetido(textos: list[str]) -> float:
     return sum(1 for i in inicios if cuenta[i] >= minimo) / len(textos)
 
 
-def revisar(silabos: list[SilaboUTI], vectorizar: Vectorizar) -> dict:
-    """Informe del lote: estructura, casi repetidos, inicios repetidos y datos personales."""
+def revisar(silabos: list[SilaboUTI], vectorizar: Vectorizar, esperadas: set[str] | None = None) -> dict:
+    """Informe del lote: estructura, casi repetidos, inicios repetidos y datos personales.
+
+    `esperadas` son las facultades que el lote debe cubrir; sin ellas, basta con que las presentes tengan sílabos."""
     por_facultad: Counter = Counter()
     por_carrera: dict[str, Counter] = {}
     por_silabo: list[int] = []
@@ -134,6 +142,7 @@ def revisar(silabos: list[SilaboUTI], vectorizar: Vectorizar) -> dict:
         "fraccion_casi_repetidos_entre_carreras": entre,
         "fraccion_inicio_repetido": _fraccion_inicio_repetido([f.texto for f in frags]),
         "datos_personales_detectados": _datos_personales(silabos),
+        "facultades_esperadas": None if esperadas is None else sorted(esperadas),
     }
 
 
@@ -151,9 +160,13 @@ def dictaminar_lote(informe: dict) -> list[str]:
     por = informe["fragmentos_por_silabo"]
     if informe["n_silabos"] and not MIN_FRAGMENTOS <= por["minimo"] <= por["maximo"] <= MAX_FRAGMENTOS:
         falla.append(f"fragmentos_por_silabo entre {MIN_FRAGMENTOS} y {MAX_FRAGMENTOS}")
+    esperadas = informe.get("facultades_esperadas")
+    presentes = {normalizar(f) for f, n in informe["silabos_por_facultad"].items() if n >= 1 and f}
     if not informe["n_silabos"] or any(
         n < 1 for n in informe["silabos_por_facultad"].values()
-    ) or "" in informe["silabos_por_facultad"]:
+    ) or "" in informe["silabos_por_facultad"] or (
+        esperadas is not None and not {normalizar(f) for f in esperadas} <= presentes
+    ):
         falla.append("cobertura_facultades: todas con sílabos")
     return falla
 
@@ -176,12 +189,25 @@ def muestrear(silabos: list[SilaboUTI], n: int = MUESTRA_POR_DEFECTO) -> list[Fr
     return salida
 
 
+def _celda(valor: str) -> str:
+    """Una celda que empieza por `=`, `+`, `-` o `@` se escribe con `'` delante: Excel no la toma por fórmula."""
+    return "'" + valor if valor[:1] in ("=", "+", "-", "@") else valor
+
+
+def _esperadas(codigos: set[str]) -> set[str]:
+    """Facultades con cupos cuyos códigos están entre los leídos; si no hay ninguno, todas las con cupos."""
+    todos = cupos(CATALOGO)
+    propias = {c.facultad for c in todos if c.codigo in codigos}
+    return propias or {c.facultad for c in todos}
+
+
 def _escribir_muestra(ruta: Path, muestra: list[Fragmento]) -> None:
     with open(ruta, "w", encoding="utf-8-sig", newline="") as f:
         w = csv.writer(f)
         w.writerow(["codigo", "carrera", "momento", "tipo", "texto", "parece_real"])
         for x in muestra:
-            w.writerow([x.codigo_pf, x.carrera, "" if x.momento is None else x.momento, x.tipo, x.texto, ""])
+            w.writerow([_celda(x.codigo_pf), _celda(x.carrera), "" if x.momento is None else x.momento,
+                        x.tipo, _celda(x.texto), ""])
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -193,8 +219,17 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--base", default=BASE_POR_DEFECTO)
     a = p.parse_args(argv)
 
+    permitida = (RAIZ / "datos_cd").resolve()
+    if not a.salida.resolve().is_relative_to(permitida):
+        print("entrada inválida: --salida debe quedar dentro de datos_cd/", file=sys.stderr)
+        return 2
     silabos, rechazados = leer_carpeta(a.silabos)
-    informe = revisar(silabos, _vectorizar_real(a.base))
+    codigos = {s.proyecto_formativo.codigo for s in silabos}
+    if not all(es_simulado(c) for c in codigos):
+        print("entrada inválida: el lote trae sílabos que no son simulados; la muestra solo admite simulados",
+              file=sys.stderr)
+        return 2
+    informe = revisar(silabos, _vectorizar_real(a.base), _esperadas(codigos))
     informe["archivos_rechazados"] = len(rechazados)
     incumplidos = dictaminar_lote(informe)
     informe["criterios_incumplidos"] = incumplidos

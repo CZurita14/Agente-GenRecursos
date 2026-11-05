@@ -383,3 +383,23 @@ def test_desarrollo_si_carga_un_preliminar(carpeta_con, monkeypatch):
     monkeypatch.setattr(modulo, "_abrir", lambda ruta, longitud: (lambda t: np.eye(len(t))))
     ruta = carpeta_con({"humo": False, "aprobado": False, "umbral": None, "preliminar": True})
     assert Razonador.cargar(ruta, exigir_aprobado=False)
+
+
+@pytest.mark.parametrize("sep", [
+    {"entrenamiento": ["SIM-1"], "prueba": ["PF-2"]},
+    {"entrenamiento": ["PF-1"], "prueba": ["SIM-2"]},
+])
+def test_produccion_rechaza_simulados_sin_la_marca_preliminar(carpeta_con, sep):
+    ruta = carpeta_con({"humo": False, "aprobado": True, "umbral": 0.7, "separacion": sep})
+    with pytest.raises(RazonadorInvalido, match="simulados"):
+        Razonador.cargar(ruta, exigir_aprobado=True)
+
+
+@pytest.mark.parametrize("sep", [None, "mala", {"entrenamiento": 3}, {"entrenamiento": ["PF-1"], "prueba": ["PF-2"]}])
+def test_produccion_acepta_separacion_ausente_mal_formada_o_sin_simulados(carpeta_con, monkeypatch, sep):
+    monkeypatch.setattr(modulo, "_abrir", lambda ruta, longitud: (lambda t: np.eye(len(t))))
+    meta = {"humo": False, "aprobado": True, "umbral": 0.7}
+    if sep is not None:
+        meta["separacion"] = sep
+    ruta = carpeta_con(meta)
+    assert Razonador.cargar(ruta, exigir_aprobado=True)

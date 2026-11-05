@@ -154,3 +154,19 @@ def test_un_pdf_no_puede_usar_el_prefijo_simulado(tmp_path, monkeypatch, silabo)
 def test_un_json_con_prefijo_simulado_si_se_lee(tmp_path, datos):
     _escribir_codigo(tmp_path, datos, "SIM-FING-X-001")
     assert len(leer_carpeta(tmp_path)[0]) == 1
+
+
+@pytest.mark.parametrize("texto", [
+    "MSc. Juan Pérez", "Mg. Juan Pérez", "Mgtr. Juan", "Ph.D. Juan", "M.Sc. Juan", "Dr.Juan Pérez",
+    "DR. JUAN PÉREZ", "Abg. Juan", "Arq. Ana", "Prof. Ana", "Lcda. Ana", "Ing. Civil", "Econ. Álvaro",
+    "Mtra. Ana", "Lcdo. Pedro",
+])
+def test_detecta_titulos_con_nombre(texto):
+    assert tiene_datos_personales(texto)
+
+
+@pytest.mark.parametrize("texto", [
+    "Ing. de requisitos", "Ingeniería Civil", "Lic. en Educación", "Prof. de matemática", "Arq. de software",
+])
+def test_no_detecta_titulos_sin_nombre(texto):
+    assert not tiene_datos_personales(texto)

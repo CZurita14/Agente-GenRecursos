@@ -263,3 +263,10 @@ def test_un_error_fatal_no_envia_cupos_nuevos(tmp_path):
         generar(cliente, CUPOS, tmp_path / "s", tmp_path / "t", hilos=1)
     assert e.value.motivo == simular.RECHAZO
     assert sum(1 for x in cliente.llamadas if x["rol"] == "sim_general") == 1
+
+
+@pytest.mark.parametrize("args", [["--hilos", "0"], ["--hilos", "-1"], ["--limite", "-1"]])
+def test_hilos_y_limite_invalidos_los_rechaza_argparse(tmp_path, args):
+    with pytest.raises(SystemExit) as e:
+        simular.main(["--salida", str(tmp_path), *args])
+    assert e.value.code == 2
