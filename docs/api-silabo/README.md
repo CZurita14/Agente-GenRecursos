@@ -32,4 +32,4 @@ La API **no** debe enviar la sección I (perfil, correo, teléfono, ORCID del do
 
 - El esquema es válido y lo cumplen los 20 sílabos simulados y el fixture.
 - En los 2 sílabos reales leídos del PDF, faltan datos en campos que sí se usan: actividad práctica (23,5 % de las sesiones vacías), autónoma (11,8 %) y entregables (64,7 %). La API debería entregarlos completos cuando existan.
-- **Cambio pendiente en el sistema:** `SilaboUTI` exige hoy `metacompetencia`, `metodologias`, `pis`, `uoc`, `modalidad`, `creditos` y `horas`, aunque no los usa. Un JSON con solo los apartados obligatorios no entra hasta darles valores por omisión o rellenarlos al importar.
+- **Cambio pendiente en el sistema:** `SilaboUTI` exige hoy 9 campos que no usa: `metacompetencia`, `metodologias`, `pis`, `uoc`, `modalidad`, `creditos`, `horas` del proyecto formativo, `recursos` del momento y `horas` de cada actividad de sesión. Un JSON con solo los apartados obligatorios no entra hasta darles valores por omisión o rellenarlos al importar.

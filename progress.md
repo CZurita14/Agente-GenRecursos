@@ -160,6 +160,12 @@ P1–P6 implementados técnicamente, incluido chat privado de ajustes y exportac
   - Tres pasadas con los 20 simulados (13 de entrenamiento y 7 de prueba) y los 2 reales como control. Acierto de facultad a 5 vecinos: base 30,4 %, 1 época 28,6 % y 3 épocas 26,6 %, con 13,8 % de azar. Coherencia por sílabo del base: 80,6 % (azar 14,6 %). Los reales quedan por debajo del azar (3,9 % contra 11 %). Conclusión: el ajuste con simulados empeora el modelo, así que conviene el base hasta tener sílabos reales.
   - La precisión a 5 vecinos de `preliminar` da 0 cuando la prueba tiene un sílabo por facultad: es un defecto de la medida, que queda pendiente de corregir.
   - Tablero privado: https://claude.ai/artifact/W3FmduVPR1DxGbFVAriDYq
+  - Pasadas de validación del JSON mínimo ([ejemplo-minimo.json](docs/api-silabo/ejemplo-minimo.json)):
+    - Suficiencia: 23 de 23 sílabos dan el mismo contexto, prompt, plan, menú, herramientas sin IA y entrenamiento (3198 comparaciones).
+    - Necesidad: 31 de 32 campos obligatorios cambian algo al alterarlos; el restante, `aprobado`, solo elige la versión vigente.
+    - Campos fuera del contrato: ninguno de los 11 cambia nada.
+    - Qwen generó las 7 herramientas con IA en 3 sílabos: 24 de 24, y 22 sin observaciones en la primera ronda.
+    - `SilaboUTI` exige 9 campos que no usa, entre ellos las `horas` de cada actividad.
 
 ### 2026-11-05
 - **Simulación de sílabos (rama `p10/simulacion`, plan [2026-11-05-simulacion-silabos.md](docs/superpowers/plans/2026-11-05-simulacion-silabos.md)):**
