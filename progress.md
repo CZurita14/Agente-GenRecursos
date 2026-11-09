@@ -154,6 +154,13 @@ P1–P6 implementados técnicamente, incluido chat privado de ajustes y exportac
 
 ## Bitácora (lo ya hecho)
 
+### 2026-11-09
+- **Corrida de análisis con los 20 simulados y contrato JSON de la API** (rama `p10/simulacion`):
+  - Contrato de los apartados que debe entregar la API: [docs/api-silabo/README.md](docs/api-silabo/README.md) y [silabo-api.schema.json](docs/api-silabo/silabo-api.schema.json). Lo cumplen 21 de 21 documentos (20 simulados y el fixture). Pendiente: `SilaboUTI` exige 7 campos que no usa, así que un JSON mínimo no entra hasta darles valores por omisión.
+  - Tres pasadas con los 20 simulados (13 de entrenamiento y 7 de prueba) y los 2 reales como control. Acierto de facultad a 5 vecinos: base 30,4 %, 1 época 28,6 % y 3 épocas 26,6 %, con 13,8 % de azar. Coherencia por sílabo del base: 80,6 % (azar 14,6 %). Los reales quedan por debajo del azar (3,9 % contra 11 %). Conclusión: el ajuste con simulados empeora el modelo, así que conviene el base hasta tener sílabos reales.
+  - La precisión a 5 vecinos de `preliminar` da 0 cuando la prueba tiene un sílabo por facultad: es un defecto de la medida, que queda pendiente de corregir.
+  - Tablero privado: https://claude.ai/artifact/W3FmduVPR1DxGbFVAriDYq
+
 ### 2026-11-05
 - **Simulación de sílabos (rama `p10/simulacion`, plan [2026-11-05-simulacion-silabos.md](docs/superpowers/plans/2026-11-05-simulacion-silabos.md)):**
   - Tarea 1 ✅ (`76deace`): marca `SIM-` y 198 cupos para las 29 carreras de grado. 6 pruebas nuevas; revisión aprobada.
