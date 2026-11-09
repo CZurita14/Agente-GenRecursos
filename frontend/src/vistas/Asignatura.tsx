@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { CalendarDays, Flag, Layers } from 'lucide-react';
+import { CalendarDays } from 'lucide-react';
 import { Alert, Badge, Button } from '../components';
 import { ErrorApi, menu as cargarMenu, recursos as cargarRecursos } from '../api/cliente';
 import type { Ambito, MenuAsignatura } from '../api/tipos';
-import { dia, fechaCorta } from '../api/herramientas';
+import { dia, fechaCorta, nombreAmbito } from '../api/herramientas';
 
 interface AsignaturaProps {
   aid: string;
@@ -13,7 +13,7 @@ interface AsignaturaProps {
   onSesionVencida: () => void;
 }
 
-/** Paso 1 del recorrido: el menú de la asignatura por semana; cada clase o momento abre la actividad. */
+/** Paso 1 del recorrido: el menú del Proyecto Formativo por semana; cada clase abre la actividad. */
 export function Asignatura({ aid, nombre, onElegir, onVerRecursos, onSesionVencida }: AsignaturaProps) {
   const [datos, setDatos] = useState<MenuAsignatura | null>(null);
   const [cuenta, setCuenta] = useState<Record<string, number>>({});
@@ -42,13 +42,13 @@ export function Asignatura({ aid, nombre, onElegir, onVerRecursos, onSesionVenci
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div>
         <h1 className="text-2xl font-bold">{nombre}</h1>
-        <p className="text-muted mt-1">Paso 1 · Elige la clase o el momento para preparar sus herramientas.</p>
+        <p className="text-muted mt-1">Paso 1 · Elige la clase para preparar sus herramientas.</p>
       </div>
       <div className="flex flex-wrap gap-2">
         <Button variant="secondary" onClick={onVerRecursos}>Ver recursos</Button>
         {puedeGenerar && <Button variant="secondary"
-          onClick={() => onElegir({ tipo: 'asignatura', id: 'asignatura' }, 'Toda la asignatura')}>
-          Herramientas de la asignatura
+          onClick={() => onElegir({ tipo: 'asignatura', id: 'asignatura' }, 'Todo el Proyecto Formativo')}>
+          Herramientas del Proyecto Formativo
         </Button>}
       </div>
     </div>
@@ -62,7 +62,7 @@ export function Asignatura({ aid, nombre, onElegir, onVerRecursos, onSesionVenci
       </h2>
       <div className="grid gap-3 md:grid-cols-2">
         {semana.clases.map(clase => <button key={clase.clase_id} type="button" disabled={!puedeGenerar}
-          onClick={() => onElegir({ tipo: 'clase', id: clase.clase_id }, `Clase ${clase.numero_clase} · ${clase.clase_id}`)}
+          onClick={() => onElegir({ tipo: 'clase', id: clase.clase_id }, `Clase ${clase.numero_clase} · ${nombreAmbito(clase.clase_id)}`)}
           className="text-left bg-surface rounded-xl border border-line p-4 hover:border-highlight focus-visible:border-highlight disabled:cursor-default">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="font-bold">{dia(clase.dia)} {fechaCorta(clase.fecha)} · Clase {clase.numero_clase}</span>
@@ -73,15 +73,6 @@ export function Asignatura({ aid, nombre, onElegir, onVerRecursos, onSesionVenci
           {clase.entregables.length > 0 && <p className="text-xs text-muted mt-1">Entregables: {clase.entregables.join(', ')}</p>}
         </button>)}
       </div>
-      {semana.cierra_momentos.map(n => <div key={n}
-        className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-highlight bg-highlight-soft p-4">
-        <span className="flex items-center gap-2 font-bold"><Flag aria-hidden="true" className="w-4 h-4" />Cierra el Momento {n}
-          {insignia(`M${n}`)}</span>
-        {puedeGenerar && <Button size="sm" icon={<Layers aria-hidden="true" className="w-4 h-4" />}
-          onClick={() => onElegir({ tipo: 'momento', id: `M${n}` }, `Momento ${n}`)}>
-          Herramientas del momento
-        </Button>}
-      </div>)}
     </section>)}
   </>;
 }

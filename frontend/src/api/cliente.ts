@@ -60,6 +60,13 @@ const json = (datos: unknown) => JSON.stringify(datos);
 export const pedirCodigo = (correo: string) =>
   pedir<{ mensaje: string }>('/auth/codigo', { method: 'POST', body: json({ correo }) });
 
+/** Si la API ofrece entrar sin validar el correo (solo en desarrollo, mientras no hay SMTP institucional). */
+export const modoAcceso = () => pedir<{ acceso_prueba: boolean }>('/auth/modo');
+
+/** Sesión sin código; sin correo entra como invitado. */
+export const accesoPrueba = (correo?: string) =>
+  pedir<{ mensaje: string }>('/auth/prueba', { method: 'POST', body: json(correo ? { correo } : {}) });
+
 export const verificarCodigo = (correo: string, codigo: string) =>
   pedir<{ mensaje: string }>('/auth/verificar', { method: 'POST', body: json({ correo, codigo }) });
 
@@ -98,5 +105,5 @@ export const editar = (aid: string, rid: string, revision: number, contenido: un
   pedir<Recurso>(`/asignaturas/${enc(aid)}/recursos/${enc(rid)}`, { method: 'PUT', body: json({ revision, contenido }) });
 
 /** Descarga directa (enlace): la cookie viaja sola y la API exige la validación (409 si no). */
-export const urlExportar = (aid: string, rid: string, formato: 'html' | 'pdf' | 'docx' = 'html') =>
-  `${BASE}/asignaturas/${enc(aid)}/recursos/${enc(rid)}/exportar?formato=${formato}`;
+export const urlExportar = (aid: string, rid: string, formato: 'html' | 'pdf' | 'docx' = 'html', docente = false) =>
+  `${BASE}/asignaturas/${enc(aid)}/recursos/${enc(rid)}/exportar?formato=${formato}${docente ? '&version=docente' : ''}`;

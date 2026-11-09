@@ -26,7 +26,7 @@ type Ruta =
 
 const MENU = [
   { id: 'inicio', label: 'Inicio', icon: <Home aria-hidden="true" className="w-4 h-4" /> },
-  { id: 'asignaturas', label: 'Mis asignaturas', icon: <BookOpen aria-hidden="true" className="w-4 h-4" /> },
+  { id: 'asignaturas', label: 'Proyecto Formativo', icon: <BookOpen aria-hidden="true" className="w-4 h-4" /> },
   { id: 'recursos', label: 'Mis recursos', icon: <FolderOpen aria-hidden="true" className="w-4 h-4" /> },
 ];
 
@@ -35,14 +35,15 @@ const pestana = (r: Ruta) => r.vista === 'inicio' || r.vista === 'generar' ? 'in
 
 /** Sin sesión: ingreso. Con sesión: menú principal (opción B) y el recorrido de recursos (P6b). */
 export default function App() {
-  const { usuario, cargando, ingresar, salir, expirar } = useSesion();
+  const { usuario, cargando, ingresar, ingresarPrueba, salir, expirar } = useSesion();
   const [ruta, setRuta] = useState<Ruta>({ vista: 'inicio' });
 
   if (cargando) {
     return <AppLayout><p className="text-muted" role="status">Cargando…</p></AppLayout>;
   }
   if (!usuario) {
-    return <AppLayout><Ingreso onIngresar={async (correo, codigo) => { await ingresar(correo, codigo); setRuta({ vista: 'inicio' }); }} /></AppLayout>;
+    return <AppLayout><Ingreso onIngresar={async (correo, codigo) => { await ingresar(correo, codigo); setRuta({ vista: 'inicio' }); }}
+      onIngresarPrueba={async correo => { await ingresarPrueba(correo); setRuta({ vista: 'inicio' }); }} /></AppLayout>;
   }
 
   const acciones = <div className="flex items-center gap-3 text-sm">
@@ -74,7 +75,7 @@ export default function App() {
         creados: ids.map(id => ({ id, herramienta: 'recurso', estado: 'en_cola' })) })}
       onAbrir={(aid, rid, rol) => setRuta({ vista: 'recurso', curso: { aid, rol }, rid, volver: { vista: 'recursos', aid } })} />}
     {ruta.vista === 'recurso' && <Recurso key={`${ruta.curso.aid}:${ruta.rid}`} aid={ruta.curso.aid} rid={ruta.rid} puedeValidar={ruta.curso.rol !== 'lector'}
-      onTrabajos={ids => setRuta({ vista: 'progreso', curso: { ...ruta.curso, nombre: ruta.curso.nombre ?? 'Asignatura' },
+      onTrabajos={ids => setRuta({ vista: 'progreso', curso: { ...ruta.curso, nombre: ruta.curso.nombre ?? 'Proyecto Formativo' },
         creados: ids.map(id => ({ id, herramienta: 'recurso', estado: 'en_cola' })) })}
       onSesionVencida={expirar} onVolver={() => setRuta(ruta.volver)} />}
   </AppLayout>;

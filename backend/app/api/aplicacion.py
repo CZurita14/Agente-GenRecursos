@@ -92,8 +92,8 @@ def crear_app(config: Ajustes | None = None, *, transporte=None, auth=None, cone
         if request.method not in {"GET", "HEAD", "OPTIONS"}:
             if request.headers.get("origin") != config.api_origen:
                 return JSONResponse({"detail": "Origen no permitido"}, status_code=403)
-        publica = ((request.method in {"GET", "HEAD"} and request.url.path == "/salud")
-                   or (request.method == "POST" and request.url.path in {"/auth/codigo", "/auth/verificar"}))
+        publica = ((request.method in {"GET", "HEAD"} and request.url.path in {"/salud", "/auth/modo"})
+                   or (request.method == "POST" and request.url.path in {"/auth/codigo", "/auth/verificar", "/auth/prueba"}))
         if not publica:
             usuario = None
             if app.state.auth is not None and request.cookies.get("sesion"):

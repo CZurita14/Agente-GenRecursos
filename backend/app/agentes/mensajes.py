@@ -44,6 +44,13 @@ class Encargo(Mensaje):
     instrucciones: str = ""
 
 
+class PlanRazonado(Mensaje):
+    """Lo que decidió el razonador; al reanudar manda sobre el modelo instalado, sea cual sea."""
+    version: str
+    planes: list[list[PlanItem]]
+    escenarios: list[str]  # Casos que quedaron libres, para que el estilo no cambie al reanudar.
+
+
 class Devolucion(Mensaje):
     item_id: str
     motivo: str
@@ -94,7 +101,8 @@ class Cierre(Mensaje):
 
 
 _TIPOS: dict[str, type[Mensaje]] = {
-    c.__name__: c for c in (Encargo, TareaLote, EntregaLote, Devolucion, Veredicto, Cierre, CheckpointRevision)
+    c.__name__: c for c in (Encargo, PlanRazonado, TareaLote, EntregaLote, Devolucion, Veredicto, Cierre,
+                            CheckpointRevision)
 }
 M = TypeVar("M", bound=Mensaje)
 

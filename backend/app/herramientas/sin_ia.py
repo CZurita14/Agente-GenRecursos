@@ -14,6 +14,8 @@ HERRAMIENTAS_SIN_IA = {
     "autoevaluacion_rubrica": "momento",
     "autoevaluacion_final": "asignatura",
     "lista_evidencia": "momento",
+    "rubrica_momento": "momento",
+    "rubrica_final": "asignatura",
 }
 INSTRUCCIONES_AUTOEVALUACION = (
     "Lee los descriptores de cada indicador y marca el nivel que mejor describe tu trabajo "
@@ -85,6 +87,19 @@ def _lista_evidencia(momento: Momento) -> dict:
     }
 
 
+def _rubrica_momento(silabo: SilaboUTI, momento: Momento) -> dict:
+    return {
+        "momento": momento.numero, "titulo": momento.titulo, "evidencia": momento.evidencia,
+        "ra": [{"id": r.id, "texto": r.texto} for r in silabo.resultados_aprendizaje if r.id in momento.ra],
+        "niveles": list(NIVELES), "indicadores": _indicadores(momento.rubrica),
+    }
+
+
+def _rubrica_final(silabo: SilaboUTI) -> dict:
+    return {"evidencia": silabo.problema.producto_final, "niveles": list(NIVELES),
+            "indicadores": _indicadores(silabo.rubrica_producto_final)}
+
+
 def generar_sin_ia(herramienta: str, silabo: SilaboUTI, ambito_id: str) -> dict:
     """Contenido de la herramienta; ValueError si la herramienta o el ámbito no corresponden."""
     tipo = HERRAMIENTAS_SIN_IA.get(herramienta)
@@ -93,8 +108,12 @@ def generar_sin_ia(herramienta: str, silabo: SilaboUTI, ambito_id: str) -> dict:
     if tipo == "asignatura":
         if ambito_id != "asignatura":
             raise ValueError("esta herramienta es de la asignatura")
+        if herramienta == "rubrica_final":
+            return _rubrica_final(silabo)
         return _hoja_ruta(silabo) if herramienta == "hoja_ruta" else _autoevaluacion_final(silabo)
     momento = _momento(silabo, ambito_id)
+    if herramienta == "rubrica_momento":
+        return _rubrica_momento(silabo, momento)
     if herramienta == "autoevaluacion_rubrica":
         return _autoevaluacion_momento(silabo, momento)
     return _lista_evidencia(momento)

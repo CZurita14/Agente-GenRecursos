@@ -103,6 +103,17 @@ class ServicioAuth:
             raise error
         return token
 
+    def sesion_directa(self, correo: str) -> str:
+        """Sesión sin código para el acceso de prueba; la ruta exige ACCESO_PRUEBA."""
+        correo = normalizar_correo(correo)
+        token = secrets.token_urlsafe(32)
+        ahora = self.ahora()
+        with closing(self.conexion()) as conn:
+            conn.autocommit = True
+            conn.execute("insert into auth_sesion (token_hash,correo,creada,actividad,vence) values (%s,%s,%s,%s,%s)",
+                         (_hash_token(token), correo, ahora, ahora, ahora + timedelta(days=7)))
+        return token
+
     def identificar(self, token: str | None) -> str | None:
         if not token or len(token) > 128:
             return None

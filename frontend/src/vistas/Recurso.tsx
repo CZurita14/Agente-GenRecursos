@@ -4,7 +4,7 @@ import { Alert, Badge, Button, Card, Modal } from '../components';
 import { ErrorApi, editar, recurso as cargarRecurso, urlExportar, validar } from '../api/cliente';
 import { leer, poner } from '../api/edicion';
 import type { Bloque, Recurso as TipoRecurso, Ruta } from '../api/tipos';
-import { SIN_IA, nombreAmbito, nombreHerramienta } from '../api/herramientas';
+import { CON_RESPUESTAS, SIN_IA, legible, nombreAmbito, nombreHerramienta } from '../api/herramientas';
 import { ChatAjustes } from '../components/ChatAjustes';
 
 interface RecursoProps {
@@ -27,14 +27,16 @@ const letra = (k: number) => String.fromCharCode(65 + k);
 /** Alertas por ítem o sección: las del coordinador o, si el docente editó, las de su edición. */
 function alertas(r: TipoRecurso): Record<string, string[]> {
   const salida: Record<string, string[]> = {};
+  const sumar = (id: string, avisos: string[]) => { salida[id] = [...new Set([...(salida[id] ?? []), ...avisos])]; };
+  for (const [id, avisos] of Object.entries(r.revision_claves ?? {})) if (avisos.length) sumar(id, avisos);
   if (!r.evidencia_vigente) {
-    for (const [id, fallos] of Object.entries(r.verificacion_edicion ?? {})) if (fallos.length) salida[id] = [...fallos];
+    for (const [id, fallos] of Object.entries(r.verificacion_edicion ?? {})) if (fallos.length) sumar(id, fallos);
     return salida;
   }
   const verificaciones = (r.evidencia.verificaciones ?? {}) as Record<string, string[]>;
   const veredictos = (r.evidencia.veredictos ?? {}) as Record<string, string>;
-  for (const [id, fallos] of Object.entries(verificaciones)) if (fallos.length) salida[id] = [...fallos];
-  for (const [id, veredicto] of Object.entries(veredictos)) if (veredicto !== 'ok') (salida[id] ??= []).push(veredicto);
+  for (const [id, fallos] of Object.entries(verificaciones)) if (fallos.length) sumar(id, fallos);
+  for (const [id, veredicto] of Object.entries(veredictos)) if (veredicto !== 'ok') sumar(id, [veredicto]);
   return salida;
 }
 
@@ -82,11 +84,11 @@ function VistaBloque({ b, nivel = 2, ed }: { b: Bloque; nivel?: number; ed?: Edi
 /** Pregunta en modo lectura, con la clave marcada. */
 function VistaItem({ item }: { item: Item }) {
   return <>
-    {item.contexto && <p className="text-sm text-muted italic mt-1">{item.contexto}</p>}
-    <p className="font-medium mt-1">{item.pregunta}</p>
+    {item.contexto && <p className="text-sm text-muted italic mt-1">{legible(item.contexto)}</p>}
+    <p className="font-medium mt-1">{legible(item.pregunta)}</p>
     <ul className="mt-2 space-y-1 text-sm">{item.opciones.map((o, k) => <li key={k}
       className={k === item.correcta ? 'font-bold text-success' : ''}>
-      {letra(k)}) {o.texto}{k === item.correcta && ' ✓ (clave)'}
+      {letra(k)}) {legible(o.texto)}{k === item.correcta && ' ✓ (clave)'}
     </li>)}</ul>
   </>;
 }
@@ -173,7 +175,7 @@ export function Recurso({ aid, rid, puedeValidar, onVolver, onSesionVencida, onT
       setBorrador(null);
       edicionActiva.current = false;
       setRevisionEdicion(null);
-      setAviso(cambio ? 'Cambios guardados. El recurso volvió a «Sin validar»: revísalo y valídalo de nuevo.' : 'No había cambios que guardar.');
+      setAviso(cambio ? 'Cambios guardados. El recurso volvió a «Por validar»: revísalo y valídalo de nuevo.' : 'No había cambios que guardar.');
     } catch (e) {
       if (e instanceof ErrorApi && e.estado === 409) setError(`${e.message}. Tu borrador se conserva; cópialo antes de cancelar y cargar la versión actual.`);
       else if (e instanceof ErrorApi && e.estado === 422) setError(`${e.message}. Revisa que ningún campo quede vacío o demasiado corto.`);
@@ -191,10 +193,9 @@ export function Recurso({ aid, rid, puedeValidar, onVolver, onSesionVencida, onT
       <h1 className="text-2xl font-bold mt-2">{nombreHerramienta(r.herramienta)}</h1>
       <div className="flex flex-wrap items-center gap-2 mt-2">
         <Badge tone="brand">{nombreAmbito(r.ambito_id)}</Badge>
-        {r.evidencia.borrador === true && <Badge tone="warning">Borrador</Badge>}
         {r.revision > 0 && <Badge tone="neutral">Editado por el docente</Badge>}
         {r.validado ? <Badge tone="success" icon={<CheckCircle2 aria-hidden="true" className="w-3 h-3" />}>Validado</Badge>
-          : <Badge tone="neutral">Sin validar</Badge>}
+          : <Badge tone="neutral">Por validar</Badge>}
         {cantidad > 0 && <Badge tone="warning">{cantidad} {cantidad === 1 ? 'alerta' : 'alertas'}</Badge>}
       </div>
     </div>
@@ -219,9 +220,9 @@ export function Recurso({ aid, rid, puedeValidar, onVolver, onSesionVencida, onT
             onClick={() => setBorrador(items.filter((_, k) => k !== n))} aria-label={`Quitar la pregunta ${n + 1}`}>Quitar</Button>}
         </div>
         {editando ? <EditorItem item={item} n={n} ed={ed} /> : <VistaItem item={item} />}
-        {avisos[item.item_id]?.map((a, i) => <Alert key={i} tone="warning" className="mt-2">{a}</Alert>)}
+        {avisos[item.item_id]?.map((a, i) => <Alert key={i} tone="warning" className="mt-2">{legible(a)}</Alert>)}
       </li>)}</ol> : <>
-        {Object.entries(avisos).map(([id, lista]) => lista.map((a, i) => <Alert key={`${id}${i}`} tone="warning" className="mb-2">{a}</Alert>))}
+        {Object.entries(avisos).map(([id, lista]) => lista.map((a, i) => <Alert key={`${id}${i}`} tone="warning" className="mb-2">{legible(a)}</Alert>))}
         <div className="space-y-4">{r.presentacion.map((b, i) => <VistaBloque key={i} b={b} ed={editando ? ed : undefined} />)}</div>
       </>}
     </Card>
@@ -240,7 +241,14 @@ export function Recurso({ aid, rid, puedeValidar, onVolver, onSesionVencida, onT
           <a href={urlExportar(aid, r.id, 'pdf')} download className="text-action underline">Descargar PDF</a>
           <a href={urlExportar(aid, r.id, 'docx')} download className="text-action underline">Descargar Word</a>
         </div>
-      </div> : !puedeValidar ? <p className="text-sm text-muted">Un editor o el dueño de la asignatura debe validarlo antes de descargarlo.</p>
+        {CON_RESPUESTAS.has(r.herramienta) && puedeValidar && <div className="rounded-lg border border-line p-3 space-y-2">
+          <p className="text-sm"><strong>Solo para el docente.</strong> Las descargas de arriba son para el estudiante y no llevan respuestas. Estas sí: no las compartas.</p>
+          <div className="flex flex-wrap gap-3">
+            <a href={urlExportar(aid, r.id, 'pdf', true)} download className="text-action underline">Descargar respuestas en PDF</a>
+            <a href={urlExportar(aid, r.id, 'docx', true)} download className="text-action underline">Descargar respuestas en Word</a>
+          </div>
+        </div>}
+      </div> : !puedeValidar ? <p className="text-sm text-muted">Un editor o el dueño del Proyecto Formativo debe validarlo antes de descargarlo.</p>
         : <div className="space-y-3">
           <p className="text-sm text-muted">La descarga se habilita cuando validas el recurso: confirma que lo revisaste.</p>
           <Button onClick={() => cantidad > 0 ? setConfirmar(true) : validarRecurso()} loading={validando}>Validar recurso</Button>

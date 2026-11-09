@@ -81,11 +81,11 @@ async function abrir({ sesion = true, viewport, rutas = {} } = {}) {
     // --- P6b: menú, catálogo, generación, avance, recurso, validación ---
     if (ruta === '/asignaturas/a1/menu') return json(200, { id: 'a1', rol: 'dueno', version_silabo: '1.0', menu: MENU_ASIG });
     if (ruta === '/asignaturas/a1/herramientas') {
-      const restringido = url.searchParams.get('id') === 'M3';
+      const restringido = url.searchParams.get('id')?.startsWith('M3');
       return json(200, { ambito: url.searchParams.get('ambito'), restringido, perfil_sugerido: 'fundamentacion',
         motivo: restringido ? 'La política de IA de este momento excluye la IA en una evaluación.' : null,
         politica_ia: 'Se permite IA como asistente.',
-        herramientas: restringido ? [{ id: 'autoevaluacion_rubrica', recomendada: true }]
+        herramientas: restringido ? []
           : [{ id: 'cuestionario', recomendada: true }, { id: 'ficha_clase', recomendada: false }] });
     }
     if (ruta === '/asignaturas/a1/generar') return json(202, { trabajos: [{ id: 't1', herramienta: 'cuestionario', estado: 'en_cola' }] });
@@ -99,7 +99,7 @@ async function abrir({ sesion = true, viewport, rutas = {} } = {}) {
       { id: 'r2', trabajo_id: 't2', ambito_id: 'M2-S1', herramienta: 'ficha_clase', version_silabo: '1.0', estado: 'listo',
         revision: 0, creado: '2026-10-28T10:05:00Z' },
       { id: 'r3', trabajo_id: 't3', ambito_id: 'asignatura', herramienta: 'hoja_ruta', version_silabo: '1.0', estado: 'listo',
-        revision: 0, creado: '2026-10-28T10:06:00Z' }]);
+        revision: 0, creado: '2026-10-28T10:06:00Z', validado: true }]);
     // --- P6c: edición (PUT con revisión y contenido completo) ---
     if (route.request().method() === 'PUT') {
       const cuerpo = JSON.parse(route.request().postData());
@@ -133,7 +133,7 @@ test('ingreso en dos pasos lleva al menú', async () => {
 test('menú con tres pestañas y perfil docente en espera', async () => {
   const { context, page } = await abrir();
   const nav = page.getByRole('navigation', { name: 'Navegación principal' });
-  for (const nombre of ['Inicio', 'Mis asignaturas', 'Mis recursos']) {
+  for (const nombre of ['Inicio', 'Proyecto Formativo', 'Mis recursos']) {
     assert.equal(await nav.getByRole('button', { name: nombre, exact: true }).count(), 1, nombre);
   }
   const perfil = page.locator('section[aria-labelledby="camino-perfil"]');
@@ -153,8 +153,8 @@ test('Empezar lleva a subir el sílabo y muestra el resumen', async () => {
   assert.match(await page.getByText('Agente asignado').innerText(), /1 semanas y 2 clases/);
   const subida = estado.llamadas.find(l => l.ruta === '/silabos');
   assert.equal(subida.tipo, 'application/pdf');
-  await page.getByRole('button', { name: 'Ver mis asignaturas' }).click();
-  await page.getByRole('table', { name: 'Mis asignaturas' }).getByText('ANALISIS DE DATOS').waitFor();
+  await page.getByRole('button', { name: 'Ver mis Proyectos Formativos' }).click();
+  await page.getByRole('table', { name: 'Proyecto Formativo' }).getByText('ANALISIS DE DATOS').waitFor();
   await context.close();
 });
 
@@ -162,7 +162,7 @@ test('un 401 a mitad del uso devuelve al ingreso', async () => {
   const { context, page, estado } = await abrir();
   estado.sesion = false;
   await page.route(url => url.pathname === '/api/asignaturas', route => route.fulfill({ status: 401, contentType: 'application/json', body: '{"detail":"Sesión requerida"}' }));
-  await page.getByRole('navigation', { name: 'Navegación principal' }).getByRole('button', { name: 'Mis asignaturas', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Navegación principal' }).getByRole('button', { name: 'Proyecto Formativo', exact: true }).click();
   await page.getByLabel('Correo institucional').waitFor();
   await context.close();
 });
@@ -195,7 +195,7 @@ test('móvil: sin desbordamiento, menú colapsado y tarjetas apiladas', async ()
 // --- P6b: Mis recursos ----------------------------------------------------------------
 
 async function abrirAsignatura(page) {
-  await page.getByRole('navigation', { name: 'Navegación principal' }).getByRole('button', { name: 'Mis asignaturas', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Navegación principal' }).getByRole('button', { name: 'Proyecto Formativo', exact: true }).click();
   await page.getByRole('button', { name: 'Abrir ANALISIS DE DATOS' }).click();
   await page.getByRole('heading', { name: 'ANALISIS DE DATOS' }).waitFor();
 }
@@ -205,12 +205,12 @@ test('recorrido: clase → actividad → generar → avance → recurso', async 
   await abrirAsignatura(page);
   await page.getByText('Semana 2 · 12/10 – 18/10').waitFor();
   await page.getByRole('button', { name: /mié 14\/10 · Clase 1/ }).click();
-  await page.getByRole('heading', { name: 'Clase 1 · M2-S1' }).waitFor();
+  await page.getByRole('heading', { name: 'Clase 1 · Momento 2, sesión 1' }).waitFor();
   await page.getByText('Se permite IA como asistente.').waitFor();
   await page.getByLabel('Cuestionario').check();
   await page.getByRole('button', { name: 'Generar' }).click();
   await page.getByRole('heading', { name: 'Generando herramientas' }).waitFor();
-  await page.getByText('Lista · requiere tu revisión').waitFor();
+  await page.getByText('Lista para revisar').waitFor();
   const consultas = estado.consultas;
   await page.getByRole('button', { name: 'Revisar' }).click();
   await page.getByRole('heading', { name: 'Cuestionario' }).waitFor();
@@ -219,14 +219,22 @@ test('recorrido: clase → actividad → generar → avance → recurso', async 
   await context.close();
 });
 
-test('momento restringido muestra el aviso y solo lo permitido', async () => {
+test('clase de un momento restringido muestra el aviso y no ofrece IA', async () => {
   const { context, page } = await abrir();
   await abrirAsignatura(page);
-  await page.getByText('Cierra el Momento 3').waitFor();
-  await page.getByRole('button', { name: 'Herramientas del momento' }).nth(1).click();
+  await page.getByRole('button', { name: /Clase 2/ }).click();
   await page.getByRole('alert').getByText('excluye la IA').waitFor();
-  assert.equal(await page.getByRole('checkbox').count(), 1);
-  assert.equal(await page.getByText('sin IA', { exact: true }).count(), 1);
+  assert.equal(await page.getByRole('checkbox').count(), 0);
+  await page.getByText('No hay herramientas disponibles').waitFor();
+  await context.close();
+});
+
+test('el menú ofrece clases y el Proyecto Formativo, no momentos', async () => {
+  const { context, page } = await abrir();
+  await abrirAsignatura(page);
+  await page.getByRole('button', { name: 'Herramientas del Proyecto Formativo' }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Herramientas del momento' }).count(), 0);
+  assert.equal(await page.getByText(/Cierra el Momento/).count(), 0);
   await context.close();
 });
 
@@ -348,7 +356,7 @@ test('si la API rechaza la edición (422) el borrador se conserva', async () => 
 
 test('las herramientas sin IA no se editan', async () => {
   const { context, page } = await abrir();
-  await revisar(page, 'Hoja de ruta de la asignatura');
+  await revisar(page, 'Hoja de ruta del Proyecto Formativo');
   await page.getByRole('heading', { name: 'Producto final' }).waitFor();
   assert.equal(await page.getByRole('button', { name: 'Editar' }).count(), 0);
   await context.close();
@@ -405,5 +413,152 @@ test('recarga de chat tardía no cambia la revisión base del borrador manual', 
   await page.getByText(/Tu borrador se conserva/).waitFor();
   assert.equal(guardado.revision, 0);
   assert.equal(await campo.inputValue(), '¿Qué procedimiento corresponde a la situación descrita?');
+  await context.close();
+});
+
+/** API simulada con el modo de prueba encendido. */
+const CON_MODO_PRUEBA = {
+  '/auth/modo': route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ acceso_prueba: true }) }),
+  '/auth/prueba': (route, estado) => {
+    (estado.pruebas ??= []).push(JSON.parse(route.request().postData()));
+    estado.sesion = true;
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ mensaje: 'Sesión iniciada' }) });
+  },
+};
+
+test('modo de prueba: entrar solo con el correo, sin código', async () => {
+  const { context, page, estado } = await abrir({ sesion: false, rutas: CON_MODO_PRUEBA });
+  await page.getByText('Modo de prueba: cualquiera puede entrar').waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Enviar código' }).count(), 0);
+  await page.getByLabel('Correo institucional').fill('docente@uti.edu.ec');
+  await page.getByRole('button', { name: 'Entrar', exact: true }).click();
+  await page.getByRole('heading', { name: '¿Qué quieres hacer hoy?' }).waitFor();
+  assert.deepEqual(estado.pruebas, [{ correo: 'docente@uti.edu.ec' }]);
+  await context.close();
+});
+
+test('modo de prueba: entrar como invitado sin escribir correo', async () => {
+  const { context, page, estado } = await abrir({ sesion: false, rutas: CON_MODO_PRUEBA });
+  await page.getByRole('button', { name: 'Entrar como invitado' }).click();
+  await page.getByRole('heading', { name: '¿Qué quieres hacer hoy?' }).waitFor();
+  assert.deepEqual(estado.pruebas, [{}]);
+  await context.close();
+});
+
+test('sin modo de prueba el ingreso sigue pidiendo código', async () => {
+  const { context, page } = await abrir({ sesion: false });
+  await page.getByRole('button', { name: 'Enviar código' }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Entrar como invitado' }).count(), 0);
+  await context.close();
+});
+
+test('Mis recursos muestra lo que sigue generándose y explica la espera', async () => {
+  const json = (route, body) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  const { context, page, estado } = await abrir({ rutas: {
+    '/asignaturas/a1/trabajos': (route, e) => {
+      e.consultas = (e.consultas ?? 0) + 1;
+      const fin = e.consultas > 1;
+      return json(route, [{ id: 't9', herramienta: 'cuestionario', ambito_tipo: 'clase', ambito_id: 'M1-S1', lotes_total: 0, lotes_hechos: 0,
+        error: null, estado: fin ? 'listo' : 'en_cola', recurso_id: fin ? 'r1' : null }]);
+    },
+  } });
+  await page.getByRole('navigation', { name: 'Navegación principal' }).getByRole('button', { name: 'Mis recursos', exact: true }).click();
+  await page.getByText('En curso', { exact: true }).waitFor();
+  await page.getByText('Se genera una herramienta a la vez por Proyecto Formativo').waitFor();
+  await page.getByText('En espera', { exact: true }).waitFor();
+  // Al terminar desaparece y la tabla se recarga sola.
+  const recargas = () => estado.llamadas.filter(l => l.ruta === '/asignaturas/a1/recursos').length;
+  const antes = recargas();
+  await page.getByText('En curso', { exact: true }).waitFor({ state: 'detached', timeout: 7000 });
+  assert.ok(recargas() > antes, 'la tabla debe recargarse al terminar un trabajo');
+  await context.close();
+});
+
+test('Mis recursos: una sola acción por fila, validar o descargar, sin estados técnicos', async () => {
+  const { context, page } = await abrir();
+  await page.getByRole('navigation', { name: 'Navegación principal' }).getByRole('button', { name: 'Mis recursos', exact: true }).click();
+  const tabla = page.getByRole('table', { name: 'Recursos del Proyecto Formativo' });
+  await tabla.getByText('Por validar').first().waitFor();
+  await tabla.getByText('Validada').waitFor();
+  const filaPendiente = tabla.getByRole('row').filter({ hasText: 'Cuestionario' });
+  await filaPendiente.getByRole('button', { name: 'Revisar Cuestionario' }).waitFor();
+  assert.equal(await filaPendiente.getByRole('link').count(), 0, 'sin validar no se descarga');
+  const filaValidada = tabla.getByRole('row').filter({ hasText: 'Hoja de ruta' });
+  for (const [etiqueta, formato] of [['HTML', 'html'], ['PDF', 'pdf'], ['Word', 'docx']]) {
+    const enlace = filaValidada.getByRole('link', { name: new RegExp(`en ${etiqueta}$`) });
+    assert.match(await enlace.getAttribute('href'), new RegExp(`recursos/r3/exportar\\?formato=${formato}$`));
+  }
+  const texto = await tabla.innerText();
+  assert.ok(!/Requiere revisión|Listo\b|Borrador|lote/i.test(texto), 'no deben verse estados internos');
+  await context.close();
+});
+
+test('la interfaz dice Proyecto Formativo, no asignatura', async () => {
+  const { context, page } = await abrir();
+  const nav = page.getByRole('navigation', { name: 'Navegación principal' });
+  await nav.getByRole('button', { name: 'Proyecto Formativo', exact: true }).click();
+  await page.getByRole('heading', { name: 'Proyecto Formativo' }).waitFor();
+  assert.ok(!/asignatura/i.test(await page.locator('body').innerText()));
+  await nav.getByRole('button', { name: 'Mis recursos', exact: true }).click();
+  await page.getByRole('table', { name: 'Recursos del Proyecto Formativo' }).waitFor();
+  assert.ok(!/asignatura/i.test(await page.locator('body').innerText()));
+  await context.close();
+});
+
+test('Mis recursos solo lista resultados finales: nada de momentos, y de rúbricas solo la final', async () => {
+  const fila = (id, ambito_id, herramienta) => ({ id, trabajo_id: `t${id}`, ambito_id, herramienta, version_silabo: '1.0', estado: 'listo',
+    revision: 0, creado: '2026-11-04T10:00:00Z', validado: false });
+  const { context, page } = await abrir({ rutas: {
+    '/asignaturas/a1/recursos': route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([
+      fila('a', 'M3', 'simulacro'), fila('b', 'M1', 'rubrica_momento'), fila('c', 'M2', 'guia_evidencia'),
+      fila('d', 'asignatura', 'rubrica_final'), fila('e', 'M1-S1', 'ficha_clase')]) }),
+  } });
+  await page.getByRole('navigation', { name: 'Navegación principal' }).getByRole('button', { name: 'Mis recursos', exact: true }).click();
+  const tabla = page.getByRole('table', { name: 'Recursos del Proyecto Formativo' });
+  await tabla.getByText('Rúbrica del producto final').waitFor();
+  await tabla.getByText('Ficha de clase').waitFor();
+  for (const oculto of ['Simulacro', 'Rúbrica del momento', 'Guía de la evidencia']) {
+    assert.equal(await tabla.getByText(oculto).count(), 0, oculto);
+  }
+  await context.close();
+});
+
+test('sin códigos: clases y momentos con nombres completos', async () => {
+  const { context, page } = await abrir();
+  const nav = page.getByRole('navigation', { name: 'Navegación principal' });
+  await nav.getByRole('button', { name: 'Mis recursos', exact: true }).click();
+  const tabla = page.getByRole('table', { name: 'Recursos del Proyecto Formativo' });
+  await tabla.getByText('Momento 2, sesión 1').first().waitFor();
+  assert.ok(!/\bM\d+(-S\d+)?\b/.test(await tabla.innerText()));
+  await context.close();
+});
+
+test('avisa si la clave contradice su explicación, también en lo ya validado', async () => {
+  const conAlerta = { ...RECURSO(false), evidencia: {}, revision_claves: { i1: ['la explicación de la respuesta marcada como correcta dice que está equivocada; revisa la clave'] } };
+  const { context, page } = await abrir({ rutas: {
+    '/asignaturas/a1/recursos/r1': route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(conAlerta) }),
+  } });
+  await revisar(page, 'Cuestionario');
+  await page.getByText('dice que está equivocada; revisa la clave').waitFor();
+  await page.getByText('1 alerta', { exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Validar recurso' }).click();
+  await page.getByText('¿Validar con alertas pendientes?').waitFor();
+  await context.close();
+});
+
+test('dos apartados: el estudiante sin respuestas y el docente con ellas', async () => {
+  const fila = (id, herramienta) => ({ id, trabajo_id: `t${id}`, ambito_id: 'M2-S1', herramienta, version_silabo: '1.0', estado: 'listo',
+    revision: 0, creado: '2026-11-04T10:00:00Z', validado: true });
+  const { context, page } = await abrir({ rutas: {
+    '/asignaturas/a1/recursos': route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([fila('q', 'cuestionario'), fila('f', 'ficha_clase')]) }),
+  } });
+  await page.getByRole('navigation', { name: 'Navegación principal' }).getByRole('button', { name: 'Mis recursos', exact: true }).click();
+  const tabla = page.getByRole('table', { name: 'Recursos del Proyecto Formativo' });
+  const quiz = tabla.getByRole('row').filter({ hasText: 'Cuestionario' });
+  await quiz.getByText('Docente (respuestas):').waitFor();
+  assert.ok(!/version=docente/.test(await quiz.getByRole('link', { name: 'Descargar Cuestionario en PDF' }).getAttribute('href')));
+  assert.match(await quiz.getByRole('link', { name: 'Descargar respuestas de Cuestionario en PDF' }).getAttribute('href'), /formato=pdf&version=docente$/);
+  assert.equal(await quiz.getByRole('link', { name: /respuestas de Cuestionario en HTML/ }).count(), 0);
+  assert.equal(await tabla.getByRole('row').filter({ hasText: 'Ficha de clase' }).getByText('Docente (respuestas):').count(), 0, 'la ficha no tiene respuestas');
   await context.close();
 });

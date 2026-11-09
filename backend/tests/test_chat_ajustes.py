@@ -335,3 +335,27 @@ def test_multiples_items_revisa_solo_seleccion_y_fallo_determinista(entorno, mon
     assert [i.item_id for i in revisados] == ["i1", "i3"]
     assert revision["veredictos"][1]["fallos_verificacion"] == fallos["i3"]
     assert fallos["i3"]  # El worker simulado produjo la misma pregunta para ambos.
+
+
+def _con_casos(entorno):
+    perfil = entorno["perfil"].model_copy(update={"estilo": entorno["perfil"].estilo.model_copy(
+        update={"escenarios": ["una biblioteca municipal", "un huerto escolar comunitario"]})})
+    return {**entorno, "perfil": perfil}
+
+
+def test_el_ajuste_no_tiene_entrada_para_el_razonador():
+    import inspect
+
+    from app.chat.ejecutor import procesar_chat
+
+    for funcion in (ajustes.regenerar, procesar_chat):
+        assert "razonador" not in inspect.signature(funcion).parameters
+
+
+def test_el_ajuste_conserva_el_estilo_de_la_carrera(entorno, monkeypatch):
+    entorno = _con_casos(entorno)
+    recurso = _quiz(entorno)
+    tareas = _worker(monkeypatch, recurso)
+    _revisor(monkeypatch)
+    ajustes.regenerar(ClienteSimulado({}), recurso=recurso, accion=_accion(items=["i2"]), **entorno)
+    assert tareas[0].estilo == entorno["perfil"].estilo

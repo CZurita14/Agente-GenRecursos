@@ -103,6 +103,16 @@ services:
   worker:
     <<: *backend
     command: [python, worker.py]
+    # Solo el worker usa el razonador. validar_configuracion corre en todos los servicios, por eso
+    # RAZONADOR_RUTA no va en el entorno común. Vacía = generación idéntica a la de siempre.
+    environment:
+      <<: *entorno
+      RAZONADOR_RUTA: ${RAZONADOR_RUTA:-}
+    volumes:
+      - type: volume
+        source: modelos
+        target: /modelos
+        read_only: true
     networks: [datos, salida]
     depends_on:
       migrar: {condition: service_completed_successfully}
@@ -198,3 +208,5 @@ networks:
 
 volumes:
   datos: {}
+  # Modelos entrenados (solo lectura en el worker). TI copia aquí la carpeta aprobada; ver docs/ciencia-datos.md.
+  modelos: {}

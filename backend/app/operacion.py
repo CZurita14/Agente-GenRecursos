@@ -23,6 +23,8 @@ from app.db.migrar import aplicar_migraciones, migraciones_preparadas
 
 def validar_configuracion(config):
     """Validación técnica de producción, sin banderas de aprobación humana."""
+    if config.razonador_ruta is not None and not _ruta_razonador(config).is_dir():
+        raise ValueError('RAZONADOR_RUTA no es una carpeta')
     if config.entorno != 'produccion':
         return
     secreto = config.auth_secreto.get_secret_value() if config.auth_secreto else ''
@@ -31,6 +33,19 @@ def validar_configuracion(config):
             or config.smtp_modo != 'smtp' or not config.smtp_host
             or not config.smtp_remitente or not config.administradores):
         raise ValueError('Configuración de producción incompleta')
+
+
+def _ruta_razonador(config) -> Path:
+    ruta = config.razonador_ruta
+    return ruta if ruta.is_absolute() else RAIZ / ruta
+
+
+def cargar_razonador(config):
+    """Modelo del worker, o None sin RAZONADOR_RUTA. Solo producción exige modelo aprobado."""
+    if config.razonador_ruta is None:
+        return None
+    from app.razonador import Razonador  # Las sondas y la API no necesitan numpy.
+    return Razonador.cargar(_ruta_razonador(config), exigir_aprobado=config.entorno == 'produccion')
 
 
 def preparado(config, *, conexion=None, perfiles=None) -> bool:

@@ -264,3 +264,25 @@ def test_trabajos_por_id_incluye_antiguos_y_excluye_chat(entorno,conn):
     privado = conn.execute('select trabajo_id from chat_pedido where id=%s',(pedido['id'],)).fetchone()['trabajo_id']
     lista = d.get(f'/asignaturas/{aid}/trabajos?ids={antiguo}&ids={privado}').json()
     assert [x['id'] for x in lista]==[str(antiguo)]
+
+
+def test_el_chat_no_consulta_el_razonador(entorno, conn, monkeypatch):
+    app, _, d, aid, producir = entorno
+    r = producir()
+    _interpretar(monkeypatch, {'accion':'ajustar_recurso','mensaje_al_docente':'Ajustaré la primera pregunta.',
+                  'recurso_id':r['id'],'items':[r['contenido'][0]['item_id']],'rutas':[],'instrucciones':'Mayor precisión'})
+
+    class Vetado:
+        def __getattr__(self, nombre):
+            pytest.fail('el chat consultó el razonador')
+
+    recibidos = []
+
+    def regenerar(*args, **kw):
+        recibidos.append(kw)
+        return r['contenido'], {}, {'alcance':[], 'veredictos':[]}
+
+    monkeypatch.setattr('app.chat.ajustes.regenerar', regenerar)
+    enviar(d,aid,r)
+    assert procesar_uno(conn,cliente_revisor(),app.state.perfiles,'chat-test',360,razonador=Vetado())
+    assert len(recibidos) == 1 and 'razonador' not in recibidos[0]

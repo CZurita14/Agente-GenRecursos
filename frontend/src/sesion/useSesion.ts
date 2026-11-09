@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { salir as cerrarSesion, verificarCodigo, yo } from '../api/cliente';
+import { accesoPrueba, salir as cerrarSesion, verificarCodigo, yo } from '../api/cliente';
 import type { Usuario } from '../api/tipos';
 
 /** Sesión del docente. La fuente de verdad es la cookie HttpOnly: aquí solo se refleja `yo()`. */
@@ -20,6 +20,11 @@ export function useSesion() {
     setUsuario(await yo());
   }, []);
 
+  const ingresarPrueba = useCallback(async (correo?: string) => {
+    await accesoPrueba(correo);
+    setUsuario(await yo());
+  }, []);
+
   const salir = useCallback(async () => {
     try {
       await cerrarSesion();
@@ -31,5 +36,5 @@ export function useSesion() {
   /** Un 401 en cualquier vista: la sesión venció en el servidor. */
   const expirar = useCallback(() => setUsuario(null), []);
 
-  return { usuario, cargando, ingresar, salir, expirar };
+  return { usuario, cargando, ingresar, ingresarPrueba, salir, expirar };
 }

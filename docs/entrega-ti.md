@@ -93,6 +93,7 @@ Se parte de [`infra/.env.example`](../infra/.env.example). El archivo real se gu
 | `LIMITE_IP_MINUTO` | Peticiones por minuto por IP (600). **Subir si los docentes salen por una sola IP (NAT)**: todos comparten esta cuota. | TI |
 | Otros `LIMITE_*` | Cuotas por usuario y por correo (pedir código, verificar, generar, subir PDF, editar). Valores por defecto en `infra/.env.example`; normalmente no se tocan. | Opcional |
 | `AUDITORIA_RETENCION_DIAS` | Días que se guardan los registros de acceso (30, máximo 365) | Institución |
+| `RAZONADOR_RUTA` | **Vacía** (apagado). Solo si el usuario decide encender el razonador entrenado: `/modelos/<versión>` de un modelo aprobado ([guía](ciencia-datos.md)). Solo la recibe el `worker`. | Institución, con TI |
 
 Fijadas en el Compose (no se cambian por variable): subida de PDF hasta 10 MiB y 20 s de análisis; JSON hasta 1 MiB; timeouts de IA 120 s (generación) y 240 s (revisión).
 
@@ -111,6 +112,8 @@ La aplicación habla con el servidor de IA por su API compatible con OpenAI. Deb
 **Si la IA cae:** los docentes siguen entrando, consultando, editando, validando y descargando; los pedidos con IA quedan en espera y se procesan cuando vuelve. Probado así en la instalación aislada.
 
 ---
+
+**Razonador entrenado (opcional, apagado).** El Compose declara el volumen `modelos`, montado de solo lectura en `/modelos` únicamente en el `worker`. Mientras `RAZONADOR_RUTA` esté vacía no se usa y la generación es la de siempre; la imagen no lleva PyTorch (solo `numpy`, `scikit-learn`, `onnxruntime` y `tokenizers`). No hay nada que instalar hasta que exista un modelo aprobado; entonces TI copia su carpeta al volumen y ajusta la variable (pasos en [operación](operacion.md)). Un modelo ausente, de prueba o sin aprobar impide que el `worker` arranque, y la causa queda en su bitácora.
 
 ## 6. Instalación (para que TI la revise)
 
@@ -168,4 +171,4 @@ No ejecutar `docker compose config` sin filtrar: imprime los secretos.
 
 ## 9. Lo que no se ha probado
 
-La instalación se probó completa en un equipo de desarrollo con un proyecto aislado, datos sintéticos, certificado autofirmado y la IA caída a propósito. **No** se ha probado: certificado institucional, SMTP real, Qwen real dentro de este Compose ni el servidor de TI. Esa verificación es la del §6 en el servidor de TI.
+La instalación se probó completa en un equipo de desarrollo con un proyecto aislado, datos sintéticos, certificado autofirmado y la IA caída a propósito. **No** se ha probado: certificado institucional, SMTP real, Qwen real dentro de este Compose ni el servidor de TI. La imagen con las dependencias del razonador se construyó una vez durante esta rama con `pip check` limpio, pero no se ha corrido con un modelo aprobado en un `worker` real: solo existe una prueba de humo con 2 sílabos, que no mide calidad. Esa verificación es la del §6 en el servidor de TI.

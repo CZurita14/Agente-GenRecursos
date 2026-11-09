@@ -12,17 +12,17 @@ interface ProgresoProps {
   onSesionVencida: () => void;
 }
 
-const ETAPAS: Record<EstadoTrabajo, { texto: string; avance: number; tono: 'neutral' | 'info' | 'success' | 'warning' | 'danger' }> = {
-  en_cola: { texto: 'En cola', avance: 10, tono: 'neutral' },
-  en_espera: { texto: 'En espera del servidor de IA', avance: 10, tono: 'warning' },
+export const ETAPAS: Record<EstadoTrabajo, { texto: string; avance: number; tono: 'neutral' | 'info' | 'success' | 'warning' | 'danger' }> = {
+  en_cola: { texto: 'En espera', avance: 10, tono: 'neutral' },
+  en_espera: { texto: 'En espera', avance: 10, tono: 'warning' },
   generando: { texto: 'Generando', avance: 40, tono: 'info' },
-  verificando: { texto: 'Verificando', avance: 65, tono: 'info' },
-  revisando: { texto: 'Revisando', avance: 85, tono: 'info' },
-  listo: { texto: 'Lista', avance: 100, tono: 'success' },
-  requiere_revision: { texto: 'Lista · requiere tu revisión', avance: 100, tono: 'warning' },
+  verificando: { texto: 'Generando', avance: 65, tono: 'info' },
+  revisando: { texto: 'Generando', avance: 85, tono: 'info' },
+  listo: { texto: 'Lista para revisar', avance: 100, tono: 'success' },
+  requiere_revision: { texto: 'Lista para revisar', avance: 100, tono: 'success' },
   error: { texto: 'No se pudo generar', avance: 100, tono: 'danger' },
 };
-const FINALES = new Set<EstadoTrabajo>(['listo', 'requiere_revision', 'error']);
+export const FINALES = new Set<EstadoTrabajo>(['listo', 'requiere_revision', 'error']);
 export const INTERVALO_MS = 4000;
 
 /** Paso 3: avance de los trabajos del pedido; consulta cada 4 s mientras alguno siga activo. */
@@ -41,7 +41,7 @@ export function Progreso({ aid, creados, onAbrir, onVolver, onSesionVencida }: P
         setEstado(Object.fromEntries(lista.filter(t => ids.includes(t.id)).map(t => [t.id, t])));
         const faltantes = ids.filter(id => !lista.some(t => t.id === id));
         setAusentes(faltantes);
-        if (faltantes.length) setError('Algún trabajo ya no está disponible en esta asignatura.');
+        if (faltantes.length) setError('Algún trabajo ya no está disponible en este Proyecto Formativo.');
       }
     }).catch(e => {
       if (!vigente) return;
@@ -68,12 +68,12 @@ export function Progreso({ aid, creados, onAbrir, onVolver, onSesionVencida }: P
         return <Card key={c.id} title={nombreHerramienta(t?.herramienta ?? c.herramienta)}>
           <div className="flex flex-wrap items-center gap-3">
             <Badge tone={etapa.tono}>{etapa.texto}</Badge>
-            {t && t.lotes_total > 0 && !FINALES.has(t.estado) && <span className="text-xs text-muted">lote {t.lotes_hechos} de {t.lotes_total}</span>}
           </div>
           <div className="mt-3 h-2 rounded-full bg-app-soft overflow-hidden" role="progressbar" aria-valuemin={0}
             aria-valuemax={100} aria-valuenow={etapa.avance} aria-label={`Avance de ${nombreHerramienta(c.herramienta)}`}>
             <div className="h-full bg-highlight transition-all" style={{ width: `${etapa.avance}%` }} />
           </div>
+          {(t?.estado ?? c.estado) === 'en_cola' && <p className="text-xs text-muted mt-2">Esperando su turno: se genera una herramienta a la vez por Proyecto Formativo. Un cuestionario o un simulacro puede tardar más de 30 minutos.</p>}
           {rid && FINALES.has(t?.estado ?? c.estado) && <div className="mt-3"><Button size="sm" onClick={() => onAbrir(rid)}>Revisar</Button></div>}
         </Card>;
       })}

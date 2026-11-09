@@ -4,7 +4,10 @@ from uuid import uuid4
 import pytest
 
 from app.agentes.mensajes import PlanItem
-from app.agentes.verificador import verificar_distribucion, verificar_ficha, verificar_items
+from app.agentes.verificador import (
+    CLAVE_CONTRADICHA, EXPLICACION_PLANTILLA, OTRA_PARECE_CLAVE, fallos_justificacion, revision_claves,
+    verificar_distribucion, verificar_ficha, verificar_items,
+)
 from app.herramientas.esquemas import ItemCuestionario, Opcion
 from app.silabo.contexto import contexto_clase
 
@@ -124,3 +127,49 @@ def test_ficha_valida_y_con_fallos(ctx):
     mala = {"ideas_clave": ["a", " ", "Ninguna de las anteriores"], "relacion_ra": "", "errores_frecuentes": ["e"]}
     fallos = verificar_ficha(mala, ctx)
     assert any("prohibida" in f for f in fallos) and any("vac" in f for f in fallos)
+
+
+# --- Coherencia entre la clave y sus explicaciones ---
+
+def _explicaciones(*textos):
+    return list(textos) + ["Otra explicación neutra."] * (4 - len(textos))
+
+
+def test_clave_contradicha_por_su_explicacion():
+    """Caso real: Análisis de Datos, Momento 1, sesión 1, pregunta 10."""
+    f = fallos_justificacion(1, ["Sin problema.", "Esta opción confunde la asimetría positiva con negativa.",
+                                 "Esta opción interpreta correctamente la asimetría positiva.", "Neutra."])
+    assert CLAVE_CONTRADICHA in f and OTRA_PARECE_CLAVE in f
+
+
+@pytest.mark.parametrize("texto", ["Esta opción describe correctamente el procedimiento.",
+                                   "Identifica el error típico.", "Es correcta, porque la media lo muestra."])
+def test_clave_coherente_no_alerta(texto):
+    assert fallos_justificacion(0, _explicaciones(texto)) == []
+
+
+@pytest.mark.parametrize("distractor", ["Esta opción no interpreta correctamente el resultado.", "Esta opción no es correcta.",
+                                        "Algunas personas ingresan incorrectamente sus credenciales."])
+def test_distractor_que_no_se_da_por_correcto_no_alerta(distractor):
+    assert fallos_justificacion(0, _explicaciones("Es la adecuada.", distractor)) == []
+
+
+@pytest.mark.parametrize("distractor", ["Esta opción interpreta correctamente la asimetría.", "Esta es la opción correcta."])
+def test_distractor_presentado_como_correcto(distractor):
+    assert fallos_justificacion(0, _explicaciones("Es la adecuada.", distractor)) == [OTRA_PARECE_CLAVE]
+
+
+def test_explicacion_de_plantilla():
+    assert EXPLICACION_PLANTILLA in fallos_justificacion(0, _explicaciones("El error que representa: ignorar un supuesto"))
+
+
+def test_verificar_items_incluye_la_coherencia(ctx):
+    item = _item(ctx)
+    item.opciones[item.correcta].justificacion = "Esta opción confunde dos conceptos."
+    assert CLAVE_CONTRADICHA in verificar_items([item], [], ctx, [], ASIG, ASIG)["i1"]
+
+
+def test_revision_claves_sobre_lo_guardado():
+    item = {"item_id": "i1", "correcta": 0, "opciones": [{"justificacion": "Confunde todo."}, {"justificacion": "Bien."}]}
+    assert revision_claves([item, {"item_id": "i2", "correcta": 0, "opciones": [{"justificacion": "Bien."}]}]) == {"i1": [CLAVE_CONTRADICHA]}
+    assert revision_claves({"conceptual": {}}) == {} and revision_claves([{"sin": "forma"}]) == {}

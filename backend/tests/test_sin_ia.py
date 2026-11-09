@@ -11,7 +11,8 @@ def _momento(silabo, numero):
 
 def test_registro_y_ambitos():
     assert HERRAMIENTAS_SIN_IA == {"hoja_ruta": "asignatura", "autoevaluacion_rubrica": "momento",
-                                   "autoevaluacion_final": "asignatura", "lista_evidencia": "momento"}
+                                   "autoevaluacion_final": "asignatura", "lista_evidencia": "momento",
+                                   "rubrica_momento": "momento", "rubrica_final": "asignatura"}
 
 
 def test_hoja_ruta_con_la_fixture(silabo):

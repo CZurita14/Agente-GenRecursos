@@ -16,19 +16,53 @@ editar (P6c); None si no se edita: herramientas sin IA, valores de listas cerrad
 Los cuestionarios (ítems con opciones) no pasan por aquí: tienen su propia vista.
 """
 from collections.abc import Callable
+import re
 
 NIVELES = {"receptivo": "Receptivo", "resolutivo": "Resolutivo", "reflexivo": "Reflexivo",
            "critico": "Crítico", "cocreativo": "Cocreativo"}
 TITULOS = {
-    "ideas_clave": "Ideas clave", "relacion_ra": "Relación con el RA", "errores_frecuentes": "Errores frecuentes",
+    "ideas_clave": "Ideas clave", "relacion_ra": "Relación con el resultado de aprendizaje", "errores_frecuentes": "Errores frecuentes",
     "autocomprobacion": "Autocomprobación", "que_se_pide": "Qué se pide", "como_se_valora": "Cómo se valora",
-    "errores_comunes": "Errores comunes", "autochequeo": "Autochequeo", "conexion_ra": "Conexión con el RA",
+    "errores_comunes": "Errores comunes", "autochequeo": "Autochequeo", "conexion_ra": "Conexión con el resultado de aprendizaje",
     "preguntas_repaso": "Preguntas de repaso", "respuesta_orientativa": "Respuesta orientativa",
     "que_observar": "Qué observar", "como_prepararse": "Cómo prepararse", "producto_final": "Producto final",
     "politica_ia": "Política de IA", "clase_id": "Clase", "para_subir": "Para subir de nivel",
 }
 _OCULTAS = {"item_id", "escenario"}  # Datos internos del sistema, no para el estudiante.
 SIN_POLITICA = "No indicada en el sílabo"
+
+
+def nombre_ambito(ambito_id: str) -> str:
+    """«M1-S2» → «Momento 1, sesión 2»; «M2» → «Momento 2»; «asignatura» → «Proyecto Formativo»."""
+    return "Proyecto Formativo" if ambito_id == "asignatura" else legible(str(ambito_id))
+
+
+def legible(texto: str) -> str:
+    """Códigos internos o del sílabo a nombres completos, también dentro de lo que redacta la IA.
+
+    Solo al mostrar: el contenido guardado no cambia y los identificadores siguen igual.
+    """
+    texto = re.sub(r"\bM([1-9]\d?)-S([1-9]\d?)\b", r"Momento \1, sesión \2", texto)
+    texto = re.sub(r"\bRA([1-9]\d?)\b", r"Resultado de aprendizaje \1", texto)
+    texto = re.sub(r"\bM([1-9]\d?)\b", r"Momento \1", texto)
+    texto = re.sub(r"\b(los|Los|sus|Sus) RA\b", r"\1 resultados de aprendizaje", texto)
+    return re.sub(r"\bRA\b", "resultado de aprendizaje", texto)
+
+
+def legibles(b: dict) -> dict:
+    """Aplica `legible` a un bloque; las rutas de edición no se tocan."""
+    salida = dict(b)
+    for clave in ("titulo", "texto"):
+        if isinstance(salida.get(clave), str):
+            salida[clave] = legible(salida[clave])
+    for clave in ("items", "columnas"):
+        if clave in salida:
+            salida[clave] = [legible(x) if isinstance(x, str) else x for x in salida[clave]]
+    if "filas" in salida:
+        salida["filas"] = [[legible(c) if isinstance(c, str) else c for c in f] for f in salida["filas"]]
+    if "bloques" in salida:
+        salida["bloques"] = [legibles(x) for x in salida["bloques"]]
+    return salida
 
 
 Ruta = list[str | int]
@@ -74,7 +108,7 @@ def _ficha(c: dict) -> list[dict]:
     e = ["aplicacion", "ejemplo"]
     return [
         _lista("Ideas clave", conceptual["ideas_clave"], ruta=["conceptual", "ideas_clave"]),
-        _texto("Relación con el RA", conceptual["relacion_ra"], ["conceptual", "relacion_ra"]),
+        _texto("Relación con el resultado de aprendizaje", conceptual["relacion_ra"], ["conceptual", "relacion_ra"]),
         _lista("Errores frecuentes", conceptual["errores_frecuentes"], ruta=["conceptual", "errores_frecuentes"]),
         _grupo("Ejemplo resuelto", [_texto("Enunciado", ejemplo["enunciado"], [*e, "enunciado"]),
                                     _lista("Pasos", ejemplo["pasos"], numerada=True, ruta=[*e, "pasos"]),
@@ -87,10 +121,10 @@ def _ficha(c: dict) -> list[dict]:
 def _repaso(c: dict) -> list[dict]:
     r = c["repaso"]
     return [
-        *(_grupo(f"Clase {s['clase_id']}", [_lista("Ideas clave", s["ideas_clave"],
+        *(_grupo(nombre_ambito(s['clase_id']), [_lista("Ideas clave", s["ideas_clave"],
                                                    ruta=["repaso", "sesiones", n, "ideas_clave"])])
           for n, s in enumerate(r["sesiones"])),
-        _texto("Conexión con el RA", r["conexion_ra"], ["repaso", "conexion_ra"]),
+        _texto("Conexión con el resultado de aprendizaje", r["conexion_ra"], ["repaso", "conexion_ra"]),
         _lista("Preguntas de repaso", r["preguntas_repaso"], numerada=True, ruta=["repaso", "preguntas_repaso"]),
     ]
 
@@ -111,7 +145,7 @@ def _caso(c: dict) -> list[dict]:
     caso = c["caso"]
     return [
         _texto("Caso", caso["caso"], ["caso", "caso"]),
-        _texto("Resultado de aprendizaje", caso["ra"]),
+        _texto("Se relaciona con", caso["ra"]),
         *(_grupo(f"Pregunta {n + 1} · {NIVELES.get(p['nivel'], p['nivel'])}",
                  [_texto("Pregunta", p["pregunta"], ["caso", "preguntas", n, "pregunta"]),
                   _texto("Respuesta orientativa", p["respuesta_orientativa"],
@@ -134,13 +168,13 @@ def _guia_final(c: dict) -> list[dict]:
 def _hoja_ruta(c: dict) -> list[dict]:
     p = c["periodo"]
     return [
-        _texto("Asignatura", f"{c['asignatura']} ({c['codigo']})"),
+        _texto("Proyecto Formativo", f"{c['asignatura']} ({c['codigo']})"),
         _texto("Periodo", f"{p['codigo']} · {_fecha(p['inicio'])} – {_fecha(p['fin'])}"),
-        _tabla("Momentos", ["Momento", "Fechas", "RA", "Evidencia", "Política de IA"],
+        _tabla("Momentos", ["Momento", "Fechas", "Resultados de aprendizaje", "Evidencia", "Política de IA"],
                [[f"{m['numero']}. {m['titulo']}", f"{_fecha(m['fecha_inicio'])} – {_fecha(m['fecha_fin'])}",
                  ", ".join(m["ra"]), m["evidencia"], m.get("politica_ia") or SIN_POLITICA] for m in c["momentos"]]),
         _tabla("Calendario de clases", ["Semana", "Clase", "Fecha", "Contenidos", "Entregables"],
-               [[s["numero"], f"Clase {k['numero_clase']} · {k['clase_id']}", _fecha(k["fecha"]),
+               [[s["numero"], f"Clase {k['numero_clase']} · {nombre_ambito(k['clase_id'])}", _fecha(k["fecha"]),
                  "; ".join(k["contenidos"]), "; ".join(k["entregables"])]
                 for s in c["semanas"] for k in s["clases"]]),
         _texto("Producto final", c["producto_final"]),
@@ -179,7 +213,21 @@ def _lista_evidencia(c: dict) -> list[dict]:
     ]
 
 
+def _rubrica_momento(c: dict) -> list[dict]:
+    return [
+        _momento(c),
+        _texto("Evidencia que se evalúa", c["evidencia"]),
+        _lista("Resultados de aprendizaje", [f"{r['id']}: {r['texto']}" for r in c["ra"]]),
+        _rubrica(c["indicadores"], c["niveles"]),
+    ]
+
+
+def _rubrica_final(c: dict) -> list[dict]:
+    return [_texto("Producto final que se evalúa", c["evidencia"]), _rubrica(c["indicadores"], c["niveles"])]
+
+
 VISTAS: dict[str, Callable[[dict], list[dict]]] = {
+    "rubrica_momento": _rubrica_momento, "rubrica_final": _rubrica_final,
     "ficha_clase": _ficha, "repaso_momento": _repaso, "guia_evidencia": _guia, "estudio_caso": _caso,
     "guia_producto_final": _guia_final, "hoja_ruta": _hoja_ruta, "autoevaluacion_rubrica": _autoevaluacion,
     "autoevaluacion_final": _autoevaluacion_final, "lista_evidencia": _lista_evidencia,
@@ -203,6 +251,13 @@ def _generica(valor, titulo: str = "") -> list[dict]:
     return [_texto(titulo, valor)]
 
 
+def sin_respuestas(b: dict) -> dict:
+    """Quita las respuestas orientativas de un bloque, también dentro de grupos anidados."""
+    if b.get("tipo") != "grupo":
+        return b
+    return {**b, "bloques": [sin_respuestas(x) for x in b["bloques"] if x.get("titulo") != "Respuesta orientativa"]}
+
+
 def es_quiz(contenido) -> bool:
     return isinstance(contenido, list) and bool(contenido) and all(isinstance(i, dict) and "opciones" in i for i in contenido)
 
@@ -214,7 +269,7 @@ def presentar(herramienta: str, contenido) -> list[dict]:
     vista = VISTAS.get(herramienta)
     if vista and isinstance(contenido, dict):
         try:
-            return vista(contenido)
+            return [legibles(b) for b in vista(contenido)]
         except (KeyError, TypeError, AttributeError):
             pass  # Contenido editado o de un esquema anterior: se muestra igual, sin perder nada.
-    return _generica(contenido)
+    return [legibles(b) for b in _generica(contenido)]

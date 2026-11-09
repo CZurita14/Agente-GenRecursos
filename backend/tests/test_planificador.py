@@ -1,12 +1,25 @@
+from pathlib import Path
+from uuid import uuid4
+
+import numpy as np
 import pytest
 
+from app.agentes.facultades import cargar_perfiles, estilo_para
+from app.agentes.mensajes import TareaLote
 from app.agentes.planificador import (
     PERFILES,
+    _focos,
+    _indice_foco,
+    estilo_razonado,
     perfil_por_nivel,
     planificar,
     tabla_especificaciones,
 )
+from app.agentes.workers.momento import ESCENARIOS_DE_RESPALDO, escenario_para
+from app.razonador import Razonador
 from app.silabo.contexto import contexto_clase
+
+RAIZ = Path(__file__).resolve().parents[2]
 
 
 def test_tabla_12_fundamentacion():
@@ -130,3 +143,111 @@ def test_sin_escenarios_libres_no_se_asigna_caso(silabo):
     plan = planificar(ctx, 4, "fundamentacion", escenarios=["picos de tráfico de red"])[0]
     assert all(p.caso == "" for p in plan)
     assert all(p.caso == "" for p in planificar(ctx, 4, "fundamentacion")[0])
+
+
+# --- Con razonador (apagado por omisión) ---------------------------------------
+
+PERFIL = cargar_perfiles(RAIZ / "agentes")["ingenierias"]
+
+
+class FalsoRazonador:
+    """Mismos métodos que `Razonador`; los temas salen de repartir los textos entre `k` grupos."""
+    version = "v-prueba"
+
+    def __init__(self, k=3, acepta=True):
+        self.k, self.acepta = k, acepta
+        self.casos_recibidos = None
+
+    def temas(self, textos):
+        return [g for g in (list(range(i, len(textos), self.k)) for i in range(self.k)) if g]
+
+    def casos_libres(self, casos, entregables):
+        self.casos_recibidos = list(casos)
+        return list(casos) if self.acepta else []
+
+
+def con_focos(ctx, cantidad=8):
+    return ctx.model_copy(update={"actividades": [f"foco {k}" for k in range(cantidad)], "contenidos": []})
+
+
+def tema_de(foco, k=3):
+    return int(foco.split()[1]) % k
+
+
+def test_sin_razonador_el_plan_no_cambia(silabo):
+    ctx = contexto_clase(silabo, "M2-S1")
+    plan = planificar(ctx, 12, "fundamentacion", razonador=None)
+    assert plan == planificar(ctx, 12, "fundamentacion")
+    focos = _focos(ctx)
+    assert [p.foco for p in _plano(plan)] == [focos[_indice_foco(k, 12, len(focos))] for k in range(12)]
+
+
+def test_cubre_todos_los_temas_antes_de_repetir(silabo):
+    ctx = con_focos(contexto_clase(silabo, "M2-S1"))
+    plan = _plano(planificar(ctx, 3, "fundamentacion", razonador=FalsoRazonador()))
+    assert len({tema_de(p.foco) for p in plan}) == 3
+
+
+def test_rotacion_por_tema_con_indice_circular(silabo):
+    # Temas [0,3,6], [1,4,7], [2,5]: un foco de cada tema, y el tema agotado se salta.
+    ctx = con_focos(contexto_clase(silabo, "M2-S1"))
+    plan = _plano(planificar(ctx, 10, "fundamentacion", razonador=FalsoRazonador()))
+    assert [int(p.foco.split()[1]) for p in plan] == [0, 1, 2, 3, 4, 5, 6, 7, 0, 1]
+
+
+def test_con_razonador_es_determinista_y_conserva_tabla_e_ids(silabo):
+    ctx = con_focos(contexto_clase(silabo, "M2-S1"))
+    razonado = planificar(ctx, 12, "profesional", razonador=FalsoRazonador())
+    assert razonado == planificar(ctx, 12, "profesional", razonador=FalsoRazonador())
+    base = planificar(ctx, 12, "profesional")
+    assert [(p.item_id, p.nivel) for p in _plano(razonado)] == [(p.item_id, p.nivel) for p in _plano(base)]
+    assert [p.foco for p in _plano(razonado)] != [p.foco for p in _plano(base)]
+
+
+def test_estilo_sin_razonador_es_el_de_siempre(silabo):
+    ctx = contexto_clase(silabo, "M2-S1")
+    assert estilo_razonado(PERFIL, "SOFTWARE", ctx, None) == estilo_para(PERFIL, "SOFTWARE")
+
+
+def test_nunca_es_menos_estricto_que_el_filtro_de_palabras(silabo):
+    ctx = contexto_clase(silabo, "M2-S1").model_copy(update={"entregables_momento": ["tienda en línea"]})
+    falso = FalsoRazonador()
+    estilo = estilo_razonado(PERFIL, "SOFTWARE", ctx, falso)
+    assert "tiempos de carga de una tienda en línea" in estilo_para(PERFIL, "SOFTWARE").escenarios
+    assert "tiempos de carga de una tienda en línea" not in estilo.escenarios
+    assert "tiempos de carga de una tienda en línea" not in falso.casos_recibidos  # el filtro va primero
+    assert estilo.escenarios
+
+
+def test_el_razonador_descarta_lo_que_el_filtro_deja_pasar(silabo):
+    ctx = contexto_clase(silabo, "M2-S1")
+
+    class SoloUno(FalsoRazonador):
+        def casos_libres(self, casos, entregables):
+            return list(casos)[:1]
+
+    estilo = estilo_razonado(PERFIL, "SOFTWARE", ctx, SoloUno())
+    assert len(estilo.escenarios) == 1
+    casos = {p.caso for p in _plano(planificar(ctx, 4, "fundamentacion", escenarios=estilo.escenarios))}
+    assert casos == set(estilo.escenarios)
+
+
+def test_todos_descartados_usa_el_comportamiento_actual(silabo):
+    ctx = contexto_clase(silabo, "M2-S1")
+    estilo = estilo_razonado(PERFIL, "SOFTWARE", ctx, FalsoRazonador(acepta=False))
+    assert estilo.escenarios == []
+    assert all(p.caso == "" for p in _plano(planificar(ctx, 4, "fundamentacion", escenarios=estilo.escenarios)))
+    tarea = TareaLote(trabajo_id=uuid4(), asignatura_id=uuid4(), lote=1, ronda=0, contexto=ctx, estilo=estilo,
+                      plan=[], ya_generado=[])
+    assert escenario_para(tarea) in ESCENARIOS_DE_RESPALDO
+
+
+def test_funciona_con_la_clase_razonador_real(silabo):
+    # Sin modelo: vectores fijos por tema, para probar que las firmas de Razonador encajan.
+    def codificar(textos):
+        ejes = np.eye(3)
+        return np.array([ejes[int(t.split()[1]) % 3] for t in textos])
+
+    ctx = con_focos(contexto_clase(silabo, "M2-S1"))
+    plan = _plano(planificar(ctx, 3, "fundamentacion", razonador=Razonador(codificar, version="v", umbral=0.6)))
+    assert {tema_de(p.foco) for p in plan} == {0, 1, 2}

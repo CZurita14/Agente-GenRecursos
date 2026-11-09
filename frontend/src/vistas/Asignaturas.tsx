@@ -12,7 +12,7 @@ interface AsignaturasProps {
 const ROLES: Record<AsignaturaResumen['rol'], string> = { dueno: 'Dueño', editor: 'Editor', lector: 'Lector' };
 
 const COLUMNAS: Column<AsignaturaResumen>[] = [
-  { key: 'nombre', header: 'Asignatura' },
+  { key: 'nombre', header: 'Proyecto Formativo' },
   { key: 'codigo_pf', header: 'Código' },
   { key: 'version_silabo', header: 'Versión' },
   { key: 'rol', header: 'Tu rol', render: a => <Badge tone={a.rol === 'dueno' ? 'brand' : 'neutral'}>{ROLES[a.rol]}</Badge> },
@@ -36,12 +36,12 @@ export function Asignaturas({ onSesionVencida, onSubir, onAbrir }: AsignaturasPr
 
   return <>
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <h1 className="text-2xl font-bold">Mis asignaturas</h1>
+      <h1 className="text-2xl font-bold">Proyecto Formativo</h1>
       <Button onClick={onSubir}>Subir sílabo</Button>
     </div>
     {error && <Alert tone="danger" role="alert">{error}</Alert>}
-    <DataTable caption="Mis asignaturas" columns={COLUMNAS} rows={filas ?? []} rowKey={a => a.id}
-      loading={filas === null} emptyMessage="Todavía no tienes asignaturas. Sube tu sílabo para empezar."
+    <DataTable caption="Proyecto Formativo" columns={COLUMNAS} rows={filas ?? []} rowKey={a => a.id}
+      loading={filas === null} emptyMessage="Todavía no tienes Proyectos Formativos. Sube tu sílabo para empezar."
       onRowClick={onAbrir} rowActionLabel={a => `Abrir ${a.nombre}`} />
   </>;
 }

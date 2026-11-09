@@ -23,9 +23,13 @@ class Ajustes(BaseSettings):
     llm_timeout_revisor_s: float = 240
     lease_s: int = 360
     agentes_dir: Path = Path("agentes")
+    # Carpeta del modelo entrenado. Sin ella la generación no usa el razonador.
+    razonador_ruta: Path | None = None
     api_origen: str = "https://localhost:5173"
     auth_secreto: SecretStr | None = Field(default=None, min_length=32)
     entorno: Literal["desarrollo", "produccion"] = "produccion"
+    # Entrar sin validar el correo, mientras no hay SMTP institucional (B4). Solo en desarrollo.
+    acceso_prueba: bool = False
     smtp_modo: Literal["deshabilitado", "consola", "smtp"] = "deshabilitado"
     smtp_host: str = ""
     smtp_port: int = Field(default=587, ge=1, le=65535)
@@ -51,6 +55,12 @@ class Ajustes(BaseSettings):
     limite_editar_correo_minuto: int = Field(default=30, ge=1, le=100000)
     auditoria_retencion_dias: int = Field(default=30, ge=1, le=365)
 
+    @field_validator("razonador_ruta", mode="before")
+    @classmethod
+    def ruta_vacia_es_apagado(cls, valor):
+        # El compose pasa la variable vacía cuando no hay modelo; Path("") sería la carpeta actual.
+        return None if isinstance(valor, str) and not valor.strip() else valor
+
     @field_validator("administradores")
     @classmethod
     def admins_validos(cls, valores):
@@ -73,6 +83,8 @@ class Ajustes(BaseSettings):
     def https_en_produccion(self):
         if self.entorno == "produccion" and not self.api_origen.startswith("https://"):
             raise ValueError("API_ORIGEN requiere HTTPS en producción")
+        if self.entorno == "produccion" and self.acceso_prueba:
+            raise ValueError("ACCESO_PRUEBA no se permite en producción")
         return self
 
     @field_validator("api_origen")

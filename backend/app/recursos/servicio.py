@@ -8,12 +8,13 @@ from psycopg.types.json import Jsonb
 from app.agentes.orquestador import SolicitudGeneracion, crear_trabajos
 from app.agentes.planificador import perfil_por_nivel
 from app.agentes.workers import WORKERS
+from app.agentes.verificador import revision_claves
 from app.agentes.workers.definiciones import DEFINICIONES
 from app.asignaturas.servicio import exigir_acceso
 from app.herramientas.sin_ia import HERRAMIENTAS_SIN_IA, generar_sin_ia
 from app.recursos.validacion import EdicionInvalida, validar_contenido
-from app.exportar.html import exportar_html
-from app.exportar.presentacion import presentar
+from app.exportar.html import CON_RESPUESTAS, exportar_html, nombre_archivo
+from app.exportar.presentacion import es_quiz, presentar, sin_respuestas
 from app.herramientas.politica import excluye_ia_en_evaluacion
 from app.silabo.contexto import contexto_por_id
 from app.silabo.modelo import SilaboUTI
@@ -26,7 +27,7 @@ def _recurso(conn, aid, rid, *, editar=False):
                         "where r.id=%s and r.asignatura_id=%s" + (" for update of r" if editar else ""),
                         (rid, aid)).fetchone()
     if fila is None:
-        raise HTTPException(404, "Recurso inexistente en esta asignatura")
+        raise HTTPException(404, "Recurso inexistente en este Proyecto Formativo")
     return fila
 
 
@@ -50,8 +51,8 @@ def _restriccion(silabo: SilaboUTI, tipo: str, ambito_id: str | None) -> str | N
         numero = int(m.group(1)) if m else None
     momento = next((x for x in silabo.momentos if x.numero == numero), None)
     if momento is not None and excluye_ia_en_evaluacion(momento.politica_ia):
-        return ("La política de IA de este momento excluye la IA en una evaluación: solo se ofrecen "
-                "herramientas sin IA y el repaso de momentos anteriores (§9.4).")
+        return ("La política de IA de este momento excluye la IA en una evaluación, así que aquí no se "
+                "generan herramientas con IA (§9.4).")
     return None
 
 
@@ -75,6 +76,8 @@ def _detalle(recurso, asignatura):
     resultado["validado"] = recurso["validado_por"] is not None
     resultado['revision_ia'] = recurso.get('revision_ia')
     resultado["presentacion"] = presentar(recurso["herramienta"], recurso["contenido"])
+    # Sobre lo guardado: también cubre lo generado antes de esta comprobación y lo editado después.
+    resultado["revision_claves"] = revision_claves(recurso["contenido"])
     resultado["evidencia_vigente"] = recurso["revision"] == 0
     if recurso["herramienta"] in HERRAMIENTAS_SIN_IA:
         resultado["silabo_actualizado"] = _actualizado_sin_ia(recurso, asignatura)
@@ -88,6 +91,35 @@ def _detalle(recurso, asignatura):
         actualizado = True
     resultado["silabo_actualizado"] = actualizado
     return resultado
+
+
+def _sin_clave(contenido):
+    """Lista de campos permitidos: lo que se agregue al esquema no se filtra por omisión."""
+    if es_quiz(contenido):
+        return [{"item_id": i.get("item_id"), "contexto": i.get("contexto"), "pregunta": i.get("pregunta"),
+                 "opciones": [{"texto": o.get("texto")} for o in i.get("opciones", [])]} for i in contenido]
+    try:
+        caso = contenido["caso"]
+        return {"caso": {"caso": caso["caso"], "ra": caso["ra"],
+                         "preguntas": [{"nivel": p["nivel"], "pregunta": p["pregunta"]} for p in caso["preguntas"]]}}
+    except (KeyError, TypeError):
+        return {}  # Forma no prevista: mejor no mostrar nada que arriesgar una respuesta.
+
+
+# Lo único que recibe quien solo lee: un campo nuevo del detalle no se expone por omisión.
+CAMPOS_LECTOR = ("id", "trabajo_id", "asignatura_id", "ambito_id", "herramienta", "version_silabo", "version_esquema",
+                 "estado", "revision", "creado", "actualizado", "validado", "validado_por", "validado_en",
+                 "silabo_actualizado", "evidencia_vigente")
+
+
+def _para_lector(detalle):
+    """Quien solo lee recibe lo mismo que el estudiante: sin claves, explicaciones ni alertas sobre ellas."""
+    if detalle["herramienta"] not in CON_RESPUESTAS:
+        return detalle
+    return {**{k: detalle[k] for k in CAMPOS_LECTOR if k in detalle},
+            "contenido": _sin_clave(detalle["contenido"]), "evidencia": {}, "revision_claves": {},
+            "verificacion_edicion": None, "revision_ia": None,
+            "presentacion": [sin_respuestas(b) for b in detalle["presentacion"]]}
 
 
 class ServicioRecursos:
@@ -115,7 +147,7 @@ class ServicioRecursos:
                 except KeyError:
                     contexto = None
                 if contexto is None:
-                    raise HTTPException(404, "Ámbito inexistente en esta asignatura")
+                    raise HTTPException(404, "Ámbito inexistente en este Proyecto Formativo")
             recomendaciones = self.perfiles[a["agente"]].herramientas_recomendadas.get(ambito, [])
             con_ia = [] if motivo else [h for h in WORKERS if h in DEFINICIONES and DEFINICIONES[h].ambito == ambito
                                         and (contexto is None or DEFINICIONES[h].requisitos(contexto) is None)]
@@ -135,13 +167,22 @@ class ServicioRecursos:
             motivo = _restriccion(SilaboUTI.model_validate(a["silabo"]), ambito.tipo, ambito.id)
             if motivo:
                 raise HTTPException(422, motivo)
+            # Pedir otra vez lo que ya está en curso no gasta GPU: se sigue el trabajo existente.
+            activos = {} if instrucciones else {f["herramienta"]: f for f in conn.execute(
+                "select distinct on (herramienta) id,herramienta,estado from trabajo where asignatura_id=%s "
+                "and ambito_id=%s and tipo='generacion' and herramienta=any(%s) "
+                "and estado in ('en_cola','en_espera','generando','verificando','revisando') order by herramienta,creado",
+                (aid, ambito.id, herramientas)).fetchall()}
+            nuevas = [h for h in herramientas if h not in activos]
             try:
-                ids = crear_trabajos(conn, SolicitudGeneracion(aid, ambito, herramientas,
-                                      cantidad=cantidad, instrucciones=instrucciones, perfil_dificultad=perfil))
+                ids = crear_trabajos(conn, SolicitudGeneracion(aid, ambito, nuevas, cantidad=cantidad,
+                                     instrucciones=instrucciones, perfil_dificultad=perfil)) if nuevas else []
             except (ValueError, KeyError):
                 raise HTTPException(422, "Selección de generación no válida") from None
-            return {"trabajos": [{"id": str(tid), "herramienta": h, "estado": "en_cola"}
-                                 for tid, h in zip(ids, herramientas)]}
+            creados = dict(zip(nuevas, ids))
+            return {"trabajos": [{"id": str(activos[h]["id"]), "herramienta": h, "estado": activos[h]["estado"]}
+                                 if h in activos else {"id": str(creados[h]), "herramienta": h, "estado": "en_cola"}
+                                 for h in herramientas]}
 
     @staticmethod
     def _generar_sin_ia(conn, aid, asignatura, ambito, herramientas):
@@ -170,21 +211,24 @@ class ServicioRecursos:
             trabajos.append({"id": str(tid), "herramienta": herramienta, "estado": "listo", "recurso_id": str(rid)})
         return {"trabajos": trabajos}
 
-    def exportar(self, aid, rid, correo, formato="html"):
-        """Exportación de una instantánea validada por el docente (spec §13)."""
-        with self._acceso(aid, correo) as (conn, _):
+    def exportar(self, aid, rid, correo, formato="html", version="estudiante"):
+        """Exportación validada (spec §13). La versión del docente trae las respuestas: lector no accede."""
+        docente = version == "docente"
+        with self._acceso(aid, correo, editar=docente) as (conn, _):
             r = _recurso(conn, aid, rid)
             if r["validado_por"] is None:
                 raise HTTPException(409, "Valida el recurso antes de descargarlo")
             contexto = _contexto(r, None)
             if formato not in ("html", "pdf", "docx"):
                 raise HTTPException(422, "Formato no soportado")
-            nombre = re.sub(r"[^A-Za-z0-9_-]", "_", f"{r['herramienta']}-{r['ambito_id']}") + "." + formato
+            if docente and (formato == "html" or r["herramienta"] not in CON_RESPUESTAS):
+                raise HTTPException(422, "Esta versión no está disponible")
+            nombre = nombre_archivo(r["herramienta"], r["ambito_id"], contexto.asignatura, formato, docente)
         if formato == "html":
             return nombre, exportar_html(r, contexto)
         from app.exportar.documento import exportar_documento, FormulaInvalida
         try:
-            return nombre, exportar_documento(r, contexto, formato)
+            return nombre, exportar_documento(r, contexto, formato, docente)
         except FormulaInvalida:
             raise HTTPException(422, "No se pudo representar una fórmula. Revisa su notación antes de exportar.") from None
 
@@ -214,12 +258,17 @@ class ServicioRecursos:
     def listar(self, aid, correo, limite, desde):
         with self._acceso(aid, correo) as (conn, _):
             return conn.execute("select id,trabajo_id,ambito_id,herramienta,version_silabo,estado,revision,"
-                                "creado,actualizado from recurso where asignatura_id=%s "
+                                "creado,actualizado,validado_por is not null as validado from recurso where asignatura_id=%s "
                                 "order by creado desc,id limit %s offset %s", (aid, limite, desde)).fetchall()
 
     def obtener(self, aid, rid, correo):
-        with self._acceso(aid, correo) as (conn, a):
-            return _detalle(_recurso(conn, aid, rid), a)
+        with closing(self.conexion()) as conn:
+            conn.autocommit = True
+            with conn.transaction():
+                conn.execute("set local lock_timeout to '2s'")
+                a, rol = exigir_acceso(conn, aid, correo)
+                detalle = _detalle(_recurso(conn, aid, rid), a)
+                return _para_lector(detalle) if rol == "lector" else detalle
 
     def editar(self, aid, rid, correo, revision, contenido):
         with self._acceso(aid, correo, editar=True) as (conn, a):

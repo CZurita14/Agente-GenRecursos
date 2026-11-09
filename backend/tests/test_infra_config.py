@@ -12,7 +12,7 @@ def test_solo_proxy_publica_puertos_y_sin_volumen_de_desarrollo():
         assert not servicio.get('container_name')
         if nombre != 'proxy':
             assert not servicio.get('ports'), nombre
-    assert set(compose['volumes']) == {'datos'}
+    assert set(compose['volumes']) == {'datos', 'modelos'}
     assert 'external' not in compose['volumes']['datos']
     assert compose['networks']['datos']['internal']
     for nombre in ('api','worker','web','proxy'):
@@ -40,6 +40,15 @@ def test_copia_imagen_no_incluye_entorno_o_silabos_reales():
     assert 'COPY . ' not in backend
     assert '@sha256:' in backend
     assert 'USER 10001:10001' in backend
+
+
+def test_la_etapa_de_pruebas_no_pide_lo_que_no_esta_en_la_imagen():
+    """`ciencia_datos` y PyTorch no entran en la imagen: ni sus pruebas ni la marca `modelo` pueden correr allí."""
+    backend = (RAIZ/'infra/Dockerfile.backend').read_text(encoding='utf-8')
+    assert 'COPY backend/ciencia_datos' not in backend
+    pruebas = backend.split(' AS pruebas', 1)[1]
+    assert 'rm -f /app/backend/tests/test_cd_' in pruebas
+    assert '"-m", "not servidor and not modelo"' in pruebas
 
 
 def test_tmpfs_es_una_sola_entrada_por_servicio():
@@ -88,3 +97,61 @@ def test_limites_configurables_en_compose_con_los_valores_de_la_api():
         assert defecto and int(defecto[1]) == Ajustes.model_fields[campo].default, campo
     ejemplo = (RAIZ/'infra/.env.example').read_text(encoding='utf-8')
     assert all(f'{c.upper()}=' in ejemplo for c in campos)
+
+
+def test_despliegue_no_expone_acceso_de_prueba():
+    """El Compose institucional nunca debe poder encender el ingreso sin validar el correo."""
+    assert 'ACCESO_PRUEBA' not in (RAIZ/'infra/compose.yaml').read_text(encoding='utf-8')
+    assert 'ACCESO_PRUEBA' not in (RAIZ/'infra/.env.example').read_text(encoding='utf-8')
+
+
+def _compose():
+    return yaml.safe_load((RAIZ/'infra/compose.yaml').read_text(encoding='utf-8'))
+
+
+def test_compose_no_activa_el_razonador_por_omision():
+    """Sin RAZONADOR_RUTA la generación es la de siempre: vacío por omisión y solo en el worker."""
+    servicios = _compose()['services']
+    assert servicios['worker']['environment']['RAZONADOR_RUTA'] == '${RAZONADOR_RUTA:-}'
+    # validar_configuracion corre en todos los servicios: ninguno más debe recibirla.
+    for nombre, servicio in servicios.items():
+        if nombre != 'worker':
+            assert 'RAZONADOR_RUTA' not in (servicio.get('environment') or {}), nombre
+    assert 'RAZONADOR_RUTA' not in _compose()['x-backend']['environment']
+    ejemplo = (RAIZ/'infra/.env.example').read_text(encoding='utf-8')
+    assert any(l.strip() == 'RAZONADOR_RUTA=' for l in ejemplo.splitlines())
+
+
+def test_el_worker_conserva_todo_el_entorno_comun_y_monta_modelos_de_solo_lectura():
+    compose = _compose()
+    comun = compose['x-backend']['environment']
+    entorno_worker = compose['services']['worker']['environment']
+    assert all(entorno_worker[k] == v for k, v in comun.items())
+    montajes = compose['services']['worker']['volumes']
+    assert montajes == [{'type': 'volume', 'source': 'modelos', 'target': '/modelos', 'read_only': True}]
+    for nombre, servicio in compose['services'].items():
+        if nombre != 'worker':
+            assert not any(isinstance(v, dict) and v.get('source') == 'modelos' or str(v).startswith('modelos:')
+                           for v in servicio.get('volumes', [])), nombre
+    assert 'modelos' in compose['volumes']
+
+
+def test_la_imagen_de_produccion_no_lleva_torch_y_el_lock_es_completo():
+    """El lock se instala con --no-deps: debe traer las dependencias del razonador y cerrar sus requisitos."""
+    import re
+    from importlib import metadata
+    from packaging.markers import default_environment
+    from packaging.requirements import Requirement
+    lock = (RAIZ/'backend/requirements.lock').read_text(encoding='utf-8').splitlines()
+    fijados = {l.split('==')[0].lower().replace('_', '-'): l.split('==')[1] for l in lock if '==' in l}
+    assert not {'torch', 'sentence-transformers', 'onnx', 'onnxscript', 'transformers'} & set(fijados)
+    assert {'numpy', 'scikit-learn', 'onnxruntime', 'tokenizers'} <= set(fijados)
+    entorno = {**default_environment(), 'sys_platform': 'linux', 'platform_system': 'Linux', 'os_name': 'posix',
+               'extra': ''}
+    for nombre in sorted(fijados):
+        # Un paquete del lock que no está instalado impediría comprobar sus requisitos: falla.
+        requisitos = metadata.requires(nombre) or []
+        for texto in requisitos:
+            r = Requirement(texto)
+            if r.marker is None or r.marker.evaluate(entorno):
+                assert re.sub(r'[-_.]+', '-', r.name).lower() in fijados, (nombre, r.name)
